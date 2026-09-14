@@ -1,0 +1,195 @@
+/* mqlite site chrome — true-black, monospace identity, single amber accent
+   (the logo's yellow dot). Shared by every page; doc pages add .prose rules. */
+:root {
+  --page: #0a0a0a;
+  --surface: #141413;
+  --surface2: #1d1d1b;
+  --ink: #f2f1ea;
+  --ink2: #b9b8ad;
+  --muted: #8a887f;
+  --line: rgba(255, 255, 255, 0.09);
+  --grid: #262624;
+  --accent: #facc15;         /* the logo dot */
+  --link: #7db3f5;
+  --good: #34d399;
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; scroll-padding-top: 180px; }
+body {
+  background: var(--page);
+  color: var(--ink2);
+  font: 15px/1.75 var(--sans);
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; text-underline-offset: 3px; }
+code, pre, kbd { font-family: var(--mono); }
+code {
+  background: var(--surface2);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 0.9em;
+  color: var(--ink);
+}
+pre {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 16px 18px;
+  overflow-x: auto;
+  overflow-y: hidden; /* never a vertical bar — collapsing is handled by .codebox.clip */
+  line-height: 1.6;
+  font-size: 13px;
+}
+
+/* subtle scrollbars wherever horizontal scroll is genuinely needed */
+pre, figure.fig, .prose table, .tscroll {
+  scrollbar-width: thin;
+  scrollbar-color: #34342f transparent;
+}
+pre::-webkit-scrollbar, figure.fig::-webkit-scrollbar,
+.prose table::-webkit-scrollbar { height: 8px; width: 8px; }
+pre::-webkit-scrollbar-thumb, figure.fig::-webkit-scrollbar-thumb,
+.prose table::-webkit-scrollbar-thumb { background: #34342f; border-radius: 4px; }
+pre::-webkit-scrollbar-track, figure.fig::-webkit-scrollbar-track,
+.prose table::-webkit-scrollbar-track { background: transparent; }
+pre code { background: none; border: 0; padding: 0; color: var(--ink); }
+
+.wrap { max-width: 1020px; margin: 0 auto; padding: 0 24px; }
+
+/* ── top nav ── */
+nav.top {
+  border-bottom: 1px solid var(--line);
+  background: rgba(10, 10, 10, 0.88);
+  backdrop-filter: blur(8px);
+  position: sticky; top: 0; z-index: 10;
+}
+nav.top .wrap { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 22px; min-height: 56px; padding-top: 10px; padding-bottom: 10px; }
+nav.top .brand {
+  display: flex; align-items: center; gap: 10px;
+  font-family: var(--mono); font-weight: 700; font-size: 16px; color: var(--ink);
+}
+nav.top .brand img { width: 24px; height: 24px; display: block; }
+nav.top .links { display: flex; flex-wrap: wrap; gap: 10px 18px; margin-left: auto; align-items: center; }
+nav.top .links a { font-family: var(--mono); font-size: 13px; color: var(--ink2); }
+nav.top .links a:hover { color: var(--ink); text-decoration: none; }
+nav.top .links a.gh {
+  border: 1px solid var(--line); border-radius: 7px; padding: 5px 12px; color: var(--ink);
+}
+nav.top .links a.gh:hover { border-color: var(--accent); }
+
+/* ── generated-page stamp ── */
+.stamp {
+  font-family: var(--mono); font-size: 12px; color: var(--muted);
+  border: 1px dashed var(--grid); border-radius: 8px;
+  padding: 8px 14px; margin: 26px 0 6px;
+}
+.stamp a { color: var(--muted); text-decoration: underline; text-underline-offset: 3px; }
+
+/* ── doc prose (generated pages) ── */
+main.prose { padding: 8px 0 60px; }
+.prose h1 { color: var(--ink); font: 700 26px/1.35 var(--mono); margin: 30px 0 14px; letter-spacing: -0.02em; }
+.prose h2 {
+  color: var(--ink); font: 700 19px/1.4 var(--mono); margin: 44px 0 12px;
+  padding-top: 14px; border-top: 1px solid var(--line);
+}
+.prose h3 { color: var(--ink); font: 650 15.5px/1.4 var(--mono); margin: 28px 0 8px; }
+.prose h4 { color: var(--ink); font: 650 14px/1.4 var(--mono); margin: 20px 0 6px; }
+.prose p, .prose ul, .prose ol { margin: 10px 0; }
+.prose ul, .prose ol { padding-left: 24px; }
+.prose li { margin: 5px 0; }
+.prose li::marker { color: var(--muted); }
+.prose strong { color: var(--ink); font-weight: 650; }
+.prose blockquote {
+  border-left: 3px solid var(--accent); background: var(--surface);
+  border-radius: 0 8px 8px 0; padding: 10px 16px; margin: 14px 0; color: var(--ink2);
+}
+.prose hr { border: 0; border-top: 1px solid var(--line); margin: 34px 0; }
+.prose table {
+  width: 100%; border-collapse: collapse; font-size: 13.2px; margin: 14px 0;
+  display: block; overflow-x: auto;
+}
+.prose th {
+  color: var(--muted); font: 600 11.5px/1.5 var(--sans); letter-spacing: 0.4px;
+  text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--grid); white-space: nowrap;
+}
+.prose td { padding: 8px 12px; border-bottom: 1px solid var(--grid); vertical-align: top; }
+.prose tr:last-child td { border-bottom: none; }
+.prose pre { margin: 14px 0; }
+.prose :not(pre) > code { overflow-wrap: anywhere; }
+.prose img { max-width: 100%; }
+.prose h1 a, .prose h2 a, .prose h3 a, .prose h4 a { color: inherit; }
+
+/* ── footer ── */
+footer.site {
+  border-top: 1px solid var(--line); margin-top: 30px;
+  font-family: var(--mono); font-size: 12.5px; color: var(--muted);
+}
+footer.site .wrap { padding: 22px 24px; display: flex; flex-wrap: wrap; gap: 8px 22px; }
+footer.site a { color: var(--muted); }
+footer.site a:hover { color: var(--ink2); }
+
+/* ── figures (hand-drawn SVGs swapped in for the docs' ASCII diagrams) ── */
+figure.fig {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+  padding: 18px 18px 10px; margin: 16px 0;
+  overflow-x: auto; /* narrow screens scroll the figure instead of shrinking its labels */
+}
+figure.fig svg, figure.fig img { width: 100%; min-width: 640px; height: auto; display: block; }
+
+/* ── code blocks: copy button · line-number gutter · highlight theme ── */
+.codebox { position: relative; margin: 14px 0; }
+.codebox pre { margin: 0; }
+.prose .codebox { margin: 14px 0; }
+.coderow {
+  display: flex; align-items: stretch;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+  overflow: hidden;
+}
+.coderow .gutter {
+  flex: none; display: flex; flex-direction: column;
+  padding: 16px 0 16px 14px; text-align: right;
+  font-family: var(--mono); font-size: 13px; line-height: 1.6;
+  color: #55534c; user-select: none; -webkit-user-select: none;
+}
+.coderow pre { border: 0; border-radius: 0; background: none; flex: 1; min-width: 0; }
+.copybtn {
+  position: absolute; top: 8px; right: 8px;
+  font: 600 11px/1 var(--mono); color: var(--ink2);
+  background: var(--surface2); border: 1px solid var(--line); border-radius: 6px;
+  padding: 6px 10px; cursor: pointer; opacity: 0.75;
+}
+.copybtn:hover { opacity: 1; color: var(--ink); border-color: var(--accent); }
+.copybtn.ok { color: #111; background: var(--accent); border-color: var(--accent); opacity: 1; }
+
+/* highlight.js theme — the site palette, restrained */
+.hljs { color: var(--ink); background: none; }
+.hljs-comment, .hljs-quote, .hljs-meta { color: #767469; }
+.hljs-keyword, .hljs-literal, .hljs-selector-tag, .hljs-type { color: #7db3f5; }
+.hljs-string, .hljs-regexp, .hljs-addition { color: #34d399; }
+.hljs-number, .hljs-symbol, .hljs-variable, .hljs-template-variable { color: #e3b341; }
+.hljs-title, .hljs-title.function_, .hljs-title.class_ { color: #f2f1ea; font-weight: 600; }
+.hljs-built_in, .hljs-attr, .hljs-attribute, .hljs-property, .hljs-params { color: #b9b8ad; }
+.hljs-section, .hljs-name, .hljs-tag { color: #facc15; }
+.hljs-deletion { color: #e66767; }
+
+/* ── long code blocks: collapsed to ~15 lines, click to expand ── */
+.codebox.clip:not(.open) .coderow,
+.codebox.clip:not(.open) > pre { max-height: 330px; overflow: hidden; }
+.codebox.clip:not(.open) .fade {
+  position: absolute; left: 1px; right: 1px; bottom: 34px; height: 64px;
+  background: linear-gradient(to bottom, rgba(20, 20, 19, 0), var(--surface));
+  pointer-events: none; border-radius: 0 0 10px 10px;
+}
+.codebox.clip.open .fade { display: none; }
+.expandbtn {
+  display: block; width: 100%; margin-top: -1px;
+  font: 600 11.5px/1 var(--mono); color: var(--ink2); text-align: center;
+  background: var(--surface2); border: 1px solid var(--line);
+  border-radius: 0 0 10px 10px; padding: 10px 0; cursor: pointer;
+}
+.expandbtn:hover { color: var(--ink); border-color: var(--accent); }
+.codebox.clip .coderow, .codebox.clip > pre { border-radius: 10px 10px 0 0; }

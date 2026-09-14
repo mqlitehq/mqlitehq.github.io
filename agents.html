@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>For AI agents · mqlite</title>
+<meta name="description" content="How an AI agent drives mqlite: the MCP server, a copy-paste system prompt for the raw HTTP API, and llms.txt for models that read the web.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/site.css">
+<script src="assets/highlight.min.js" defer></script>
+<script src="assets/site.js" defer></script>
+<style>
+  .head { padding: 56px 0 8px; }
+  .head h1 { font: 700 30px/1.25 var(--mono); color: var(--ink); letter-spacing: -0.02em; }
+  .head p { margin-top: 12px; max-width: 50em; }
+  section.blk { padding: 30px 0 4px; }
+  section.blk > h2 { font: 700 19px/1.4 var(--mono); color: var(--ink); margin-bottom: 4px; }
+  section.blk > .lede { color: var(--muted); font-size: 13.5px; margin-bottom: 14px; }
+  .quote { border-left: 3px solid var(--accent); background: var(--surface); border-radius: 0 10px 10px 0; padding: 13px 17px; margin: 12px 0; font-size: 13.8px; }
+  .quote b { color: var(--ink); }
+  .tbl { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 4px 14px; overflow-x: auto; margin: 12px 0; }
+  .tbl table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .tbl th { color: var(--muted); font: 600 11.5px/1.5 var(--sans); letter-spacing: 0.4px; text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+  .tbl td { padding: 8px 12px; border-bottom: 1px solid var(--grid); vertical-align: top; }
+  .tbl tr:last-child td { border-bottom: none; }
+  .prompt { position: relative; }
+  .prompt pre { font-size: 12.4px; line-height: 1.62; }
+  .copy {
+    position: absolute; top: 10px; right: 10px;
+    font: 600 11.5px/1 var(--mono); color: #111; background: var(--accent);
+    border: 0; border-radius: 6px; padding: 7px 12px; cursor: pointer;
+  }
+  .copy:hover { filter: brightness(1.08); }
+  h3.sub { font: 650 15px/1.4 var(--mono); color: var(--ink); margin: 22px 0 8px; }
+  p { margin: 8px 0; }
+  strong { color: var(--ink); font-weight: 650; }
+</style>
+</head>
+<body>
+<nav class="top"><div class="wrap">
+  <a class="brand" href="./"><img src="logo.svg" alt="" width="24" height="24"> mqlite</a>
+  <div class="links">
+    <a href="concepts.html">Concepts</a>
+    <a href="internals.html">Internals</a>
+    <a href="api.html">API</a>
+    <a href="cli.html">CLI</a>
+    <a href="deployment.html">Deployment</a>
+    <a href="observability.html">Observability</a>
+    <a href="operations.html">Operations</a>
+    <a href="agents.html">For AI agents</a>
+    <a class="gh" href="https://github.com/mqlitehq/mqlite">GitHub ↗</a>
+  </div>
+</div></nav>
+
+<div class="wrap">
+
+<div class="stamp">These docs track <a href="https://github.com/mqlitehq/mqlite/tree/main">main · source v0.3.0</a>.
+  The latest release is <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.3.0">v0.3.0</a>
+  (default port 6754); the examples below pin that version. Use the
+  <a href="https://github.com/mqlitehq/mqlite/tree/v0.3.0/docs">v0.3.0 docs</a>
+  for the versioned reference, and follow the <a href="operations.html#upgrade-and-rollback">upgrade procedure</a>
+  when moving from v0.2.0 (port 8080, schema token 2) to v0.3.0 (schema token 5).</div>
+
+<div class="head">
+  <h1># mqlite for AI agents</h1>
+  <p>mqlite was shaped so a model can drive it <strong>without tripping</strong>: every operation is
+  one HTTP POST with a JSON body, there is exactly one settlement verb per outcome (no aliases
+  to confuse a model), <code>GET /</code> returns a machine-readable discovery card, and delivery
+  semantics are documented as testable invariants. Three ways in, strongest first.</p>
+</div>
+
+<section class="blk">
+  <h2># 1 · MCP server (recommended)</h2>
+  <p class="lede"><code>mqlite-mcp</code> ships in the same repo — a dependency-free stdio MCP server that turns each tool call into one HTTP POST to the broker.</p>
+  <p>Install v0.3.0 with <code>go install github.com/mqlitehq/mqlite/cmd/mqlite-mcp@v0.3.0</code>,
+  or use <code>mqlite-mcp</code> from a
+  <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.3.0">v0.3.0 release archive</a>,
+  then register the installed binary with your MCP host:</p>
+<pre><code class="language-json">{
+  "mcpServers": {
+    "mqlite": {
+      "command": "/path/to/mqlite-mcp",
+      "env": {
+        "MQLITE_ENDPOINT": "https://your-broker.example.com",
+        "MQLITE_TOKEN": "mqk_..."
+      }
+    }
+  }
+}</code></pre>
+  <p>The agent then sees <strong>14 tools</strong> — deliberately minimal, because over-specified
+  tools make models misuse them:</p>
+  <div class="tbl"><table>
+    <tr><th>Tool</th><th>Does</th></tr>
+    <tr><td><code>list_queues</code></td><td>list queues / subscriptions</td></tr>
+    <tr><td><code>create_queue</code></td><td>create or update a queue by name</td></tr>
+    <tr><td><code>send</code></td><td>send a message (<code>queue</code>, <code>body</code>, optional <code>message_id</code> / <code>group_id</code>)</td></tr>
+    <tr><td><code>receive</code></td><td>peek-lock messages → returns <code>seq_number</code> + <code>lock_token</code></td></tr>
+    <tr><td><code>complete</code> / <code>abandon</code> / <code>reject</code></td><td>settle: done / retry / dead-letter</td></tr>
+    <tr><td><code>renew</code></td><td>extend a held lock before it expires — hold a message across long work</td></tr>
+    <tr><td><code>defer</code> / <code>receive_deferred</code></td><td>set a locked message aside by <code>seq_number</code>, then fetch deferred messages back by seq</td></tr>
+    <tr><td><code>peek</code></td><td>browse without locking (optionally by state)</td></tr>
+    <tr><td><code>stats</code></td><td>queue depth by state</td></tr>
+    <tr><td><code>redrive</code> / <code>purge</code></td><td>move dead letters back / delete them</td></tr>
+  </table></div>
+  <p>Details: <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/mcp.md">docs/mcp.md</a>.</p>
+</section>
+
+<section class="blk">
+  <h2># 2 · raw HTTP — a prompt you can paste</h2>
+  <p class="lede">For any agent that can run <code>curl</code> or make HTTP calls. Fill in the two placeholders and paste this into your agent's system prompt or task context:</p>
+  <div class="prompt">
+<pre id="p1"><code>You have access to a message queue (an mqlite broker).
+
+Base URL:  &lt;MQLITE_ENDPOINT&gt;              the broker's origin, including the port.
+           Direct:  http://127.0.0.1:6754   (mqlite serves JSON-over-HTTP on TCP 6754
+                                             and terminates no TLS of its own)
+           Proxied: https://mq.example.com  (HTTPS :443 at a reverse proxy, which
+                                             forwards to the broker's internal :6754)
+           Endpoint paths below are relative to this origin.
+Auth:      every call needs the header    Authorization: Bearer &lt;MQLITE_TOKEN&gt;
+Protocol:  every operation is ONE HTTP POST with a JSON body to
+           /mqlite.v1.QueueService/&lt;Method&gt; or /mqlite.v1.AdminService/&lt;Method&gt;.
+           GET / (no auth) returns a discovery card listing every endpoint.
+
+Rules:
+- Message bodies are BASE64 strings in JSON. Encode before sending,
+  decode after receiving.
+- Queues never auto-create. Create first:
+    AdminService/CreateQueue  {"name":"jobs","config":{}}
+- Consume with Peek-Lock:
+    QueueService/Receive  {"queue":"jobs","max_messages":1,"wait_time_ms":5000}
+  Each returned message has seq_number + lock_token. You MUST settle every
+  message you receive, using its lock_token:
+    QueueService/Complete {"queue":"jobs","seq_number":N,"lock_token":"..."}  done
+    QueueService/Abandon  {...,"delay_ms":60000}   retry later (optional backoff)
+    QueueService/Reject   {...}                    give up -> dead-letter queue
+  If you settle nothing, the lock expires (default 30s). Recovery returns the
+  message to active, or sends it to the DLQ at its delivery limit.
+  New settlements and Renew require locked_until_ms &gt; now: the exact deadline
+  is already expired, even before the reaper runs. An unexpired receipt only lets
+  the exact request replay a previously committed settlement after expiry.
+- Receive-and-Delete grants no lease: lock_token is empty and locked_until_ms
+  is zero (omitted in JSON), including receive-attempt replays. Do not settle it.
+- Default Peek-Lock delivery is AT-LEAST-ONCE: you may see a message twice.
+  Make your handling idempotent (set message_id on send; check your own state
+  before acting).
+- Long-running work: call QueueService/Renew with the lock_token to extend the
+  lock before it expires.
+- Pub/sub: AdminService/Subscribe {"topic":"events","name":"my-sub",
+  "filter":{"expr":"subject == \"order\""}} — then Send to "events" fans out;
+  Receive from "my-sub". Filter may be omitted (match all).
+- Ordered work: send with "group_id" — messages sharing a group_id are
+  delivered strictly in order, one in flight per group. Abandon with delay_ms &gt; 0
+  parks the message in scheduled and keeps blocking its ordered group until due
+  (strict_fifo: the whole queue). Cancel only removes never-delivered scheduled
+  messages, with delivery_count = 0.
+- Errors are JSON {"code","message"}: 400 invalid_argument · 401 unauthenticated ·
+  404 not_found · 409 name_conflict / already_exists / lock_lost ·
+  413 message_too_large. On 409 lock_lost, re-Receive instead of retrying
+  the settle.
+
+Cheat sheet (request bodies abbreviated):
+  AdminService/CreateQueue   {"name","config":{}}
+  AdminService/ListQueues    {}
+  AdminService/Subscribe     {"topic","name","filter?"}
+  QueueService/Send          {"queue","messages":[{"body":"&lt;base64&gt;",
+                              "message_id?","group_id?"}]}
+  QueueService/Receive       {"queue","max_messages","wait_time_ms"}
+  QueueService/Complete      {"queue","seq_number","lock_token"}
+  QueueService/Abandon       {"queue","seq_number","lock_token","delay_ms?"}
+  QueueService/Reject        {"queue","seq_number","lock_token"}
+  QueueService/Renew         {"queue","seq_number","lock_token"}
+  QueueService/Stats         {"queue"}
+Full reference: https://github.com/mqlitehq/mqlite/blob/main/docs/api-reference.md</code></pre>
+  </div>
+  <div class="quote"><b>Why this works well for models:</b> there is no connection state to
+  manage, no binary protocol, no SDK to install — every step is a self-contained POST whose
+  response tells the model exactly what token to use next. A settle whose response you lost can be
+  retried safely while its receipt is unexpired — by <b>resending the same request</b>:
+  same queue, message, lock token, verb and effect-changing arguments. Change that
+  identity and you get <code>lock_lost</code>, never a success that quietly
+  kept the first call's effect. A live receipt can replay a committed settlement
+  after its original lease expires; it cannot authorize a new effect or revive
+  the lease. So a confused agent fails loud, not wrong.</div>
+</section>
+
+<section class="blk">
+  <h2># 3 · for models reading the web</h2>
+  <p class="lede">Machine-readable entry points on this documentation site; the full bundle is generated from source docs.</p>
+  <div class="tbl"><table>
+    <tr><th>File</th><th>Contents</th></tr>
+    <tr><td><a href="llms.txt"><code>llms.txt</code></a></td><td>one-page summary: what mqlite is, the key facts, where everything lives</td></tr>
+    <tr><td><a href="llms-full.txt"><code>llms-full.txt</code></a></td><td>the full docs bundle as plain markdown: concepts + internals + HTTP API + CLI + MCP + examples + operations + deployment + observability</td></tr>
+    <tr><td><code>GET /</code> on any broker</td><td>live discovery card: name, version, auth mode, every endpoint path</td></tr>
+  </table></div>
+  <p>For broker administration, start with <a href="operations.html">Operations</a>,
+  use <a href="deployment.html">Deployment</a> for configuration, and follow
+  <a href="observability.html">Observability</a> for monitoring and alerts.</p>
+</section>
+
+<section class="blk">
+  <h2># the one rule that matters</h2>
+  <div class="quote">
+    mqlite is <b>honestly at-least-once</b>. No queue that survives crashes can promise your
+    handler runs exactly once — mqlite doesn't pretend to. Design agent workflows so that
+    <b>doing a message twice is harmless</b>: key side effects on <code>message_id</code> or your own
+    idempotency keys, and settle promptly. Everything else follows from
+    <a href="concepts.html">the concepts page</a>.
+  </div>
+</section>
+
+</div>
+
+<footer class="site"><div class="wrap">
+  <span>MIT © The MQLite Authors</span>
+  <a href="https://github.com/mqlitehq/mqlite">GitHub</a>
+  <a href="https://github.com/mqlitehq/mqlite/releases">Releases</a>
+  <a href="llms.txt">llms.txt</a>
+</div></footer>
+</body>
+</html>

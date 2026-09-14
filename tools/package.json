@@ -1,0 +1,11 @@
+{
+  "name": "mqlitehq-github-io-tools",
+  "private": true,
+  "type": "module",
+  "description": "Regenerates the site's doc pages from the mqlite repo (see build.mjs)",
+  "dependencies": {
+    "@highlightjs/cdn-assets": "^11.11.1",
+    "marked": "^15.0.0",
+    "marked-gfm-heading-id": "^4.1.1"
+  }
+}

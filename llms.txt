@@ -1,0 +1,97 @@
+# mqlite
+
+> A message queue in a single SQLite file. Peek-Lock delivery, retries, dead-letter
+> queues, scheduling, duplicate detection, FIFO groups and topic fan-out — embedded
+> in a Go process or served as a tiny HTTP broker. Pure Go, no CGO. MIT licensed.
+
+Public documentation: https://mqlitehq.github.io/.
+Relative links below resolve against this website.
+
+NOTE ON VERSIONS: the latest release is v0.3.0 (default port 6754, schema token 5).
+This website tracks main; the installation commands below pin v0.3.0. Use the
+[v0.3.0 documentation](https://github.com/mqlitehq/mqlite/tree/v0.3.0/docs)
+for the versioned reference. Upgrading from v0.2.0 (port 8080, schema token 2)
+requires a new database; follow [upgrade and rollback](operations.html#upgrade-and-rollback).
+
+- One engine, two front-ends: `mqlite.OpenEmbedded` (in-process, one SQLite file)
+  and `mqlite serve` (HTTP broker, default :6754, Bearer-token auth, secure by
+  default — a token is auto-generated if none is set).
+- Storage: local SQLite (pure-Go driver) or remote Turso/libSQL. Remote buys
+  durability + geo-replication (~45 ms per durable commit), not throughput.
+- Wire protocol: JSON over HTTP, one POST per operation, 22 routes under
+  /mqlite.v1.QueueService/* and /mqlite.v1.AdminService/*. Message bodies are
+  base64 in JSON. GET / is an open discovery card listing every endpoint.
+- Delivery: Peek-Lock (receive → work → settle with a lock_token) or
+  receive-and-delete. Exactly one settlement verb per outcome:
+  Complete / Abandon / Reject / Defer. Locks renewable (Renew); a 1 s reaper returns
+  expired locks to active or to DLQ at the delivery limit. Peek-Lock is at-least-once;
+  handlers must be idempotent.
+- Lease boundary: new settlements and Renew require the current lock_token and
+  locked_until_ms > now; equality is expired, even before the reaper runs. Renew
+  before expiry. An unexpired exact-request receipt can replay an already committed
+  settlement after its original deadline (same queue, sequence, token, verb and
+  effect-changing arguments); it cannot authorize a new effect or revive a lease.
+- Receive-and-Delete removes the row before returning it and grants no lease:
+  empty lock_token and zero locked_until_ms (omitted in JSON), including receive
+  attempt replays. The SDK exposes a zero LockedUntil time.
+- Retries: delivery_count per message; at max_delivery_count on retry → dead-letter
+  queue (state, not a separate queue). Redrive moves dead letters back; DLQ
+  retention bounds age/count/bytes.
+- Ordering: standard (per-group_id FIFO, cross-group parallel), group_fifo
+  (group_id required), strict_fifo (whole-queue serial). Order holds across
+  crashes and lock expiry. Abandon with delay_ms > 0 parks the message in scheduled
+  and keeps blocking its ordered group until due (strict_fifo: the whole queue).
+- Pub/sub: topics are implicit; Subscribe(topic, name, filter) creates a backing
+  queue per subscription; filters are one expr boolean predicate, fail-closed.
+  Queue, subscription and topic names are one disjoint namespace (conflicts 409).
+- Scheduling: deliver at a time (Schedule). Cancel only removes never-delivered
+  scheduled messages (delivery_count = 0), not delayed retries. Per-message TTL is
+  capped by the queue default. Duplicate detection by message_id within a window.
+- Transactional outbox (embedded-only): business write + enqueue commit in ONE
+  SQLite transaction via mq.Tx.
+- Ops: /ui embedded admin console, /metrics Prometheus (incl. per-RPC latency
+  histograms), /healthz, CLI (22 commands), MCP server (mqlite-mcp, 14 tools). The local production
+  boundary is one broker per persistent SQLite file; backups and recovery must be
+  rehearsed. Use TLS and Bearer authentication for network access.
+- Limits: message body ≤ 1 MiB (configurable), request body ≤ 32 MiB,
+  Receive ≤ 256 messages / 20 s long-poll.
+- NOT for: log streaming/replay (use Kafka/Redpanda/NATS JetStream), multi-node
+  HA clusters (NATS/RabbitMQ), Postgres-native queueing (pgmq/River), or
+  sustained six-figure msg/s on one node. Single-writer, single-node by design.
+
+## Docs
+
+- [Concepts](concepts.html): the whole model — queues,
+  topics, subscriptions, filters, and the full message lifecycle state machine.
+- [Internals](internals.html): schema, concurrency, fencing and recovery.
+- [HTTP API reference](api.html): every route, request,
+  response, error code and limit.
+- [CLI reference](cli.html): the mqlite command-line client —
+  broker, produce/consume/administer, embedded or against a broker.
+- [Operations](operations.html): production scope, backup, restore, upgrade and rollback.
+- [Deployment](deployment.html): installation, persistent storage, tokens and TLS.
+- [Observability](observability.html): queue and DLQ depth, RPC latency and alerts.
+- [For AI agents](agents.html): MCP server setup and a
+  copy-paste system prompt for driving the raw HTTP API.
+- [Full docs bundle](llms-full.txt): concepts + internals + API + CLI + MCP + examples
+  + operations + deployment + observability as one plain-markdown file.
+
+## Source
+
+- [GitHub](https://github.com/mqlitehq/mqlite): code, issues, full docs/ tree
+  (deployment, Turso, retention, observability, conformance TCK, benchmarks).
+- [Concepts source](https://github.com/mqlitehq/mqlite/blob/main/docs/concepts.md).
+- [Internals source](https://github.com/mqlitehq/mqlite/blob/main/docs/internals.md).
+- [HTTP API source](https://github.com/mqlitehq/mqlite/blob/main/docs/api-reference.md).
+- [CLI source](https://github.com/mqlitehq/mqlite/blob/main/docs/cli.md).
+- [Operations source](https://github.com/mqlitehq/mqlite/blob/main/docs/operations.md).
+- [Deployment source](https://github.com/mqlitehq/mqlite/blob/main/docs/deployment.md).
+- [Observability source](https://github.com/mqlitehq/mqlite/blob/main/docs/observability.md).
+- [MCP source](https://github.com/mqlitehq/mqlite/blob/main/docs/mcp.md).
+- [Releases](https://github.com/mqlitehq/mqlite/releases): binaries for
+  linux/macos/windows (amd64+arm64), each archive contains mqlite + mqlite-mcp.
+- Container image: `ghcr.io/mqlitehq/mqlite:0.3.0` (default port 6754).
+  See [Deployment](deployment.html) for persistent storage, authentication and TLS.
+- Broker: `go install github.com/mqlitehq/mqlite/cmd/mqlite@v0.3.0`.
+- MCP server: `go install github.com/mqlitehq/mqlite/cmd/mqlite-mcp@v0.3.0`.
+- SDK: `go get github.com/mqlitehq/mqlite@v0.3.0` (Go ≥ 1.21).

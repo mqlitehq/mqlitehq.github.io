@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 750 450" role="img" aria-label="Message lifecycle: new settlements and renewal require an unexpired lease; immediate abandon and lock expiry return to active; delayed abandon parks in scheduled; cancel only removes never-delivered scheduled messages" font-family="ui-monospace, SF Mono, Menlo, Consolas, monospace">
+  <desc>Below the delivery limit, immediate Abandon and lock expiry return a locked message to active. Abandon with delay_ms greater than zero moves it to scheduled and blocks its ordered group until due, or the whole queue in strict_fifo. At the delivery limit, Abandon and lock expiry move it to the dead-letter queue. Cancel removes only never-delivered scheduled messages with delivery_count equal to zero. New settlements and Renew require the current token and locked_until_ms greater than now; equality is expired. An unexpired exact-request receipt can replay a previously committed settlement after its original lease expires.</desc>
+  <defs>
+    <marker id="arr2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#7a786f"/>
+    </marker>
+  </defs>
+
+  <!-- entries: an immediate Send lands in active (skipping scheduled entirely) -->
+  <text x="80" y="20" text-anchor="middle" font-size="10" fill="#98968c">Send (scheduled)</text>
+  <line x1="80" y1="28" x2="80" y2="66" stroke="#7a786f" stroke-width="1.5" marker-end="url(#arr2)"/>
+  <text x="245" y="20" text-anchor="middle" font-size="10" fill="#98968c">Send</text>
+  <line x1="245" y1="28" x2="245" y2="66" stroke="#7a786f" stroke-width="1.5" marker-end="url(#arr2)"/>
+
+  <!-- main spine: scheduled → active → locked -->
+  <rect x="20" y="70" width="120" height="36" rx="6" fill="rgba(85,152,231,0.10)" stroke="#5598e7" stroke-width="1.5"/>
+  <text x="80" y="88" text-anchor="middle" dominant-baseline="central" font-size="13" font-weight="600" fill="#f2f1ea">scheduled</text>
+
+  <line x1="142" y1="88" x2="183" y2="88" stroke="#7a786f" stroke-width="1.5" marker-end="url(#arr2)"/>
+  <text x="163" y="79" text-anchor="middle" font-size="10" fill="#98968c">due</text>
+
+  <rect x="185" y="70" width="120" height="36" rx="6" fill="rgba(52,211,153,0.10)" stroke="#34d399" stroke-width="1.5"/>
+  <text x="245" y="88" text-anchor="middle" dominant-baseline="central" font-size="13" font-weight="600" fill="#f2f1ea">active</text>
+
+  <line x1="307" y1="88" x2="358" y2="88" stroke="#7a786f" stroke-width="1.5" marker-end="url(#arr2)"/>
+  <text x="333" y="79" text-anchor="middle" font-size="10" fill="#98968c">receive</text>
+  <text x="333" y="100" text-anchor="middle" font-size="10" fill="#98968c">count++</text>
+
+  <rect x="360" y="70" width="120" height="36" rx="6" fill="rgba(227,179,65,0.10)" stroke="#e3b341" stroke-width="1.5"/>
+  <text x="420" y="88" text-anchor="middle" dominant-baseline="central" font-size="13" font-weight="600" fill="#f2f1ea">locked</text>
+
+  <!-- renew: self-loop that keeps the lock -->
+  <path d="M 398 70 C 398 46, 442 46, 442 70" fill="none" stroke="#7a786f" stroke-width="1.5" marker-end="url(#arr2)"/>
+  <text x="380" y="38" text-anchor="middle" font-size="10" fill="#98968c">renew before expiry ↻</text>
+
+  <!-- settlement branches from locked -->
+  <line x1="480" y1="76" x2="531" y2="39" stroke="#7a786f" stroke-width="1.5" marker-end="url(#arr2)"/>
+  <text x="500" y="48" text-anchor="end" font-size="10" fill="#98968c">complete</text>
+  <rect x="535" y="22" width="170" height="32" rx="6" fill="#1f1f1d" stroke="#4a4946" stroke-width="1.5"/>
+  <text x="620" y="38" text-anchor="middle" dominant-baseline="central" font-size="12.5" font-weight="600" fill="#f2f1ea">done ✓ · row removed</text>
+
+  <line x1="485" y1="92" x2="532" y2="98" stroke="#7a786f" stroke-width="1.5" marker-start="url(#arr2)" marker-end="url(#arr2)"/>
+  <text x="527" y="82" text-anchor="middle" font-size="10" fill="#98968c">defer ⇄ by seq</text>
+  <rect x="535" y="88" width="170" height="32" rx="6" fill="rgba(85,152,231,0.10)" stroke="#5598e7" stroke-width="1.5"/>
+  <text x="620" y="104" text-anchor="middle" dominant-baseline="central" font-size="13" font-weight="600" fill="#f2f1ea">deferred</text>
+
+  <line x1="486" y1="106" x2="533" y2="158" stroke="#7a786f" stroke-width="1.5" marker-end="url(#arr2)"/>
+  <text x="560" y="136" text-anchor="start" font-size="10" fill="#98968c">reject / count ≥ max</text>
+  <rect x="535" y="146" width="170" height="32" rx="6" fill="rgba(230,103,103,0.10)" stroke="#e66767" stroke-width="1.5"/>
+  <text x="620" y="162" text-anchor="middle" dominant-baseline="central" font-size="13" font-weight="600" fill="#f2f1ea">dead-letter (DLQ)</text>
+
+  <!-- purge / retention: the DLQ's terminal exit -->
+  <line x1="668" y1="178" x2="668" y2="196" stroke="#7a786f" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arr2)"/>
+  <text x="668" y="210" text-anchor="middle" font-size="10" fill="#98968c">✗ purge / retention</text>
+
+  <!-- cancel: only a never-delivered scheduled message can be removed -->
+  <line id="cancel-scheduled" x1="80" y1="106" x2="80" y2="128" stroke="#7a786f" stroke-width="1.5" marker-end="url(#arr2)"/>
+  <text x="87" y="117" font-size="10" dominant-baseline="central" fill="#98968c">cancel</text>
+  <text x="58" y="144" font-size="11" fill="#e66767">✗ removed</text>
+  <text x="10" y="160" font-size="9" fill="#98968c">never-delivered only</text>
+  <text x="42" y="174" font-size="9" fill="#98968c">count = 0</text>
+
+  <!-- immediate requeue: abandon without delay / lock expiry while count < max -->
+  <path id="immediate-redelivery" d="M 420 106 L 420 205 L 245 205 L 245 108" fill="none" stroke="#7a786f" stroke-width="1.5" marker-end="url(#arr2)"/>
+  <text x="250" y="221" font-size="10" fill="#98968c">abandon (delay_ms = 0) / lock expiry</text>
+  <text x="250" y="235" font-size="10" fill="#98968c">count &lt; max → active</text>
+
+  <!-- redrive loop: DLQ back to active with the count reset -->
+  <path d="M 600 178 L 600 252 L 225 252 L 225 108" fill="none" stroke="#7a786f" stroke-width="1.5" marker-end="url(#arr2)"/>
+  <text x="250" y="268" font-size="10" fill="#98968c">redrive → active (delivery_count reset to 0)</text>
+
+  <!-- delayed requeue: locked → scheduled, holding the ordered group until due -->
+  <path id="delayed-abandon" d="M 460 106 L 460 188 L 730 188 L 730 300 L 127 300 L 127 108" fill="none" stroke="#5598e7" stroke-width="1.5" marker-end="url(#arr2)"/>
+  <text x="250" y="316" font-size="10" fill="#98968c">abandon (delay_ms &gt; 0), count &lt; max → scheduled</text>
+  <text x="250" y="332" font-size="10" fill="#98968c">holds group until due (strict_fifo: whole queue)</text>
+
+  <!-- TTL: the exit every non-terminal state shares -->
+  <line x1="30" y1="365" x2="58" y2="365" stroke="#7a786f" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arr2)"/>
+  <text x="66" y="365" font-size="10" dominant-baseline="central" fill="#98968c">TTL expiry — from any of scheduled / active / locked / deferred:</text>
+  <text x="66" y="381" font-size="10" dominant-baseline="central" fill="#98968c">→ dead-letter, or ✗ discarded when dead_letter_on_expire = 0</text>
+
+  <text x="30" y="411" font-size="10" fill="#98968c">New settlements / Renew: current token, locked_until_ms &gt; now; equality is expired.</text>
+  <text x="30" y="427" font-size="10" fill="#98968c">An unexpired exact-request receipt can replay a committed settlement after lease expiry.</text>
+</svg>

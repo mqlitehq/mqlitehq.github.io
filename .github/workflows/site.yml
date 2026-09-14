@@ -1,0 +1,60 @@
+name: site
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  anti-rot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the site
+        uses: actions/checkout@v7
+      - name: Check out mqlite (canonical docs)
+        uses: actions/checkout@v7
+        with:
+          repository: mqlitehq/mqlite
+          path: mqlite-src
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          check-latest: true
+          package-manager-cache: false
+      - name: Install generator dependencies
+        working-directory: tools
+        run: npm ci
+      - name: Test generation and rejection contracts
+        working-directory: tools
+        run: node --test build.test.mjs
+      - name: Verify every generated output and source-derived claim
+        working-directory: tools
+        run: node build.mjs ../mqlite-src --check
+      - name: Package the public static site
+        run: sh tools/package-site.sh _site
+      - name: Upload the checked site
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: _site
+
+  deploy:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: anti-rot
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    concurrency:
+      group: github-pages
+      cancel-in-progress: false
+    steps:
+      - name: Deploy the checked site
+        id: deployment
+        uses: actions/deploy-pages@v5

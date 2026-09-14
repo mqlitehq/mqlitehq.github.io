@@ -1,0 +1,398 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>mqlite — a message queue in a single SQLite file</title>
+<meta name="description" content="Peek-Lock delivery, retries, DLQ, scheduling, dedup, FIFO groups and topic fan-out — embedded in your Go process or served as a tiny broker. Pure Go, no CGO, one SQLite file.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/site.css">
+<script src="assets/highlight.min.js" defer></script>
+<script src="assets/site.js" defer></script>
+<style>
+  /* landing-only */
+  .hero { padding: 74px 0 30px; }
+  .hero h1 { font: 700 44px/1.15 var(--mono); color: var(--ink); letter-spacing: -0.03em; display: flex; align-items: center; gap: 16px; }
+  .hero h1 img { width: 52px; height: 52px; }
+  .hero .tag { margin: 18px 0 8px; font-size: 19px; color: var(--ink); max-width: 46em; }
+  .hero .tag b { color: var(--accent); font-weight: 650; }
+  .hero .sub { color: var(--ink2); max-width: 46em; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 20px 0 24px; }
+  .chip { font: 500 12px/1 var(--mono); color: var(--ink2); border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; }
+  .chip.v { color: var(--accent); border-color: rgba(250, 204, 21, 0.35); }
+  .cta { display: flex; flex-wrap: wrap; gap: 12px; }
+  .btn { font: 600 14px/1 var(--mono); border-radius: 9px; padding: 12px 18px; display: inline-block; }
+  .btn.primary { background: var(--accent); color: #111; }
+  .btn.primary:hover { text-decoration: none; filter: brightness(1.08); }
+  .btn.ghost { border: 1px solid var(--line); color: var(--ink); }
+  .btn.ghost:hover { text-decoration: none; border-color: var(--accent); }
+
+  section.land { padding: 34px 0 6px; }
+
+  .pains { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  @media (max-width: 900px) { .pains { grid-template-columns: 1fr; } }
+  .pain { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px 16px; display: flex; flex-direction: column; }
+  .pain h3 { font: 650 14px/1.55 var(--mono); color: var(--ink); margin-bottom: 8px; }
+  .pain h3::before { content: "✗ "; color: #e66767; }
+  .pain .p { font-size: 12.8px; color: var(--muted); line-height: 1.65; flex: 1; }
+  .pain .a { border-top: 1px solid var(--grid); margin-top: 12px; padding-top: 12px; }
+  .pain .a b { display: block; font: 650 13.5px/1.5 var(--mono); color: var(--accent); margin-bottom: 4px; }
+  .pain .a p { font-size: 12.8px; color: var(--ink2); line-height: 1.65; }
+  section.land > h2 { font: 700 20px/1.4 var(--mono); color: var(--ink); margin-bottom: 4px; }
+  section.land > .lede { color: var(--muted); font-size: 13.5px; margin-bottom: 16px; }
+  section.land h3.subh { font: 650 13.5px/1.6 var(--mono); color: var(--ink2); margin: 26px 0 10px; }
+  section.land h3.subh a { color: var(--link); }
+
+  .tabbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+  .tabbar button { font: 600 12.5px/1 var(--mono); color: var(--ink2); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 9px 14px; cursor: pointer; }
+  .tabbar button:hover { color: var(--ink); border-color: var(--accent); }
+  .tabbar button.on { color: #111; background: var(--accent); border-color: var(--accent); }
+  .tabpane { display: none; }
+  .tabpane.on { display: block; }
+  .tabpane > p { font-size: 13.4px; color: var(--ink2); margin: 0 0 10px; }
+
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .why { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; }
+  .why h3 { font: 650 14.5px/1.4 var(--mono); color: var(--ink); margin-bottom: 6px; }
+  .why h3 em { color: var(--accent); font-style: normal; margin-right: 8px; }
+  .why p { font-size: 13.4px; }
+  .why code { font-size: 0.85em; }
+
+  .split { display: grid; grid-template-columns: 5fr 6fr; gap: 22px; align-items: start; }
+  .split > * { min-width: 0; }
+  .split pre { margin: 0; }
+  @media (max-width: 900px) { .grid2, .split { grid-template-columns: 1fr; } .hero h1 { font-size: 34px; } }
+
+  .sem { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  @media (max-width: 900px) { .sem { grid-template-columns: 1fr 1fr; } }
+  .sem a { display: block; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 11px 14px; color: var(--ink2); font-size: 12.6px; line-height: 1.55; }
+  .sem a:hover { text-decoration: none; border-color: var(--accent); }
+  .sem b { display: block; font: 650 12.5px/1.5 var(--mono); color: var(--ink); }
+
+  .numbers { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 6px 18px; overflow-x: auto; }
+  .numbers table { width: 100%; border-collapse: collapse; font-size: 13.2px; }
+  .numbers th { color: var(--muted); font: 600 11.5px/1.5 var(--sans); letter-spacing: 0.4px; text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+  .numbers td { padding: 10px 12px; border-bottom: 1px solid var(--grid); vertical-align: top; }
+  .numbers tr:last-child td { border-bottom: none; }
+  .num { font-family: var(--mono); color: var(--ink); white-space: nowrap; }
+
+  .quote { border-left: 3px solid var(--accent); background: var(--surface); border-radius: 0 10px 10px 0; padding: 14px 18px; margin: 12px 0; font-size: 14px; }
+  .quote b { color: var(--ink); }
+</style>
+</head>
+<body>
+<nav class="top"><div class="wrap">
+  <a class="brand" href="./"><img src="logo.svg" alt="" width="24" height="24"> mqlite</a>
+  <div class="links">
+    <a href="concepts.html">Concepts</a>
+    <a href="internals.html">Internals</a>
+    <a href="api.html">API</a>
+    <a href="cli.html">CLI</a>
+    <a href="deployment.html">Deployment</a>
+    <a href="observability.html">Observability</a>
+    <a href="operations.html">Operations</a>
+    <a href="agents.html">For AI agents</a>
+    <a class="gh" href="https://github.com/mqlitehq/mqlite">GitHub ↗</a>
+  </div>
+</div></nav>
+
+<div class="wrap">
+
+<div class="hero">
+  <h1><img src="logo.svg" alt="mqlite logo">mqlite</h1>
+  <p class="tag">A message queue in a <b>single SQLite file</b>.</p>
+  <p class="sub">Peek-Lock delivery, retries, dead-letter queues, scheduling, dedup,
+  FIFO groups and topic fan-out — <strong>embedded in your Go process</strong> or served as a
+  <strong>tiny HTTP broker</strong>. Same engine, same file, your choice.</p>
+  <div class="chips">
+    <span class="chip v">latest release v0.3.0</span>
+    <span class="chip">docs track main</span>
+    <span class="chip">pure Go · no CGO</span>
+    <span class="chip">one binary · one file</span>
+    <span class="chip">JSON over HTTP · curl-able</span>
+    <span class="chip">local SQLite or remote Turso</span>
+    <span class="chip">MIT</span>
+  </div>
+  <div class="cta">
+    <a class="btn primary" href="#quickstart">Quickstart</a>
+    <a class="btn ghost" href="concepts.html">Read the concepts</a>
+    <a class="btn ghost" href="operations.html">Production operations</a>
+    <a class="btn ghost" href="agents.html">I'm an AI agent</a>
+  </div>
+</div>
+
+<section class="land" id="solves">
+  <h2># what it solves</h2>
+  <p class="lede">Three problems that keep re-appearing in every backend.</p>
+  <div class="pains">
+    <div class="pain">
+      <h3>“I need background jobs, not a broker deployment.”</h3>
+      <div class="p">A cluster to operate, an SDK to learn, a bill to pay — for one service.</div>
+      <div class="a"><b>→ a library over one file</b>
+        <p>Zero infrastructure. Want HTTP later? The same engine runs as one ~30 MB process.</p>
+      </div>
+    </div>
+    <div class="pain">
+      <h3>“My DB write and my event can disagree.”</h3>
+      <div class="p">Save the order, publish the event — crash in between and they split. Outbox tables and CDC are yet more machinery.</div>
+      <div class="a"><b>→ one transaction for both</b>
+        <p>The queue <em>is</em> your SQLite DB: business write + enqueue commit atomically.</p>
+      </div>
+    </div>
+    <div class="pain">
+      <h3>“My hand-rolled jobs table became a bad broker.”</h3>
+      <div class="p">A <code>status</code> column and a polling loop slowly regrow locks, retries, dead-letters — untested.</div>
+      <div class="a"><b>→ these semantics come finished</b>
+        <p>Peek-Lock, retries → DLQ + redrive, FIFO groups, delays, dedup — pinned by a conformance suite.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="land">
+  <h2># why mqlite</h2>
+  <p class="lede">Design priorities, in order — when they conflict, the earlier one wins.</p>
+  <div class="grid2">
+    <div class="why"><h3><em>1</em>Lightweight &amp; embeddable</h3>
+      <p>One pure-Go binary over one SQLite file. No broker cluster, no sidecar, no CGO.
+      Start embedded; move the same code to a broker, or the storage to replicated
+      <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/turso.md">Turso</a>, without rewriting your app.</p></div>
+    <div class="why"><h3><em>2</em>Reliable under concurrency</h3>
+      <p>Honestly <strong>at-least-once</strong>: new settlements require a current token and
+      unexpired lease; idempotent
+      send/receive/settle, single-broker crash recovery, and O(log n) claims on a deep backlog.
+      FIFO groups stay ordered even across consumer crashes and lock expiry.</p></div>
+    <div class="why"><h3><em>3</em>Simple, unambiguous interface</h3>
+      <p>Every operation is <strong>one HTTP POST with a JSON body</strong> — 22 routes, curl-able by
+      construction, exactly one settlement verb per outcome (<code>Complete</code> /
+      <code>Abandon</code> / <code>Reject</code> / <code>Defer</code>), no aliases. Easy for people; easy for
+      <a href="agents.html">agents</a>.</p></div>
+    <div class="why"><h3><em>4</em>Service Bus flavor, not a clone</h3>
+      <p>Peek-Lock, <code>group_id</code> sessions, DLQ + redrive, scheduling and duplicate detection feel
+      familiar from Azure Service Bus — in an idiomatic-Go shape, with the
+      <a href="concepts.html">whole model documented</a> and every claim pinned by a
+      <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/conformance.md">conformance suite</a>.</p></div>
+  </div>
+</section>
+
+<section class="land">
+  <h2># the killer feature: a transactional outbox with no outbox</h2>
+  <div class="split">
+    <div>
+      <p>Because the queue <em>is</em> your SQLite database, a business write and its event
+      commit in <strong>one transaction</strong>. The message exists if and only if the order does —
+      no dual-write race, no CDC pipeline, no poller.</p>
+      <div class="quote"><b>Embedded-only, and nothing else gives you this shape:</b>
+      external brokers can't join your DB transaction, and Postgres-based queues need a
+      Postgres. Here it's one file.</div>
+    </div>
+    <pre><code class="language-go">package main
+
+import (
+    "context"
+    "log"
+
+    "github.com/mqlitehq/mqlite"
+    "github.com/mqlitehq/mqlite/engine"
+)
+
+func main() {
+    ctx := context.Background()
+    mq, _ := mqlite.OpenEmbedded(ctx, "file:./app.db")
+    defer mq.Close()
+    _ = mq.CreateQueue(ctx, "order-events", mqlite.QueueConfig{})
+
+    err := mq.Tx(ctx, func(tx *engine.EngineTx) error {
+        // 1) the business write, on the SAME transaction. Use tx.Context(), not the
+        //    ctx you passed to Tx — a statement interrupted mid-transaction wedges
+        //    a local SQLite database.
+        if _, err := tx.SQL().ExecContext(tx.Context(),
+            `INSERT INTO orders(id, total) VALUES(?, ?)`,
+            42, 1999); err != nil {
+            return err // rollback: nothing enqueued
+        }
+        // 2) enqueue — commits atomically with it:
+        _, err := tx.SendOne("order-events",
+            engine.OutMessage{Body: []byte(`{"order":42}`)})
+        return err
+    })
+    if err != nil {
+        log.Fatal(err)
+    }
+    // Either both happened, or neither did.
+}</code></pre>
+  </div>
+</section>
+
+<section class="land" id="how">
+  <h2># how it works</h2>
+  <p class="lede">Two delivery targets, one storage story: a topic stores nothing — the thing that stores, is consumed, and can dead-letter is always a queue.</p>
+  <figure class="fig"><img src="assets/fig-overview.svg" alt="mqlite model: send straight to a queue (active → locked → consumer, with a DLQ side-loop), or publish to a topic that fans out to per-subscription backing queues; a message matching no subscription is dropped." style="width:100%;display:block"></figure>
+  <h3 class="subh">the source version described here is covered by the conformance TCK — details in <a href="concepts.html">Concepts</a>; the full construction story (schema, locks, fencing, recovery) is in <a href="internals.html">Internals</a></h3>
+  <div class="sem">
+    <a href="concepts.html"><b>Peek-Lock delivery</b>receive → work → settle; renew before expiry; expired locks auto-redeliver</a>
+    <a href="concepts.html"><b>Retries → DLQ</b>max_delivery_count then dead-letter; redrive back; bounded retention</a>
+    <a href="concepts.html"><b>FIFO groups</b>standard / group_fifo / strict_fifo; order holds across crashes, lock expiry &amp; delayed retries</a>
+    <a href="concepts.html"><b>Topics + filters</b>fan-out with one expr predicate per subscription, fail-closed</a>
+    <a href="concepts.html"><b>Scheduling &amp; TTL</b>deliver later; cancel a never-delivered scheduled message; per-message TTL capped by the queue</a>
+    <a href="concepts.html"><b>Duplicate detection</b>message_id window collapses repeats; conflicts fail loud (409)</a>
+    <a href="concepts.html"><b>Defer</b>set a message aside, fetch it back by sequence number</a>
+    <a href="api.html"><b>Ops built in</b>/ui console · /metrics histograms · discovery card · CLI · MCP server</a>
+  </div>
+</section>
+
+<section class="land" id="honest">
+  <h2># the honest part</h2>
+  <p class="lede">Measured, reproducible, published — including the unflattering rows. Full method: <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/benchmark.md">docs/benchmark.md</a>.</p>
+  <div class="numbers"><table>
+    <tr><th>Setup</th><th>Measured</th><th>Read this as</th></tr>
+    <tr><td>Local file DB, 12-core machine</td>
+        <td class="num">19.5k msg/s single · ~35k batched</td>
+        <td>an embedded queue that keeps up with your app</td></tr>
+    <tr><td>1-vCPU / 256 MB cloud box, embedded engine</td>
+        <td class="num">6–7.5k msg/s batched · 1,507 msg/s drain</td>
+        <td>batch your sends and receives — that's the sweet spot</td></tr>
+    <tr><td>Remote Turso (co-located)</td>
+        <td class="num">~45 ms per durable commit</td>
+        <td>you're buying durability + geo-replication, <strong>not</strong> throughput</td></tr>
+    <tr><td>Memory / disk</td>
+        <td class="num">25–34 MB RSS · file auto-shrinks when drained</td>
+        <td>fits the smallest VM you can rent</td></tr>
+  </table></div>
+  <h3 class="subh">when NOT to use mqlite — it is a single-writer, single-node queue by design</h3>
+  <div class="numbers"><table>
+    <tr><th>If you need…</th><th>Use instead</th></tr>
+    <tr><td>Log streaming, replay, consumer groups over history</td><td>Kafka · Redpanda · NATS JetStream</td></tr>
+    <tr><td>A clustered, highly-available multi-node broker</td><td>NATS · RabbitMQ</td></tr>
+    <tr><td>A queue inside the Postgres you already run</td><td>pgmq · River</td></tr>
+    <tr><td>Sustained six-figure msg/s on one node</td><td>not this — the single-writer model is the point, not a bug</td></tr>
+    <tr><td>“Exactly-once delivery”</td><td>nobody sells that honestly; mqlite is at-least-once, so write idempotent handlers</td></tr>
+  </table></div>
+</section>
+
+<section class="land" id="quickstart">
+  <h2># quickstart</h2>
+  <p class="lede">Three ways in — they all drive the same engine. These examples pin v0.3.0; see <a href="deployment.html">Deployment</a> for installation and runtime settings.</p>
+  <div class="tabs">
+    <div class="tabbar">
+      <button class="on" data-t="go">Embedded Go</button>
+      <button data-t="broker">Broker + curl</button>
+      <button data-t="docker">Docker</button>
+    </div>
+    <div class="tabpane on" data-t="go">
+      <p>No server at all: one import, one file — the queue lives inside your process. <code>go get github.com/mqlitehq/mqlite@v0.3.0</code> (Go ≥ 1.21).</p>
+      <pre><code class="language-go">package main
+
+import (
+    "context"
+    "fmt"
+    "log"
+    "time"
+
+    "github.com/mqlitehq/mqlite"
+)
+
+func main() {
+    ctx := context.Background()
+    mq, err := mqlite.OpenEmbedded(ctx, "file:./mq.db")
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer mq.Close()
+
+    if err := mq.CreateQueue(ctx, "orders", mqlite.QueueConfig{
+        LockDuration:     30 * time.Second,
+        MaxDeliveryCount: 5,
+    }); err != nil {
+        log.Fatal(err)
+    }
+
+    // produce
+    if _, err := mq.SendOne(ctx, "orders", mqlite.OutMessage{Body: []byte(`{"id":42}`)}); err != nil {
+        log.Fatal(err)
+    }
+
+    // consume (Peek-Lock): receive, do work, then settle
+    msgs, err := mq.Receive(ctx, "orders", mqlite.RecvOpts{Max: 10, Wait: 5 * time.Second})
+    if err != nil {
+        log.Fatal(err)
+    }
+    for _, m := range msgs {
+        fmt.Printf("got: %s\n", m.Body)
+        if err := m.Complete(ctx); err != nil { // or m.Abandon(ctx) to retry, m.Reject(ctx) -> DLQ
+            log.Fatal(err)
+        }
+    }
+}</code></pre>
+    </div>
+    <div class="tabpane" data-t="broker">
+      <p>One tiny process, secure by default: it generates a <code>mqk_…</code> token and prints it if you don't set one. Every operation is one POST.</p>
+      <p>v0.3.0 uses port 6754 and schema token 5. Upgrading from v0.2.0 (port 8080, schema token 2) requires a new database; follow the <a href="operations.html#upgrade-and-rollback">upgrade and rollback procedure</a>.</p>
+      <pre><code class="language-bash">go install github.com/mqlitehq/mqlite/cmd/mqlite@v0.3.0   # default port 6754
+
+# start the broker on :6754 with a known token, in the background
+MQLITE_TOKENS=mqk_dev MQLITE_DB=file:./mq.db mqlite serve &
+export TOKEN=mqk_dev        # (omit MQLITE_TOKENS to have the broker generate + print one)
+
+# create a queue, send, receive — curl-able by construction
+curl -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+     --data '{"name":"orders","config":{}}' \
+     localhost:6754/mqlite.v1.AdminService/CreateQueue
+
+curl -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+     --data "{\"queue\":\"orders\",\"messages\":[{\"body\":\"$(printf hi | base64)\"}]}" \
+     localhost:6754/mqlite.v1.QueueService/Send
+
+curl -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+     --data '{"queue":"orders","max_messages":1,"wait_time_ms":5000}' \
+     localhost:6754/mqlite.v1.QueueService/Receive</code></pre>
+    </div>
+    <div class="tabpane" data-t="docker">
+      <p>A named volume keeps queue data across container replacement. The admin console is available at <code>/ui</code>.</p>
+      <p>This example pins the v0.3.0 image. For production configuration and recovery, follow <a href="deployment.html">Deployment</a> and the <a href="operations.html">operations runbook</a>.</p>
+      <pre><code class="language-bash">docker run -d --name mqlite -p 127.0.0.1:6754:6754 \
+  -e MQLITE_TOKENS=mqk_dev \
+  -e MQLITE_DB=file:/data/mq.db \
+  -v mqdata:/data \
+  ghcr.io/mqlitehq/mqlite:0.3.0
+
+curl http://localhost:6754/          # discovery card (no auth)
+# then open the admin console in a browser: http://localhost:6754/ui</code></pre>
+    </div>
+  </div>
+</section>
+
+<section class="land" id="operations">
+  <h2># run it in production</h2>
+  <p class="lede">Start with one broker over a persistent local SQLite file. Choose a durability setting and rehearse recovery before putting messages into production.</p>
+  <div class="sem">
+    <a href="operations.html"><b>Operations runbook</b>production boundary, backups, restore, upgrades and rollback</a>
+    <a href="deployment.html"><b>Deployment</b>installation, one broker, persistent storage, authentication and TLS</a>
+    <a href="observability.html"><b>Observability</b>queue depth, dead letters, RPC latency and actionable alerts</a>
+    <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/conformance.md"><b>Conformance</b>delivery guarantees, recovery contracts and the tests behind them</a>
+  </div>
+</section>
+
+<section class="land">
+  <h2># built for AI agents too</h2>
+  <div class="quote">
+    The API was shaped so a model can drive it without tripping: one POST per operation,
+    one verb per outcome, a machine-readable discovery card at <code>GET /</code>, an
+    <b>MCP server</b> (<code>mqlite-mcp</code>, 14 tools), and
+    <a href="llms.txt"><code>llms.txt</code></a> / <a href="llms-full.txt"><code>llms-full.txt</code></a>
+    for anything that reads the web. Copy-paste prompts and setup:
+    <a href="agents.html"><b>For AI agents →</b></a>
+  </div>
+</section>
+
+</div>
+
+<footer class="site"><div class="wrap">
+  <span>MIT © The MQLite Authors</span>
+  <a href="https://github.com/mqlitehq/mqlite">GitHub</a>
+  <a href="https://github.com/mqlitehq/mqlite/releases">Releases</a>
+  <a href="https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md">Changelog</a>
+  <a href="llms.txt">llms.txt</a>
+</div></footer>
+</body>
+</html>
