@@ -19,6 +19,7 @@
     <a href="internals.html">Internals</a>
     <a href="api.html">API</a>
     <a href="cli.html">CLI</a>
+    <a href="access-keys.html">Access keys</a>
     <a href="deployment.html">Deployment</a>
     <a href="observability.html">Observability</a>
     <a href="operations.html">Operations</a>
@@ -27,8 +28,8 @@
   </div>
 </div></nav>
 <div class="wrap">
-  <div class="stamp">Generated from <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/internals.md">mqlite main · docs/internals.md</a> — source v0.3.0; latest release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.3.0">v0.3.0</a>.
-  These docs track main; check release notes for published artifacts. Edit the canonical Markdown and re-run <code>tools/build.mjs</code>.</div>
+  <div class="stamp">Generated from <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/internals.md">mqlite main · docs/internals.md</a> — source v0.3.1; latest release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.3.0">v0.3.0</a>.
+  These docs track main; check release notes for published artifacts. The source changes are unreleased. Edit the canonical Markdown and re-run <code>tools/build.mjs</code>.</div>
   <main class="prose">
 <h1 id="how-mqlite-works--building-a-reliable-queue-on-one-sqlite-file">How mqlite works — building a reliable queue on one SQLite file</h1>
 <blockquote>
@@ -55,8 +56,8 @@ something you already trust: <strong>a SQLite database with ACID transactions</s
 schema and the transitions right, and the reliability story stops being clever
 code and becomes <strong>database invariants</strong>.</p>
 <p>The rest of this document is those invariants, in the order they earn their keep.</p>
-<h2 id="2--the-schema-seven-tables-one-of-which-matters-most">2 · The schema: seven tables, one of which matters most</h2>
-<p>Everything lives in seven <code>STRICT</code> tables (<code>engine/schema.go</code>). Six carry the
+<h2 id="2--the-schema-eight-tables-one-of-which-matters-most">2 · The schema: eight tables, one of which matters most</h2>
+<p>Everything lives in eight <code>STRICT</code> tables (<code>engine/schema.go</code>). Seven carry the
 machinery; one carries your data:</p>
 <table>
 <thead>
@@ -92,6 +93,10 @@ machinery; one carries your data:</p>
 <tr>
 <td><code>meta</code></td>
 <td>one row: the schema guard token (§9)</td>
+</tr>
+<tr>
+<td><code>access_keys</code></td>
+<td>SHA-256 token digests, permission sets, expiry and revocation metadata (v0.3.1)</td>
 </tr>
 </tbody></table>
 <p>The heart, abridged:</p>
@@ -348,10 +353,11 @@ namespace disjointness…) each cite the hermetic test that pins them; CI runs
 them with the race detector on three OSes.</li>
 <li><strong>Plan-pinning tests</strong> — <code>EXPLAIN QUERY PLAN</code> output is asserted, so the
 performance shape is a regression-tested contract, not a hope (§5).</li>
-<li><strong>A schema golden test</strong> — the DDL&#39;s hash is pinned to the schema guard token
-in <code>meta</code>. mqlite keeps a <em>single canonical schema</em> and refuses to open a file
-from a different one (<code>ErrSchemaVersionMismatch</code>); pre-1.0 there are no silent
-migrations, and the golden test makes forgetting the token bump impossible.</li>
+<li><strong>A schema golden test</strong> — the complete canonical DDL is pinned. A database
+with a different guard token is refused (<code>ErrSchemaVersionMismatch</code>); existing
+table layouts are never migrated. Incompatible changes require a token change.
+The independent <code>access_keys</code> addition preserves token 5, with a separate golden
+for its DDL, the unchanged prior DDL and actual old-binary compatibility checks.</li>
 <li><strong>An integrity sweep</strong> — a randomized send/receive/crash workload asserting
 every message arrives (no loss), arrives intact (content hash), and never
 exceeds its delivery bound.</li>

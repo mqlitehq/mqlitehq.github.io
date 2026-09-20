@@ -39,11 +39,11 @@ function materialize(t, outputs) {
 test('the complete generated output and source inventories are explicit', () => {
   assert.deepEqual(PAGES.map(([src, out]) => [src, out]), [
     ['concepts.md', 'concepts.html'], ['internals.md', 'internals.html'], ['api-reference.md', 'api.html'],
-    ['cli.md', 'cli.html'], ['deployment.md', 'deployment.html'], ['observability.md', 'observability.html'],
+    ['cli.md', 'cli.html'], ['access-keys.md', 'access-keys.html'], ['deployment.md', 'deployment.html'], ['observability.md', 'observability.html'],
     ['operations.md', 'operations.html'],
   ]);
-  assert.deepEqual(BUNDLE_FILES, ['concepts.md', 'internals.md', 'api-reference.md', 'cli.md', 'deployment.md', 'observability.md', 'operations.md', 'mcp.md', 'examples.md']);
-  assert.deepEqual(GENERATED_FILES, ['concepts.html', 'internals.html', 'api.html', 'cli.html', 'deployment.html', 'observability.html', 'operations.html', 'llms-full.txt', 'site-metadata.json', 'assets/highlight.min.js']);
+  assert.deepEqual(BUNDLE_FILES, ['concepts.md', 'internals.md', 'api-reference.md', 'cli.md', 'access-keys.md', 'deployment.md', 'observability.md', 'operations.md', 'mcp.md', 'examples.md']);
+  assert.deepEqual(GENERATED_FILES, ['concepts.html', 'internals.html', 'api.html', 'cli.html', 'access-keys.html', 'deployment.html', 'observability.html', 'operations.html', 'llms-full.txt', 'site-metadata.json', 'assets/highlight.min.js']);
 });
 
 test('source and dated latest release stay distinct across patch preparation and publication', (t) => {
@@ -56,6 +56,7 @@ test('source and dated latest release stay distinct across patch preparation and
     assert.equal(metadata.latestRelease, `v${released}`);
     for (const [, out] of PAGES) {
       assert.ok(outputs.get(out).includes(`source v${source}; latest release:`));
+      assert.equal(outputs.get(out).includes('The source changes are unreleased.'), source !== released);
       assert.ok(outputs.get(out).includes(`releases/tag/v${released}`));
       assert.ok(outputs.get(out).includes('mqlite main'));
       assert.ok(!outputs.get(out).includes('upcoming v0.3.0'));
@@ -172,7 +173,7 @@ test('the real Pages package contains the complete static inventory with identic
     return entry.isDirectory() ? files(resolve(dir, entry.name), `${name}/`) : [name];
   });
   const expected = [
-    'agents.html', 'api.html', 'assets/fig-lifecycle.svg', 'assets/fig-overview.svg',
+    'access-keys.html', 'agents.html', 'api.html', 'assets/fig-lifecycle.svg', 'assets/fig-overview.svg',
     'assets/highlight.min.js', 'assets/site.css', 'assets/site.js', 'cli.html',
     'concepts.html', 'deployment.html', 'favicon.svg', 'index.html', 'internals.html',
     'llms-full.txt', 'llms.txt', 'logo.svg', 'observability.html', 'operations.html',

@@ -88,6 +88,7 @@
     <a href="internals.html">Internals</a>
     <a href="api.html">API</a>
     <a href="cli.html">CLI</a>
+    <a href="access-keys.html">Access keys</a>
     <a href="deployment.html">Deployment</a>
     <a href="observability.html">Observability</a>
     <a href="operations.html">Operations</a>
@@ -106,7 +107,7 @@
   <strong>tiny HTTP broker</strong>. Same engine, same file, your choice.</p>
   <div class="chips">
     <span class="chip v">latest release v0.3.0</span>
-    <span class="chip">docs track main</span>
+    <span class="chip">source v0.3.1 · unreleased</span>
     <span class="chip">pure Go · no CGO</span>
     <span class="chip">one binary · one file</span>
     <span class="chip">JSON over HTTP · curl-able</span>
@@ -117,6 +118,7 @@
     <a class="btn primary" href="#quickstart">Quickstart</a>
     <a class="btn ghost" href="concepts.html">Read the concepts</a>
     <a class="btn ghost" href="operations.html">Production operations</a>
+    <a class="btn ghost" href="access-keys.html">Access keys</a>
     <a class="btn ghost" href="agents.html">I'm an AI agent</a>
   </div>
 </div>
@@ -163,7 +165,7 @@
       send/receive/settle, single-broker crash recovery, and O(log n) claims on a deep backlog.
       FIFO groups stay ordered even across consumer crashes and lock expiry.</p></div>
     <div class="why"><h3><em>3</em>Simple, unambiguous interface</h3>
-      <p>Every operation is <strong>one HTTP POST with a JSON body</strong> — 22 routes, curl-able by
+      <p>Every operation is <strong>one HTTP POST with a JSON body</strong> — 25 routes in the v0.3.1 source, curl-able by
       construction, exactly one settlement verb per outcome (<code>Complete</code> /
       <code>Abandon</code> / <code>Reject</code> / <code>Defer</code>), no aliases. Easy for people; easy for
       <a href="agents.html">agents</a>.</p></div>
@@ -362,6 +364,19 @@ curl http://localhost:6754/          # discovery card (no auth)
   </div>
 </section>
 
+<section class="land" id="access-keys">
+  <h2># one key for each application</h2>
+  <p class="lede"><strong>v0.3.1 source · unreleased.</strong> Keep a configured administrator token and issue separate application keys at runtime, with no broker restart.</p>
+  <div class="sem">
+    <a href="access-keys.html#choose-a-permission"><b>Send</b>send, schedule and cancel scheduled messages</a>
+    <a href="access-keys.html#choose-a-permission"><b>Listen</b>receive, settle, renew, peek and read queue statistics</a>
+    <a href="access-keys.html#choose-a-permission"><b>Manage</b>all application rights, administration and issuing or revoking keys</a>
+    <a href="access-keys.html#rotate-revoke-and-recover"><b>Rotate without a restart</b>create a replacement, switch the application, then revoke the old key</a>
+  </div>
+  <p>Permissions apply across one broker. Tokens are shown once; the database stores only their digests. Manage keys through the Go SDK, HTTP API, CLI, console or MCP. The v0.3.0 release examples below do not include this feature.</p>
+  <p><a href="access-keys.html">Read the access key guide →</a></p>
+</section>
+
 <section class="land" id="operations">
   <h2># run it in production</h2>
   <p class="lede">Start with one broker over a persistent local SQLite file. Choose a durability setting and rehearse recovery before putting messages into production.</p>
@@ -378,7 +393,7 @@ curl http://localhost:6754/          # discovery card (no auth)
   <div class="quote">
     The API was shaped so a model can drive it without tripping: one POST per operation,
     one verb per outcome, a machine-readable discovery card at <code>GET /</code>, an
-    <b>MCP server</b> (<code>mqlite-mcp</code>, 14 tools), and
+    <b>MCP server</b> (<code>mqlite-mcp</code>, 17 tools in the unreleased v0.3.1 source), and
     <a href="llms.txt"><code>llms.txt</code></a> / <a href="llms-full.txt"><code>llms-full.txt</code></a>
     for anything that reads the web. Copy-paste prompts and setup:
     <a href="agents.html"><b>For AI agents →</b></a>

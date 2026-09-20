@@ -1,9 +1,9 @@
 mqlite main — full documentation bundle.
-Source version: v0.3.0. Latest recorded release: v0.3.0.
+Source version: v0.3.1. Latest recorded release: v0.3.0.
 These docs track main; consult release notes for published artifacts and upgrade requirements.
 Source of truth: https://github.com/mqlitehq/mqlite/tree/main/docs
 
-<!-- ===== mqlite main · source v0.3.0; latest release v0.3.0 · docs/concepts.md ===== -->
+<!-- ===== mqlite main · source v0.3.1; latest release v0.3.0 · docs/concepts.md ===== -->
 
 # Core concepts & subscription filters
 
@@ -471,7 +471,7 @@ there is no IO:
   for the filter rules MQLite guarantees.
 
 
-<!-- ===== mqlite main · source v0.3.0; latest release v0.3.0 · docs/internals.md ===== -->
+<!-- ===== mqlite main · source v0.3.1; latest release v0.3.0 · docs/internals.md ===== -->
 
 # How mqlite works — building a reliable queue on one SQLite file
 
@@ -503,9 +503,9 @@ code and becomes **database invariants**.
 
 The rest of this document is those invariants, in the order they earn their keep.
 
-## 2 · The schema: seven tables, one of which matters most
+## 2 · The schema: eight tables, one of which matters most
 
-Everything lives in seven `STRICT` tables (`engine/schema.go`). Six carry the
+Everything lives in eight `STRICT` tables (`engine/schema.go`). Seven carry the
 machinery; one carries your data:
 
 | Table | Job |
@@ -517,6 +517,7 @@ machinery; one carries your data:
 | `settlement_receipts` | makes acknowledgements idempotent (§7) |
 | `receive_attempts` | makes receives idempotent (§7) |
 | `meta` | one row: the schema guard token (§9) |
+| `access_keys` | SHA-256 token digests, permission sets, expiry and revocation metadata (v0.3.1) |
 
 The heart, abridged:
 
@@ -788,10 +789,11 @@ Every claim in this document is enforced by something that fails loudly:
   them with the race detector on three OSes.
 - **Plan-pinning tests** — `EXPLAIN QUERY PLAN` output is asserted, so the
   performance shape is a regression-tested contract, not a hope (§5).
-- **A schema golden test** — the DDL's hash is pinned to the schema guard token
-  in `meta`. mqlite keeps a *single canonical schema* and refuses to open a file
-  from a different one (`ErrSchemaVersionMismatch`); pre-1.0 there are no silent
-  migrations, and the golden test makes forgetting the token bump impossible.
+- **A schema golden test** — the complete canonical DDL is pinned. A database
+  with a different guard token is refused (`ErrSchemaVersionMismatch`); existing
+  table layouts are never migrated. Incompatible changes require a token change.
+  The independent `access_keys` addition preserves token 5, with a separate golden
+  for its DDL, the unchanged prior DDL and actual old-binary compatibility checks.
 - **An integrity sweep** — a randomized send/receive/crash workload asserting
   every message arrives (no loss), arrives intact (content hash), and never
   exceeds its delivery bound.
@@ -899,7 +901,7 @@ with the conformance suite as the judge.
 [benchmark.md](https://github.com/mqlitehq/mqlite/blob/main/docs/benchmark.md).*
 
 
-<!-- ===== mqlite main · source v0.3.0; latest release v0.3.0 · docs/api-reference.md ===== -->
+<!-- ===== mqlite main · source v0.3.1; latest release v0.3.0 · docs/api-reference.md ===== -->
 
 # mqlite HTTP API reference
 
@@ -967,12 +969,100 @@ card from `$BASE_URL` and the paths are usable as-is.
 
 ## Auth
 
-Bearer token via `Authorization: Bearer <token>`. The broker accepts the tokens in
-`MQLITE_TOKENS` (comma-separated). **Secure by default:** if `MQLITE_TOKENS` is
-**unset**, `mqlite serve` **generates a random token** (`mqk_…`, 128-bit) and prints it
-at startup — the broker is never silently wide open. Set `MQLITE_TOKENS=off` to
-explicitly disable auth (localhost/LAN only). When auth is on, every endpoint needs the
-token **except** the open ones below. A missing/invalid token → `401 unauthenticated`.
+Use one `Authorization: Bearer <token>` header. The broker accepts configured
+administrator tokens in `MQLITE_TOKENS` (comma-separated), plus managed access keys
+stored in its database. **Secure by default:** if `MQLITE_TOKENS` is **unset**,
+`mqlite serve` generates and prints an administrator token at startup. Newly
+generated tokens always use `mqk_` plus 64 lowercase hexadecimal characters:
+256 random bits, 68 ASCII characters in total. Existing configured tokens remain
+valid without changing their format. Token values are case-sensitive.
+
+Set `MQLITE_TOKENS=off` to explicitly disable auth (loopback by default; a remote
+bind needs the explicit insecure override). In that mode, the existing queue API
+remains open and key-management RPCs are forbidden. An embedded `Serve` without
+`WithTokens` has the same explicit auth-off behavior.
+
+With auth enabled, missing, malformed, unknown, expired or revoked credentials
+return `401 unauthenticated`; a valid key without the required permission returns
+`403 permission_denied`. A key-store failure is a server error, never an auth
+bypass. Bare tokens, other authentication schemes and duplicate Authorization
+headers are rejected.
+
+### Permissions
+
+Permissions apply to **all queues and subscriptions in this broker**. Use `send`,
+`listen`, both, or `manage`; `manage` includes the other two and may issue new
+administrator keys. This is consumption permission, not a read-only observer:
+receiving, settling and renewing change message state.
+
+| Required permission | Operations |
+|---|---|
+| `send` | `QueueService/Send`, `Schedule`, `Cancel` |
+| `listen` | `QueueService/Receive`, `ReceiveDeferred`, `Peek`, `Stats`, `Complete`, `CompleteBatch`, `Abandon`, `Reject`, `Defer`, `Renew`, `RenewBatch` |
+| `manage` | All `AdminService` methods, all `AuthService` methods, and `/metrics` |
+
+Both receive modes require `listen`, including receive-and-delete. Batch and
+idempotent replay paths use the same permission checks as the original operation.
+The current web console requires `manage` because it lists and manages the whole
+broker. The public static page alone grants no access to its API.
+
+Configured administrators and managed `manage` keys have identical operation
+rights. Configured credentials are checked first: explicitly placing an existing
+managed token in `MQLITE_TOKENS` grants it administrator rights independently of
+its database permissions, expiry or revocation. Remove it from configuration to
+withdraw that static grant. Database key operations never alter environment
+configuration.
+
+### CreateKey / ListKeys / RevokeKey
+
+These methods are available in the v0.3.1 source tree; v0.3.0 does not implement
+them. All paths are `/mqlite.v1.AuthService/<Method>` and require `manage` with
+authentication enabled.
+
+| Method | Request | Response |
+|---|---|---|
+| `CreateKey` | `id`, `name`, `permissions`, optional `expires_at_ms` | `{"key": <AccessKey>, "token": "mqk_…"}` |
+| `ListKeys` | optional `after_id`, `limit`, `sort` | `{"keys": [<AccessKey>], "next_after_id": "…"}`; cursor omitted at the end |
+| `RevokeKey` | `id` | `{"ok": true}`; already revoked records succeed again |
+
+`AccessKey` metadata contains `id`, `name`, `permissions`, `created_at_ms`,
+`expires_at_ms` and `revoked_at_ms`. Zero expiry means no expiry; zero revocation
+time means not revoked. Expired and revoked records remain visible to managers.
+Metadata never contains a token or its digest. Lists include only managed keys;
+limit defaults to 100 and cannot exceed 1000. Omitted or empty `sort` means
+`id_asc` (public ID ascending). Use `sort: "created_desc"` for newest first:
+creation time descending, then public ID descending for equal timestamps.
+
+Pass the previous page's `next_after_id` as `after_id`, retaining the same sort.
+For `created_desc`, the cursor must identify an existing key; an unknown cursor
+or unsupported sort returns `400 invalid_argument`. Revocation and expiry do not
+remove records or change their position. Return to the first page to see records
+newer than the current cursor. Pagination is not a snapshot of concurrent inserts.
+The `id_asc` mode also accepts a valid ID that is not present, which supports
+looking up a retained creation ID using its immediate predecessor and `limit: 1`.
+
+Before creation, generate and retain a public ID: exactly 32 lowercase hexadecimal
+characters representing 128 random bits. The SDK provides `GenerateKeyID()`; the
+CLI generates one if `--id` is omitted. This ID is separate from the secret and
+lets you identify a creation whose response was lost. Names are nonempty UTF-8
+labels up to 128 bytes without leading/trailing whitespace or NUL. Names need not
+be unique. `permissions` accepts `send`, `listen`, or `manage`; any combination
+containing `manage` is normalized to `["manage"]`. Expiry is epoch milliseconds,
+either zero or a future instant.
+
+The server generates the secret and stores only its SHA-256 digest. Save the
+creation response securely: no later operation can recover the same secret. A
+duplicate ID returns `409 key_conflict` rather than producing or revealing a key.
+Do not automatically retry a creation after an ambiguous response. Reconcile the
+retained ID, revoke an undelivered key when confirmed, and use a new ID for its
+replacement. An absent row does not prove that an outstanding request cannot
+still commit. Never guess which same-named key to revoke.
+
+Revocation rejects subsequent authentication attempts immediately. Requests
+already authorized, including a long-poll Receive, may finish. Subsequent
+settlement and renewal still require a valid key. Issued keys are independent:
+revoking their creator does not revoke them. Change permissions by issuing a
+replacement key, moving clients, then revoking the old key.
 
 ## Open endpoints (no auth)
 
@@ -1005,7 +1095,7 @@ which case `/ui` 404s and the card's optional `ui` field is omitted.
 
 | Method | Path | Auth | Returns |
 |---|---|---|---|
-| `GET` | `/metrics` | Bearer | Prometheus text: `mqlite_queue_messages{queue,state}` gauges |
+| `GET` | `/metrics` | Bearer with `manage` | Prometheus text: `mqlite_queue_messages{queue,state}` gauges |
 
 ## QueueService
 
@@ -1325,13 +1415,15 @@ Errors are a JSON envelope `{"code": "...", "message": "..."}` with an HTTP stat
 | 400 | `invalid_argument` | malformed JSON, an **unknown field**, trailing data after the object, a bad filter expression, an empty queue name, or an unknown enum (`kind` / `ordering_mode`). The decoder is strict — a typo'd field is a 400, not a silently-dropped no-op (`mqlite.ErrInvalidArgument`). |
 | 400 | `group_required` | a `group_fifo` send with no `group_id` |
 | 401 | `unauthenticated` | missing/invalid Bearer token (auth is on by default; only `MQLITE_TOKENS=off` disables it) |
+| 403 | `permission_denied` | a valid key lacks permission, or key management was attempted with auth disabled (`mqlite.ErrPermissionDenied`) |
 | 404 | `not_found` | the queue or message doesn't exist; or an unknown path |
 | 409 | `already_exists` | single-message dedup conflict (same id, different body) |
 | 409 | `name_conflict` | a queue/subscription/topic name collision at creation time — the namespace is one and disjoint (`Subscribe`/`CreateQueue`) |
+| 409 | `key_conflict` | a managed key ID or token digest is already registered (`mqlite.ErrKeyConflict`); no existing secret is returned |
 | 409 | `lock_lost` | settle with an expired or wrong `lock_token` |
 | 413 | `message_too_large` | body over `MaxMessageBytes` (default 1 MiB) |
 | 499 | `canceled` | the client canceled the request |
-| 503 | `outcome_unknown` | a remote (Turso/libSQL) write lost its commit acknowledgement — it **may or may not** have applied. **Do not blindly retry**; reconcile by `message_id`/dedup first (`mqlite.ErrOutcomeUnknown`). Only occurs against a remote store, never a local file/`:memory:`. |
+| 503 | `outcome_unknown` | a remote (Turso/libSQL) write lost its commit acknowledgement — it **may or may not** have applied. **Do not blindly retry**; reconcile messages by `message_id`/dedup, or key operations by their retained public key ID (`mqlite.ErrOutcomeUnknown`). Only occurs against a remote store, never a local file/`:memory:`. |
 | 500 | `internal` | unexpected server error |
 
 The Go SDK re-exports the sentinel errors (`mqlite.ErrLockLost`, `ErrDedupConflict`,
@@ -1339,7 +1431,7 @@ The Go SDK re-exports the sentinel errors (`mqlite.ErrLockLost`, `ErrDedupConfli
 client mode.
 
 
-<!-- ===== mqlite main · source v0.3.0; latest release v0.3.0 · docs/cli.md ===== -->
+<!-- ===== mqlite main · source v0.3.1; latest release v0.3.0 · docs/cli.md ===== -->
 
 # CLI reference (`mqlite`)
 
@@ -1362,7 +1454,7 @@ mqlite <command> [flags] [args]
 | `MQLITE_DB` | embedded DB DSN: `file:./mq.db` / `:memory:` / `libsql://<db>.turso.io` |
 | `MQLITE_DB_AUTH_TOKEN` | auth token for a remote libSQL/Turso DSN |
 | `MQLITE_ENDPOINT` + `MQLITE_TOKEN` | client mode: a running broker + its Bearer token |
-| `MQLITE_TOKENS` | broker (`serve`) Bearer tokens; **unset → a `mqk_…` token is generated + printed**, `=off` disables auth |
+| `MQLITE_TOKENS` | broker (`serve`) administrator Bearer tokens; **unset → a `mqk_…` token is generated + printed**, `=off` disables auth; additional managed keys live in the database |
 | `MQLITE_SYNC` | `NORMAL` (default) / `FULL` / `OFF` / `EXTRA` durability (embedded/serve). An unrecognized value is **rejected at startup** — a typo never silently downgrades to `NORMAL`. |
 | `MQLITE_DLQ_MAX_AGE` · `MQLITE_DLQ_MAX_COUNT` · `MQLITE_DLQ_MAX_BYTES` | broker DLQ retention (`serve`); on by default, disable with `MQLITE_DLQ_RETENTION=off` |
 
@@ -1429,6 +1521,57 @@ The listen address may also come from **`MQLITE_ADDR`** (precedence: `--addr` >
 
 Serves the RPC API, `/metrics`, the open `/` + `/healthz`, and — unless
 `MQLITE_UI=off` — the embedded admin console at `/ui`.
+
+### `key create|list|revoke` — manage persistent access keys
+
+Available in the v0.3.1 source tree. In client mode, use an environment administrator
+or a managed `manage` key as `MQLITE_TOKEN`. The broker can keep running while keys
+are created or revoked. Embedded mode directly manages the configured database
+and requires exclusive ownership; it cannot open a running local broker's DB.
+
+```bash
+# MQLITE_ENDPOINT and MQLITE_TOKEN already select the broker and administrator.
+mqlite key create --name producer --permissions send --output json
+mqlite key create --name worker --permissions listen --output json
+mqlite key create --name processor --permissions send,listen --output json
+mqlite key create --name operator --permissions manage --output json
+mqlite key list --limit 100 --output json
+mqlite key list --sort created_desc --limit 25 --output json
+mqlite key revoke --id <public-key-id>
+```
+
+| Subcommand | Flags | Result |
+|---|---|---|
+| `create` | required `--name`, `--permissions`; optional `--id`, `--expires-at-ms` | key metadata plus its one-time secret |
+| `list` | optional `--after-id`, `--limit` (default 100, maximum 1000), `--sort id_asc\|created_desc` (default `id_asc`) | metadata and a continuation cursor; no secrets or digests |
+| `revoke` | required `--id` | idempotently revokes an existing database key |
+
+`--id` is a public 32-character lowercase hex ID; when omitted, the CLI generates
+it before contacting the broker. Creation failures report that ID so an ambiguous
+result can be reconciled without guessing from a name. The secret is a separate
+`mqk_` token with 64 lowercase hex characters. Save it securely when returned;
+it cannot be retrieved again. `--expires-at-ms` uses epoch milliseconds; zero
+(the default) means no expiry. Key names need not be unique.
+
+Lists default to ascending public ID order. `--sort created_desc` lists the
+newest-created keys first across all pages, with descending ID as the tie-breaker
+for identical creation timestamps. Pass `next_after_id` as `--after-id` and keep
+the same `--sort` on every page; text output includes the full continuation
+command. In creation order, the cursor must be an existing key ID (revoked and
+expired keys remain valid cursors). ID order also accepts absent predecessor IDs
+for reconciling a lost create response.
+
+`send` permits sending, scheduling and cancelling scheduled messages; `listen`
+permits consumption, settlement, renewal, peek and queue stats; `manage` includes
+both and all administration, including issuing other `manage` keys. Permissions
+apply to the whole broker. A 403 is a permission failure, not an invalid token;
+ordinary send/listen keys cannot use `key`, `list`, `status` or the admin console.
+Existing configured administrator tokens retain their original format and rights.
+
+To rotate a managed key, create its replacement, move the application to the new
+token, then revoke the old ID. No broker restart is needed. See
+[the authentication contract](https://github.com/mqlitehq/mqlite/blob/main/docs/api-reference.md#auth) and
+[backup/restore implications](https://github.com/mqlitehq/mqlite/blob/main/docs/operations.md#consistent-backups).
 
 ### `create-queue <name>` — create/update a queue
 ```bash
@@ -1623,7 +1766,159 @@ See also: [api-reference.md](https://github.com/mqlitehq/mqlite/blob/main/docs/a
 [examples.md](https://github.com/mqlitehq/mqlite/blob/main/docs/examples.md) (Go SDK).
 
 
-<!-- ===== mqlite main · source v0.3.0; latest release v0.3.0 · docs/deployment.md ===== -->
+<!-- ===== mqlite main · source v0.3.1; latest release v0.3.0 · docs/access-keys.md ===== -->
+
+# Access keys
+
+Runtime access keys are available in the **v0.3.1 source tree (unreleased)**.
+The published v0.3.0 supports configured administrator tokens only.
+
+## Choose a permission
+
+| Permission | Operations |
+|---|---|
+| `send` | Send, schedule and cancel scheduled messages |
+| `listen` | Receive, settle, renew, peek and read queue statistics |
+| `send` + `listen` | Both application roles |
+| `manage` | Both application roles, queue/topic administration, console, metrics, and issuing/revoking keys, including other `manage` keys |
+
+Permissions apply across the broker, not to individual queues. A `listen` key can
+delete consumed messages through completion or receive-and-delete; it is not a
+read-only auditing role. A `send` key can cancel scheduled messages from other
+producers. Use separate brokers when applications need a stronger isolation boundary.
+
+The keys in `MQLITE_TOKENS` remain administrators. Keep one configured administrator
+available for recovery. Existing configured token strings remain valid; every newly
+generated token uses `mqk_` followed by 64 lowercase hexadecimal characters. The
+broker stores only the SHA-256 digest of managed tokens, together with their public
+ID, name, permissions and lifecycle timestamps. Names need not be unique.
+
+Managed authentication performs one indexed database query for every request,
+without caching credentials. On Turso this includes a remote round trip; measure
+the application's request latency and throughput with its intended credentials
+and storage location before sizing a deployment.
+
+## Create and use a key
+
+Start the broker with authentication enabled and connect the CLI using an
+administrator credential from your secret manager:
+
+```sh
+export MQLITE_ENDPOINT=http://127.0.0.1:6754
+# Set MQLITE_TOKEN securely to a configured administrator or managed manage key.
+mqlite create-queue orders
+mqlite key create --name orders-producer --permissions send --output json
+mqlite key create --name orders-worker --permissions listen --output json
+```
+
+Save each returned `token` securely. It is shown only on successful creation and
+cannot be recovered through listing or by repeating creation. Give the producer
+its `send` token as `MQLITE_TOKEN`, then run `mqlite send orders 'hello'`. Give the
+worker its `listen` token, then run `mqlite receive orders`. The worker command
+prints and completes the message by default.
+
+Each creation has a separate public `id` (32 lowercase hex characters). The CLI
+generates it before making the request, or accepts `--id`. An optional
+`--expires-at-ms` sets a future UTC epoch-millisecond expiry; zero means no expiry.
+
+Use an administrator for `mqlite key list --output json`. Pagination uses
+`--after-id` with the previous `next_after_id`; the default page limit is 100,
+maximum 1000. Listings include expired and revoked metadata, never secrets or
+digests. Configured tokens are managed in configuration and do not appear here.
+The CLI defaults to public ID order. Use `mqlite key list --sort created_desc --output json`
+for newest first, retaining `--sort created_desc` on subsequent
+pages. Equal creation timestamps are ordered by public ID descending.
+
+## Go SDK
+
+Both `Client` and `Embedded` expose `CreateKey`, `ListKeys`, `ListKeysWithOptions`
+and `RevokeKey`.
+Embedded administration is trusted local access and needs exclusive ownership of
+a local database. Use `Client` to manage a running broker.
+
+```go
+id := mqlite.GenerateKeyID() // retain this public ID before the request
+created, err := admin.CreateKey(ctx, mqlite.CreateKeyOptions{
+    ID: id, Name: "orders-producer", Permissions: []string{"send"},
+})
+if err != nil {
+    // Preserve id; reconcile an ambiguous result before issuing a replacement.
+    return fmt.Errorf("create key %s: %w", id, err)
+}
+// Store created.Token in your secret manager; never log the result struct.
+producer, err := mqlite.Open(ctx, endpoint, mqlite.WithToken(created.Token))
+if err != nil {
+    return err
+}
+defer producer.Close()
+_, err = producer.SendOne(ctx, "orders", mqlite.OutMessage{Body: []byte("hello")})
+```
+
+Pass `page.NextAfterID` to the next `ListKeys(ctx, afterID, limit)` call until it is
+empty. This method keeps public ID order. For newest-first pagination, use
+`ListKeysWithOptions(ctx, mqlite.ListKeysOptions{Sort: "created_desc", Limit: 100})`
+and set `AfterID` to the returned cursor for later pages, keeping the same `Sort`.
+Revoke a managed key with `RevokeKey(ctx, id)`. The SDK returns
+`ErrUnauthenticated` for missing/invalid/revoked/expired credentials and
+`ErrPermissionDenied` for insufficient permissions. `Receiver.Run` stops on these
+permanent authentication/authorization failures, including settlement and renewal.
+
+## HTTP, console and MCP
+
+The three HTTP operations are `AuthService/CreateKey`, `ListKeys` and `RevokeKey`.
+See the complete [request/response contract](https://github.com/mqlitehq/mqlite/blob/main/docs/api-reference.md#createkey--listkeys--revokekey).
+All require `Authorization: Bearer <administrator-token>`. Authentication disabled
+with `MQLITE_TOKENS=off` does not enable anonymous key administration.
+
+The console at `/ui/` accepts a configured administrator or managed `manage` key.
+Open **Access keys** to create, inspect and revoke credentials. Save the newly
+created secret before dismissing its one-time display. The console explains when
+an older broker does not support the feature. Application `send`/`listen` keys
+belong in clients, not the administrator console.
+
+The **managed keys** list shows runtime-issued access keys newest first across
+all pages. Creating a key returns to the first page; equal creation timestamps
+use public ID descending as a stable tie-breaker. Configured
+`MQLITE_TOKENS` administrators are changed through configuration and a broker
+restart. Expiry uses local time in `yyyy-MM-dd HH:mm` format with an English
+calendar, independent of browser language; list timestamps include seconds.
+
+The MCP server exposes `create_key`, `list_keys` and `revoke_key`. Configure its
+`MQLITE_TOKEN` with the permission required by each tool. Key creation needs a
+public ID allocated before the call. See [MCP usage](https://github.com/mqlitehq/mqlite/blob/main/docs/mcp.md); do not paste new
+secrets into prompts, tool logs or generated source files.
+
+## Rotate, revoke and recover
+
+1. Create a replacement key and store its secret.
+2. Move the application to the replacement and verify a send/receive/settle cycle.
+3. Revoke the old public ID with `mqlite key revoke --id <old-id>`.
+
+No restart is needed. Revocation is permanent and repeated revocation succeeds.
+New authentication fails immediately after a successful revocation, but a request
+already authorized, including a long poll, may finish. Later settle/renew requests
+authenticate again. Keys issued by another key are independent: revoking their
+issuer does not revoke them. An administrator can revoke itself; retain another
+administrator before doing so.
+
+If a creation response is lost, keep the original public ID and list keys as an
+administrator to find it. If it exists without a saved secret, revoke it and
+create a replacement with a new ID. A repeated ID returns `409 key_conflict` and
+never replays the secret. A timeout or `unavailable` response is not proof that
+creation failed; clients must not blindly retry with a new ID.
+
+A token explicitly present in `MQLITE_TOKENS` is always an administrator, even if
+a matching managed record is restricted, revoked or expired. Remove that static
+configuration and restart to remove the configured grant. To rotate configured
+tokens, temporarily accept old and new values, move clients, then remove the old
+value and restart again.
+
+Backups include managed key state. Restoring an older snapshot can restore an old
+revocation state or discard newer credentials. Review keys using a configured
+administrator before reopening traffic. See [backup and upgrade procedures](https://github.com/mqlitehq/mqlite/blob/main/docs/operations.md).
+
+
+<!-- ===== mqlite main · source v0.3.1; latest release v0.3.0 · docs/deployment.md ===== -->
 
 # Deploying mqlite
 
@@ -1645,7 +1940,7 @@ Everything is read from the environment — the DB string is never compiled in.
 |---|---|
 | `MQLITE_DB` | `file:/data/mq.db` (local) or `libsql://<db>.turso.io` (remote) |
 | `MQLITE_DB_AUTH_TOKEN` | auth token for a remote libSQL/Turso DSN |
-| `MQLITE_TOKENS` | comma-separated Bearer tokens the broker accepts (**set this in production**) |
+| `MQLITE_TOKENS` | comma-separated administrator Bearer tokens (**set this in production**) |
 | `MQLITE_SYNC` | durability: `NORMAL` (default) / `FULL` / `OFF` / `EXTRA` (local file only); an unrecognized value is rejected at startup |
 | `MQLITE_DLQ_MAX_AGE` · `MQLITE_DLQ_MAX_COUNT` · `MQLITE_DLQ_MAX_BYTES` | DLQ retention bounds (defaults 14d / 1,000,000 per queue; byte cap off; `MQLITE_DLQ_RETENTION=off` to disable) — see [retention.md](https://github.com/mqlitehq/mqlite/blob/main/docs/retention.md) |
 | `MQLITE_MAX_MESSAGE_BYTES` | reject larger bodies (default 1 MiB) |
@@ -1782,6 +2077,13 @@ connects to the broker on `127.0.0.1:6754`, which is the only interface the brok
 above — so the proxy (with TLS + whatever access control you add) is the single entry
 point, not a bypassable layer over an all-interfaces socket.
 
+Runtime-managed keys in the upcoming v0.3.1 can be created and revoked without a
+restart. Use a configured administrator or managed `manage` key for the console,
+metrics scraper and key administration; use `send`/`listen` for applications.
+See [key commands](https://github.com/mqlitehq/mqlite/blob/main/docs/cli.md#key-createlistrevoke--manage-persistent-access-keys) and
+[key rotation](https://github.com/mqlitehq/mqlite/blob/main/docs/operations.md#key-rotation). Existing v0.3.0 deployment examples in this guide
+remain pinned to the published release and do not include managed keys.
+
 ## Backup, restore and upgrades
 
 Follow the [production runbook](https://github.com/mqlitehq/mqlite/blob/main/docs/operations.md#consistent-backups) for read-only
@@ -1838,12 +2140,12 @@ curl -H "Authorization: Bearer $T" -H 'Content-Type: application/json' \
 - [ ] Scrape `/metrics` (Prometheus) for queue depths — see [observability.md](https://github.com/mqlitehq/mqlite/blob/main/docs/observability.md).
 
 
-<!-- ===== mqlite main · source v0.3.0; latest release v0.3.0 · docs/observability.md ===== -->
+<!-- ===== mqlite main · source v0.3.1; latest release v0.3.0 · docs/observability.md ===== -->
 
 # Observability
 
-The broker exposes Prometheus metrics at **`GET /metrics`** (behind Bearer auth, like
-the RPCs — a scraper passes the token; `/`, `/healthz` and the enabled static `/ui`
+The broker exposes Prometheus metrics at **`GET /metrics`** (requiring a Bearer key
+with `manage` permission when auth is enabled; `/`, `/healthz` and the enabled static `/ui`
 console are open, while its API calls still require authentication). This guide
 wires `/metrics` into Prometheus + Grafana and suggests alerts.
 
@@ -1938,7 +2240,7 @@ scrape_configs:
     metrics_path: /metrics
     authorization:
       type: Bearer
-      credentials: mqk_prod_CHANGEME   # one of MQLITE_TOKENS (use a file in real setups)
+      credentials: mqk_prod_CHANGEME   # configured administrator or managed manage key; use a credentials file
     static_configs:
       - targets: ["your-mqlite.fly.dev"]
 ```
@@ -2042,11 +2344,12 @@ resuming producers. See the [Prometheus function reference](https://prometheus.i
 for gauge and counter query semantics.
 
 
-<!-- ===== mqlite main · source v0.3.0; latest release v0.3.0 · docs/operations.md ===== -->
+<!-- ===== mqlite main · source v0.3.1; latest release v0.3.0 · docs/operations.md ===== -->
 
 # Production operations
 
-This runbook describes v0.3.0 (port 6754, schema token 5).
+This runbook covers v0.3.0 and the upcoming v0.3.1 (port 6754, schema token 5).
+Runtime-managed access keys require v0.3.1; v0.3.0 supports configured tokens only.
 Upgrading from v0.2.0 changes both its default port (8080) and schema token (2);
 follow [upgrade and rollback](#upgrade-and-rollback) before replacing the broker.
 See [deployment](https://github.com/mqlitehq/mqlite/blob/main/docs/deployment.md) for installation and [observability](https://github.com/mqlitehq/mqlite/blob/main/docs/observability.md)
@@ -2066,8 +2369,9 @@ for metric definitions and alerts.
   can lose recent commits after power loss. `FULL` still depends on the storage
   stack honoring flushes; SIGKILL tests do not simulate a power failure.
 - Set stable `MQLITE_TOKENS`, terminate HTTPS, and keep the broker behind the proxy
-  or a private network. Every token grants the same API access; there are no
-  per-queue roles. Keep credentials in a restricted environment/secret file.
+  or a private network. Configured tokens are administrators; runtime keys can
+  restrict sending or listening across the broker. There are no per-queue roles.
+  Keep credentials in a restricted environment/secret file.
 - Consumers must be idempotent. Restarts, lost responses and restoring an older
   snapshot can repeat work whose external side effects already happened. Reuse
   stable `MessageID`/body, receive `AttemptID`, and the exact settlement request
@@ -2111,10 +2415,24 @@ for the difference between backlog gauges and the completion counter. Review DLQ
 messages before retention removes them; retention is a bounded failure buffer,
 not an archive. Leave space for a new backup and WAL growth during a long read.
 
-For token rotation, configure `MQLITE_TOKENS=old,new`, restart the single broker,
-move clients and scrapers to the new token, then remove the old token and restart.
-Token changes take effect at startup. Quiesce clients during each replacement and
-verify the canary before resuming normal traffic.
+## Key rotation
+
+Use a separate managed key for each producer, consumer or administrator. A
+`manage` key can issue or revoke keys, including other administrators; a `send`
+or `listen` key cannot. The current console and metrics scraper require `manage`.
+Create managed keys with `mqlite key create`, move clients to the replacement,
+then `mqlite key revoke --id <old-id>`. These changes persist in the database and
+take effect without restarting the broker. Revocation rejects new authentication
+attempts; requests already authorized may finish. Keys issued by another key are
+independent, so revoking their issuer does not revoke them.
+
+Configured administrator rotation still uses `MQLITE_TOKENS=old,new`, a broker
+restart, client/scraper cutover, then removal of the old configured token and
+another restart. Quiesce clients during each replacement and verify the canary
+before resuming traffic. A token explicitly configured here remains an
+administrator even if a matching database key has expired or been revoked;
+remove that configuration to revoke the static grant. Keep a configured
+administrator available for recovery, and store secrets outside command history.
 
 ## Consistent backups
 
@@ -2122,10 +2440,15 @@ These procedures are for a local SQLite file. Turso backups and point-in-time
 recovery belong to the remote service; rehearse that provider's restore process
 and keep one active MQLite owner during the switchover.
 
-Protect backups like the live database: they include message bodies, properties
-and any business tables used by the embedded outbox. Keep a verified copy outside
+Protect backups like the live database: they include message bodies, properties,
+managed key digests/permissions/revocations and any embedded outbox business tables.
+Keep a verified copy outside
 the database's failure domain, together with the matching binary/image identity
-and configuration needed to restore it. Store credentials separately.
+and configuration needed to restore it. Store plaintext credentials separately.
+Restoring a snapshot also restores its key state: newer keys may disappear and
+keys revoked after the snapshot may become valid again. Before reopening client
+traffic, use a configured administrator to review key metadata and revoke or
+replace credentials whose state changed after the backup.
 
 ### Online snapshot
 
@@ -2213,6 +2536,14 @@ establish database compatibility, and MQLite does not run schema migrations.
 | Rollback before candidate accepts business writes | Stop the candidate and restore the matched old binary plus old snapshot/configuration; verify before resuming clients. |
 | Rollback after candidate accepts business writes | First preserve candidate data and reconcile new messages and external effects. Blindly restoring the old snapshot would discard those new writes. |
 
+For **v0.3.0 → v0.3.1**, schema token **5** and the port remain unchanged.
+The candidate adds the independent `access_keys` table without rewriting existing
+queue or message tables. Rehearse opening a restored copy first. Rolling back to
+v0.3.0 preserves that extra table, but the old binary cannot authenticate managed
+keys or enforce their permissions: reconnect clients with configured administrator
+tokens, or keep them stopped until v0.3.1 is restored. A database with an unrelated,
+incompatible table named `access_keys` is rejected without modifying it.
+
 For **v0.2.0 → v0.3.0**, schema **2 → 5** and default port **8080 → 6754** both
 change. Before the cutover, stop producers and account for **every queue and
 subscription in every state**, including future scheduled work, deferred work and
@@ -2242,13 +2573,13 @@ in this release, so do not improvise a direct SQL table copy between schemas.
 rules behind these procedures.
 
 
-<!-- ===== mqlite main · source v0.3.0; latest release v0.3.0 · docs/mcp.md ===== -->
+<!-- ===== mqlite main · source v0.3.1; latest release v0.3.0 · docs/mcp.md ===== -->
 
 # MCP server (`mqlite-mcp`)
 
 `mqlite-mcp` is a [Model Context Protocol](https://modelcontextprotocol.io) server
 that exposes the mqlite broker as **agent tools** — so an AI agent (Claude, etc.) can
-create queues, send, receive, and settle messages without writing any HTTP. It is a
+create queues, send, receive, settle messages, and manage access keys without writing any HTTP. It is a
 thin, **dependency-free** forwarder: it speaks MCP (JSON-RPC 2.0 over stdio) and turns
 each tool call into one HTTP POST to the broker. Stdlib + the in-repo `wire` contract
 only — no MCP SDK, no CGO (the same ethos as the rest of mqlite).
@@ -2265,7 +2596,7 @@ it with the broker endpoint + token:
 | Env | Default | Meaning |
 |---|---|---|
 | `MQLITE_ENDPOINT` | `http://127.0.0.1:6754` | the broker base URL |
-| `MQLITE_TOKEN` | — | Bearer token (one of the broker's `MQLITE_TOKENS`) |
+| `MQLITE_TOKEN` | — | configured administrator or managed broker access key; tool calls follow its permissions |
 
 ## Connect an agent host
 
@@ -2308,14 +2639,61 @@ models misuse them):
 | `stats` | queue counters by state |
 | `redrive` | move dead letters back to active |
 | `purge` | permanently delete dead letters |
+| `create_key` | create a managed key (`id`, `name`, `permissions`, optional `expires_at_ms`); returns the token once |
+| `list_keys` | list public key metadata, including revoked/expired keys (`after_id`, `limit`, `sort`) |
+| `revoke_key` | revoke a managed key by public `id`; repeated revocation is safe |
 
 Settlement is by `lock_token` from `receive` — delivery is at-least-once, so an agent
 should treat handlers as idempotent. Full HTTP semantics: [api-reference.md](https://github.com/mqlitehq/mqlite/blob/main/docs/api-reference.md).
 
+## Access key management
 
-<!-- ===== mqlite main · source v0.3.0; latest release v0.3.0 · docs/examples.md ===== -->
+The three key tools require `manage`; both an environment administrator token and
+an active managed `manage` key may issue further administrator keys. `send` and
+`listen` keys receive `permission_denied` for these tools. The MCP server forwards
+`MQLITE_TOKEN` on every call, and broker authorization decides what it may do.
+
+Before calling `create_key`, choose and retain a unique 32-character lowercase
+hexadecimal `id`. The `id` is public metadata, distinct from the secret token:
+
+```json
+{
+  "name": "create_key",
+  "arguments": {
+    "id": "e734810a9f634d75bd8a029c1f7e5062",
+    "name": "order-producer",
+    "permissions": ["send"]
+  }
+}
+```
+
+`permissions` accepts `send`, `listen`, their combination, or `manage` (which
+includes both). `expires_at_ms` is a future UTC epoch-millisecond timestamp; omit
+it or use zero for no expiry. The response has `key` metadata and a one-time
+`token` in the `mqk_` + 64 lowercase hex format. Store the token securely; it will
+be visible in the successful MCP tool result and may be retained by your MCP
+host. List responses never contain secrets or token hashes.
+
+Creation is not retried automatically. An error includes the retained valid
+public ID; after an uncertain result, use `list_keys` and `revoke_key` for that ID
+before issuing a replacement with a new ID. Reusing an ID returns `key_conflict`
+and cannot recover a secret. Pass `next_after_id` from `list_keys` back as
+`after_id` until the cursor is absent; the default limit is 100, maximum 1000.
+The optional `sort` is `id_asc` (default) or `created_desc` (newest-created first,
+then descending public ID for timestamp ties). Keep the same sort on every page.
+Creation-order cursors must identify an existing key, including revoked or
+expired keys. The default ID order also accepts absent predecessor IDs when
+reconciling a lost create response.
+Environment tokens are not listed or revocable through these tools. Key tools are
+unavailable when broker authentication is explicitly disabled.
+
+
+<!-- ===== mqlite main · source v0.3.1; latest release v0.3.0 · docs/examples.md ===== -->
 
 # Examples
+
+For authenticated producer/consumer credentials, Go SDK key management, console and
+MCP workflows, see [Access keys](https://github.com/mqlitehq/mqlite/blob/main/docs/access-keys.md) (v0.3.1 and later).
 
 Copy-runnable examples for the four ways to use mqlite: **embedded** in-process, the
 **transactional outbox** (the killer feature), a **remote** client with a hands-off

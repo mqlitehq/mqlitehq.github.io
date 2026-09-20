@@ -17,6 +17,7 @@ export const PAGES = [
   ['internals.md', 'internals.html', 'Internals', 'SQLite, the single-writer model, fencing tokens, indexes, and crash recovery.'],
   ['api-reference.md', 'api.html', 'HTTP API reference', 'Every broker operation: requests, responses, errors, and limits.'],
   ['cli.md', 'cli.html', 'CLI reference', 'Run, produce, consume, and administer queues with the command-line client.'],
+  ['access-keys.md', 'access-keys.html', 'Access keys', 'Issue, scope, rotate, expire, and revoke broker access keys at runtime.'],
   ['deployment.md', 'deployment.html', 'Deployment', 'Configure and run one broker with Docker, systemd, or remote Turso storage.'],
   ['observability.md', 'observability.html', 'Observability', 'Monitor broker health, queue state, delivery failures, and storage.'],
   ['operations.md', 'operations.html', 'Operations', 'Back up, restore, upgrade, and operate a single-broker deployment.'],
@@ -77,6 +78,7 @@ export function rewriteMdLinks(md) {
 }
 
 function page({ title, description, src, body }, metadata) {
+  const unreleased = metadata.latestRelease !== `v${metadata.sourceVersion}`;
   const navigation = PAGES.map(([, out, label]) => `    <a href="${out}">${label.replace('HTTP API reference', 'API').replace('CLI reference', 'CLI')}</a>`).join('\n');
   return `<!doctype html>
 ${GENERATED_MARKER}
@@ -102,7 +104,7 @@ ${navigation}
 </div></nav>
 <div class="wrap">
   <div class="stamp">Generated from <a href="${GH}/blob/main/docs/${src}">mqlite main · docs/${src}</a> — source v${metadata.sourceVersion}; latest release: <a href="${GH}/releases/tag/${metadata.latestRelease}">${metadata.latestRelease}</a>.
-  These docs track main; check release notes for published artifacts. Edit the canonical Markdown and re-run <code>tools/build.mjs</code>.</div>
+  These docs track main; check release notes for published artifacts.${unreleased ? ' The source changes are unreleased.' : ''} Edit the canonical Markdown and re-run <code>tools/build.mjs</code>.</div>
   <main class="prose">
 ${body}
   </main>

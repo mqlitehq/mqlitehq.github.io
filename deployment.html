@@ -19,6 +19,7 @@
     <a href="internals.html">Internals</a>
     <a href="api.html">API</a>
     <a href="cli.html">CLI</a>
+    <a href="access-keys.html">Access keys</a>
     <a href="deployment.html">Deployment</a>
     <a href="observability.html">Observability</a>
     <a href="operations.html">Operations</a>
@@ -27,8 +28,8 @@
   </div>
 </div></nav>
 <div class="wrap">
-  <div class="stamp">Generated from <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/deployment.md">mqlite main · docs/deployment.md</a> — source v0.3.0; latest release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.3.0">v0.3.0</a>.
-  These docs track main; check release notes for published artifacts. Edit the canonical Markdown and re-run <code>tools/build.mjs</code>.</div>
+  <div class="stamp">Generated from <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/deployment.md">mqlite main · docs/deployment.md</a> — source v0.3.1; latest release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.3.0">v0.3.0</a>.
+  These docs track main; check release notes for published artifacts. The source changes are unreleased. Edit the canonical Markdown and re-run <code>tools/build.mjs</code>.</div>
   <main class="prose">
 <h1 id="deploying-mqlite">Deploying mqlite</h1>
 <p>mqlite is <strong>one pure-Go binary</strong> (or one container image) over <strong>one SQLite file</strong>
@@ -60,7 +61,7 @@ this guide covers the broker (<code>mqlite serve</code>). Pick a target:</p>
 </tr>
 <tr>
 <td><code>MQLITE_TOKENS</code></td>
-<td>comma-separated Bearer tokens the broker accepts (<strong>set this in production</strong>)</td>
+<td>comma-separated administrator Bearer tokens (<strong>set this in production</strong>)</td>
 </tr>
 <tr>
 <td><code>MQLITE_SYNC</code></td>
@@ -192,6 +193,12 @@ curl http://localhost:6754/healthz
 connects to the broker on <code>127.0.0.1:6754</code>, which is the only interface the broker binds
 above — so the proxy (with TLS + whatever access control you add) is the single entry
 point, not a bypassable layer over an all-interfaces socket.</p>
+<p>Runtime-managed keys in the upcoming v0.3.1 can be created and revoked without a
+restart. Use a configured administrator or managed <code>manage</code> key for the console,
+metrics scraper and key administration; use <code>send</code>/<code>listen</code> for applications.
+See <a href="cli.html#key-createlistrevoke--manage-persistent-access-keys">key commands</a> and
+<a href="operations.html#key-rotation">key rotation</a>. Existing v0.3.0 deployment examples in this guide
+remain pinned to the published release and do not include managed keys.</p>
 <h2 id="backup-restore-and-upgrades">Backup, restore and upgrades</h2>
 <p>Follow the <a href="operations.html#consistent-backups">production runbook</a> for read-only
 online snapshots, offline directory copies, isolated restore validation and rollback.

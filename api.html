@@ -19,6 +19,7 @@
     <a href="internals.html">Internals</a>
     <a href="api.html">API</a>
     <a href="cli.html">CLI</a>
+    <a href="access-keys.html">Access keys</a>
     <a href="deployment.html">Deployment</a>
     <a href="observability.html">Observability</a>
     <a href="operations.html">Operations</a>
@@ -27,8 +28,8 @@
   </div>
 </div></nav>
 <div class="wrap">
-  <div class="stamp">Generated from <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/api-reference.md">mqlite main · docs/api-reference.md</a> — source v0.3.0; latest release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.3.0">v0.3.0</a>.
-  These docs track main; check release notes for published artifacts. Edit the canonical Markdown and re-run <code>tools/build.mjs</code>.</div>
+  <div class="stamp">Generated from <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/api-reference.md">mqlite main · docs/api-reference.md</a> — source v0.3.1; latest release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.3.0">v0.3.0</a>.
+  These docs track main; check release notes for published artifacts. The source changes are unreleased. Edit the canonical Markdown and re-run <code>tools/build.mjs</code>.</div>
   <main class="prose">
 <h1 id="mqlite-http-api-reference">mqlite HTTP API reference</h1>
 <p>The broker speaks <strong>Connect-style JSON over HTTP</strong>. Every operation is a single
@@ -115,12 +116,119 @@ same JSON-over-HTTP API listens on when nothing is proxying for you.</p>
 against the origin that served the card, so they inherit its scheme, host and port. Fetch the
 card from <code>$BASE_URL</code> and the paths are usable as-is.</p>
 <h2 id="auth">Auth</h2>
-<p>Bearer token via <code>Authorization: Bearer &lt;token&gt;</code>. The broker accepts the tokens in
-<code>MQLITE_TOKENS</code> (comma-separated). <strong>Secure by default:</strong> if <code>MQLITE_TOKENS</code> is
-<strong>unset</strong>, <code>mqlite serve</code> <strong>generates a random token</strong> (<code>mqk_…</code>, 128-bit) and prints it
-at startup — the broker is never silently wide open. Set <code>MQLITE_TOKENS=off</code> to
-explicitly disable auth (localhost/LAN only). When auth is on, every endpoint needs the
-token <strong>except</strong> the open ones below. A missing/invalid token → <code>401 unauthenticated</code>.</p>
+<p>Use one <code>Authorization: Bearer &lt;token&gt;</code> header. The broker accepts configured
+administrator tokens in <code>MQLITE_TOKENS</code> (comma-separated), plus managed access keys
+stored in its database. <strong>Secure by default:</strong> if <code>MQLITE_TOKENS</code> is <strong>unset</strong>,
+<code>mqlite serve</code> generates and prints an administrator token at startup. Newly
+generated tokens always use <code>mqk_</code> plus 64 lowercase hexadecimal characters:
+256 random bits, 68 ASCII characters in total. Existing configured tokens remain
+valid without changing their format. Token values are case-sensitive.</p>
+<p>Set <code>MQLITE_TOKENS=off</code> to explicitly disable auth (loopback by default; a remote
+bind needs the explicit insecure override). In that mode, the existing queue API
+remains open and key-management RPCs are forbidden. An embedded <code>Serve</code> without
+<code>WithTokens</code> has the same explicit auth-off behavior.</p>
+<p>With auth enabled, missing, malformed, unknown, expired or revoked credentials
+return <code>401 unauthenticated</code>; a valid key without the required permission returns
+<code>403 permission_denied</code>. A key-store failure is a server error, never an auth
+bypass. Bare tokens, other authentication schemes and duplicate Authorization
+headers are rejected.</p>
+<h3 id="permissions">Permissions</h3>
+<p>Permissions apply to <strong>all queues and subscriptions in this broker</strong>. Use <code>send</code>,
+<code>listen</code>, both, or <code>manage</code>; <code>manage</code> includes the other two and may issue new
+administrator keys. This is consumption permission, not a read-only observer:
+receiving, settling and renewing change message state.</p>
+<table>
+<thead>
+<tr>
+<th>Required permission</th>
+<th>Operations</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>send</code></td>
+<td><code>QueueService/Send</code>, <code>Schedule</code>, <code>Cancel</code></td>
+</tr>
+<tr>
+<td><code>listen</code></td>
+<td><code>QueueService/Receive</code>, <code>ReceiveDeferred</code>, <code>Peek</code>, <code>Stats</code>, <code>Complete</code>, <code>CompleteBatch</code>, <code>Abandon</code>, <code>Reject</code>, <code>Defer</code>, <code>Renew</code>, <code>RenewBatch</code></td>
+</tr>
+<tr>
+<td><code>manage</code></td>
+<td>All <code>AdminService</code> methods, all <code>AuthService</code> methods, and <code>/metrics</code></td>
+</tr>
+</tbody></table>
+<p>Both receive modes require <code>listen</code>, including receive-and-delete. Batch and
+idempotent replay paths use the same permission checks as the original operation.
+The current web console requires <code>manage</code> because it lists and manages the whole
+broker. The public static page alone grants no access to its API.</p>
+<p>Configured administrators and managed <code>manage</code> keys have identical operation
+rights. Configured credentials are checked first: explicitly placing an existing
+managed token in <code>MQLITE_TOKENS</code> grants it administrator rights independently of
+its database permissions, expiry or revocation. Remove it from configuration to
+withdraw that static grant. Database key operations never alter environment
+configuration.</p>
+<h3 id="createkey--listkeys--revokekey">CreateKey / ListKeys / RevokeKey</h3>
+<p>These methods are available in the v0.3.1 source tree; v0.3.0 does not implement
+them. All paths are <code>/mqlite.v1.AuthService/&lt;Method&gt;</code> and require <code>manage</code> with
+authentication enabled.</p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Request</th>
+<th>Response</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>CreateKey</code></td>
+<td><code>id</code>, <code>name</code>, <code>permissions</code>, optional <code>expires_at_ms</code></td>
+<td><code>{&quot;key&quot;: &lt;AccessKey&gt;, &quot;token&quot;: &quot;mqk_…&quot;}</code></td>
+</tr>
+<tr>
+<td><code>ListKeys</code></td>
+<td>optional <code>after_id</code>, <code>limit</code>, <code>sort</code></td>
+<td><code>{&quot;keys&quot;: [&lt;AccessKey&gt;], &quot;next_after_id&quot;: &quot;…&quot;}</code>; cursor omitted at the end</td>
+</tr>
+<tr>
+<td><code>RevokeKey</code></td>
+<td><code>id</code></td>
+<td><code>{&quot;ok&quot;: true}</code>; already revoked records succeed again</td>
+</tr>
+</tbody></table>
+<p><code>AccessKey</code> metadata contains <code>id</code>, <code>name</code>, <code>permissions</code>, <code>created_at_ms</code>,
+<code>expires_at_ms</code> and <code>revoked_at_ms</code>. Zero expiry means no expiry; zero revocation
+time means not revoked. Expired and revoked records remain visible to managers.
+Metadata never contains a token or its digest. Lists include only managed keys;
+limit defaults to 100 and cannot exceed 1000. Omitted or empty <code>sort</code> means
+<code>id_asc</code> (public ID ascending). Use <code>sort: &quot;created_desc&quot;</code> for newest first:
+creation time descending, then public ID descending for equal timestamps.</p>
+<p>Pass the previous page&#39;s <code>next_after_id</code> as <code>after_id</code>, retaining the same sort.
+For <code>created_desc</code>, the cursor must identify an existing key; an unknown cursor
+or unsupported sort returns <code>400 invalid_argument</code>. Revocation and expiry do not
+remove records or change their position. Return to the first page to see records
+newer than the current cursor. Pagination is not a snapshot of concurrent inserts.
+The <code>id_asc</code> mode also accepts a valid ID that is not present, which supports
+looking up a retained creation ID using its immediate predecessor and <code>limit: 1</code>.</p>
+<p>Before creation, generate and retain a public ID: exactly 32 lowercase hexadecimal
+characters representing 128 random bits. The SDK provides <code>GenerateKeyID()</code>; the
+CLI generates one if <code>--id</code> is omitted. This ID is separate from the secret and
+lets you identify a creation whose response was lost. Names are nonempty UTF-8
+labels up to 128 bytes without leading/trailing whitespace or NUL. Names need not
+be unique. <code>permissions</code> accepts <code>send</code>, <code>listen</code>, or <code>manage</code>; any combination
+containing <code>manage</code> is normalized to <code>[&quot;manage&quot;]</code>. Expiry is epoch milliseconds,
+either zero or a future instant.</p>
+<p>The server generates the secret and stores only its SHA-256 digest. Save the
+creation response securely: no later operation can recover the same secret. A
+duplicate ID returns <code>409 key_conflict</code> rather than producing or revealing a key.
+Do not automatically retry a creation after an ambiguous response. Reconcile the
+retained ID, revoke an undelivered key when confirmed, and use a new ID for its
+replacement. An absent row does not prove that an outstanding request cannot
+still commit. Never guess which same-named key to revoke.</p>
+<p>Revocation rejects subsequent authentication attempts immediately. Requests
+already authorized, including a long-poll Receive, may finish. Subsequent
+settlement and renewal still require a valid key. Issued keys are independent:
+revoking their creator does not revoke them. Change permissions by issuing a
+replacement key, moving clients, then revoking the old key.</p>
 <h2 id="open-endpoints-no-auth">Open endpoints (no auth)</h2>
 <table>
 <thead>
@@ -174,7 +282,7 @@ which case <code>/ui</code> 404s and the card&#39;s optional <code>ui</code> fie
 <tbody><tr>
 <td><code>GET</code></td>
 <td><code>/metrics</code></td>
-<td>Bearer</td>
+<td>Bearer with <code>manage</code></td>
 <td>Prometheus text: <code>mqlite_queue_messages{queue,state}</code> gauges</td>
 </tr>
 </tbody></table>
@@ -643,6 +751,11 @@ conflict signal. With dedup off (default), or with identical bodies, there is no
 <td>missing/invalid Bearer token (auth is on by default; only <code>MQLITE_TOKENS=off</code> disables it)</td>
 </tr>
 <tr>
+<td>403</td>
+<td><code>permission_denied</code></td>
+<td>a valid key lacks permission, or key management was attempted with auth disabled (<code>mqlite.ErrPermissionDenied</code>)</td>
+</tr>
+<tr>
 <td>404</td>
 <td><code>not_found</code></td>
 <td>the queue or message doesn&#39;t exist; or an unknown path</td>
@@ -656,6 +769,11 @@ conflict signal. With dedup off (default), or with identical bodies, there is no
 <td>409</td>
 <td><code>name_conflict</code></td>
 <td>a queue/subscription/topic name collision at creation time — the namespace is one and disjoint (<code>Subscribe</code>/<code>CreateQueue</code>)</td>
+</tr>
+<tr>
+<td>409</td>
+<td><code>key_conflict</code></td>
+<td>a managed key ID or token digest is already registered (<code>mqlite.ErrKeyConflict</code>); no existing secret is returned</td>
 </tr>
 <tr>
 <td>409</td>
@@ -675,7 +793,7 @@ conflict signal. With dedup off (default), or with identical bodies, there is no
 <tr>
 <td>503</td>
 <td><code>outcome_unknown</code></td>
-<td>a remote (Turso/libSQL) write lost its commit acknowledgement — it <strong>may or may not</strong> have applied. <strong>Do not blindly retry</strong>; reconcile by <code>message_id</code>/dedup first (<code>mqlite.ErrOutcomeUnknown</code>). Only occurs against a remote store, never a local file/<code>:memory:</code>.</td>
+<td>a remote (Turso/libSQL) write lost its commit acknowledgement — it <strong>may or may not</strong> have applied. <strong>Do not blindly retry</strong>; reconcile messages by <code>message_id</code>/dedup, or key operations by their retained public key ID (<code>mqlite.ErrOutcomeUnknown</code>). Only occurs against a remote store, never a local file/<code>:memory:</code>.</td>
 </tr>
 <tr>
 <td>500</td>
