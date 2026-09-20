@@ -19,6 +19,7 @@
     <a href="internals.html">Internals</a>
     <a href="api.html">API</a>
     <a href="cli.html">CLI</a>
+    <a href="access-keys.html">Access keys</a>
     <a href="deployment.html">Deployment</a>
     <a href="observability.html">Observability</a>
     <a href="operations.html">Operations</a>
@@ -27,7 +28,7 @@
   </div>
 </div></nav>
 <div class="wrap">
-  <div class="stamp">Generated from <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/cli.md">mqlite main · docs/cli.md</a> — source v0.3.0; latest release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.3.0">v0.3.0</a>.
+  <div class="stamp">Generated from <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/cli.md">mqlite main · docs/cli.md</a> — source v0.3.1; latest release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.3.1">v0.3.1</a>.
   These docs track main; check release notes for published artifacts. Edit the canonical Markdown and re-run <code>tools/build.mjs</code>.</div>
   <main class="prose">
 <h1 id="cli-reference-mqlite">CLI reference (<code>mqlite</code>)</h1>
@@ -63,7 +64,7 @@ broker over HTTP. <strong>Client mode wins if <code>MQLITE_ENDPOINT</code> is se
 </tr>
 <tr>
 <td><code>MQLITE_TOKENS</code></td>
-<td>broker (<code>serve</code>) Bearer tokens; <strong>unset → a <code>mqk_…</code> token is generated + printed</strong>, <code>=off</code> disables auth</td>
+<td>broker (<code>serve</code>) administrator Bearer tokens; <strong>unset → a <code>mqk_…</code> token is generated + printed</strong>, <code>=off</code> disables auth; additional managed keys live in the database</td>
 </tr>
 <tr>
 <td><code>MQLITE_SYNC</code></td>
@@ -155,6 +156,67 @@ a broker (<code>mqlite serve</code> + <code>--endpoint</code>) when you need man
 <code>--insecure-allow-remote</code> is passed, and <strong><code>MQLITE_CORS</code> defaults to off</strong>.</p>
 <p>Serves the RPC API, <code>/metrics</code>, the open <code>/</code> + <code>/healthz</code>, and — unless
 <code>MQLITE_UI=off</code> — the embedded admin console at <code>/ui</code>.</p>
+<h3 id="key-createlistrevoke--manage-persistent-access-keys"><code>key create|list|revoke</code> — manage persistent access keys</h3>
+<p>Available in v0.3.1 and later. In client mode, use an environment administrator
+or a managed <code>manage</code> key as <code>MQLITE_TOKEN</code>. The broker can keep running while keys
+are created or revoked. Embedded mode directly manages the configured database
+and requires exclusive ownership; it cannot open a running local broker&#39;s DB.</p>
+<pre><code class="language-bash"># MQLITE_ENDPOINT and MQLITE_TOKEN already select the broker and administrator.
+mqlite key create --name producer --permissions send --output json
+mqlite key create --name worker --permissions listen --output json
+mqlite key create --name processor --permissions send,listen --output json
+mqlite key create --name operator --permissions manage --output json
+mqlite key list --limit 100 --output json
+mqlite key list --sort created_desc --limit 25 --output json
+mqlite key revoke --id &lt;public-key-id&gt;
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Subcommand</th>
+<th>Flags</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>create</code></td>
+<td>required <code>--name</code>, <code>--permissions</code>; optional <code>--id</code>, <code>--expires-at-ms</code></td>
+<td>key metadata plus its one-time secret</td>
+</tr>
+<tr>
+<td><code>list</code></td>
+<td>optional <code>--after-id</code>, <code>--limit</code> (default 100, maximum 1000), <code>--sort id_asc|created_desc</code> (default <code>id_asc</code>)</td>
+<td>metadata and a continuation cursor; no secrets or digests</td>
+</tr>
+<tr>
+<td><code>revoke</code></td>
+<td>required <code>--id</code></td>
+<td>idempotently revokes an existing database key</td>
+</tr>
+</tbody></table>
+<p><code>--id</code> is a public 32-character lowercase hex ID; when omitted, the CLI generates
+it before contacting the broker. Creation failures report that ID so an ambiguous
+result can be reconciled without guessing from a name. The secret is a separate
+<code>mqk_</code> token with 64 lowercase hex characters. Save it securely when returned;
+it cannot be retrieved again. <code>--expires-at-ms</code> uses epoch milliseconds; zero
+(the default) means no expiry. Key names need not be unique.</p>
+<p>Lists default to ascending public ID order. <code>--sort created_desc</code> lists the
+newest-created keys first across all pages, with descending ID as the tie-breaker
+for identical creation timestamps. Pass <code>next_after_id</code> as <code>--after-id</code> and keep
+the same <code>--sort</code> on every page; text output includes the full continuation
+command. In creation order, the cursor must be an existing key ID (revoked and
+expired keys remain valid cursors). ID order also accepts absent predecessor IDs
+for reconciling a lost create response.</p>
+<p><code>send</code> permits sending, scheduling and cancelling scheduled messages; <code>listen</code>
+permits consumption, settlement, renewal, peek and queue stats; <code>manage</code> includes
+both and all administration, including issuing other <code>manage</code> keys. Permissions
+apply to the whole broker. A 403 is a permission failure, not an invalid token;
+ordinary send/listen keys cannot use <code>key</code>, <code>list</code>, <code>status</code> or the admin console.
+Existing configured administrator tokens retain their original format and rights.</p>
+<p>To rotate a managed key, create its replacement, move the application to the new
+token, then revoke the old ID. No broker restart is needed. See
+<a href="api.html#auth">the authentication contract</a> and
+<a href="operations.html#consistent-backups">backup/restore implications</a>.</p>
 <h3 id="create-queue-name--createupdate-a-queue"><code>create-queue &lt;name&gt;</code> — create/update a queue</h3>
 <pre><code class="language-bash">mqlite create-queue orders --lock 30s --max-delivery 5 --dedup 10m --ordering strict_fifo
 </code></pre>

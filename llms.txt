@@ -7,9 +7,10 @@
 Public documentation: https://mqlitehq.github.io/.
 Relative links below resolve against this website.
 
-NOTE ON VERSIONS: the latest release is v0.3.0 (default port 6754, schema token 5).
-This website tracks main; the installation commands below pin v0.3.0. Use the
-[v0.3.0 documentation](https://github.com/mqlitehq/mqlite/tree/v0.3.0/docs)
+NOTE ON VERSIONS: the latest release is v0.3.1 (default port 6754, schema token 5).
+This website tracks main. Runtime access keys and key-management tools require
+v0.3.1 or later. Installation commands below pin v0.3.1. Use the
+[v0.3.1 documentation](https://github.com/mqlitehq/mqlite/tree/v0.3.1/docs)
 for the versioned reference. Upgrading from v0.2.0 (port 8080, schema token 2)
 requires a new database; follow [upgrade and rollback](operations.html#upgrade-and-rollback).
 
@@ -18,8 +19,8 @@ requires a new database; follow [upgrade and rollback](operations.html#upgrade-a
   default — a token is auto-generated if none is set).
 - Storage: local SQLite (pure-Go driver) or remote Turso/libSQL. Remote buys
   durability + geo-replication (~45 ms per durable commit), not throughput.
-- Wire protocol: JSON over HTTP, one POST per operation, 22 routes under
-  /mqlite.v1.QueueService/* and /mqlite.v1.AdminService/*. Message bodies are
+- Wire protocol: JSON over HTTP, one POST per operation, 25 routes under
+  /mqlite.v1.QueueService/*, /mqlite.v1.AdminService/* and /mqlite.v1.AuthService/*. Message bodies are
   base64 in JSON. GET / is an open discovery card listing every endpoint.
 - Delivery: Peek-Lock (receive → work → settle with a lock_token) or
   receive-and-delete. Exactly one settlement verb per outcome:
@@ -50,9 +51,24 @@ requires a new database; follow [upgrade and rollback](operations.html#upgrade-a
 - Transactional outbox (embedded-only): business write + enqueue commit in ONE
   SQLite transaction via mq.Tx.
 - Ops: /ui embedded admin console, /metrics Prometheus (incl. per-RPC latency
-  histograms), /healthz, CLI (22 commands), MCP server (mqlite-mcp, 14 tools). The local production
+  histograms), /healthz, CLI (23 commands, including the key subcommand group), MCP server (mqlite-mcp, 17 tools). The local production
   boundary is one broker per persistent SQLite file; backups and recovery must be
   rehearsed. Use TLS and Bearer authentication for network access.
+- Access keys (v0.3.1 and later): configured MQLITE_TOKENS remain full
+  administrators. Managed keys are persisted in the same DB and can be created,
+  listed, expired and revoked at runtime using SDK/HTTP/CLI/console/MCP.
+  send = send/schedule/cancel; listen = receive/settle/renew/peek/queue stats;
+  manage includes both and administration/key issuance, including other managers.
+  Rights cover the entire broker. Listen is consumption, not read-only auditing.
+  Newly generated secrets are mqk_ + 64 lowercase hex; stored as SHA-256 digests,
+  never plaintext. Preserve the public 32-lowercase-hex ID before creation.
+  Secrets are returned once; a lost response must be reconciled by ID and revoked
+  before replacing. Duplicate ID returns key_conflict, never an old secret.
+  CLI: key create/list/revoke. MCP: create_key/list_keys/revoke_key.
+  List pagination: next_after_id -> after_id; 100 default, 1000 maximum.
+  401 unauthenticated or 403 permission_denied is permanent: do not retry forever.
+  Revocation affects later requests; already-authorized long polls may finish.
+  Environment tokens cannot be listed/revoked through the managed-key API.
 - Limits: message body ≤ 1 MiB (configurable), request body ≤ 32 MiB,
   Receive ≤ 256 messages / 20 s long-poll.
 - NOT for: log streaming/replay (use Kafka/Redpanda/NATS JetStream), multi-node
@@ -68,12 +84,13 @@ requires a new database; follow [upgrade and rollback](operations.html#upgrade-a
   response, error code and limit.
 - [CLI reference](cli.html): the mqlite command-line client —
   broker, produce/consume/administer, embedded or against a broker.
+- [Access keys](access-keys.html): permissions, issuance, rotation, expiry and revocation.
 - [Operations](operations.html): production scope, backup, restore, upgrade and rollback.
 - [Deployment](deployment.html): installation, persistent storage, tokens and TLS.
 - [Observability](observability.html): queue and DLQ depth, RPC latency and alerts.
 - [For AI agents](agents.html): MCP server setup and a
   copy-paste system prompt for driving the raw HTTP API.
-- [Full docs bundle](llms-full.txt): concepts + internals + API + CLI + MCP + examples
+- [Full docs bundle](llms-full.txt): concepts + internals + API + CLI + access keys + MCP + examples
   + operations + deployment + observability as one plain-markdown file.
 
 ## Source
@@ -87,11 +104,12 @@ requires a new database; follow [upgrade and rollback](operations.html#upgrade-a
 - [Operations source](https://github.com/mqlitehq/mqlite/blob/main/docs/operations.md).
 - [Deployment source](https://github.com/mqlitehq/mqlite/blob/main/docs/deployment.md).
 - [Observability source](https://github.com/mqlitehq/mqlite/blob/main/docs/observability.md).
+- [Access key source](https://github.com/mqlitehq/mqlite/blob/main/docs/access-keys.md).
 - [MCP source](https://github.com/mqlitehq/mqlite/blob/main/docs/mcp.md).
 - [Releases](https://github.com/mqlitehq/mqlite/releases): binaries for
   linux/macos/windows (amd64+arm64), each archive contains mqlite + mqlite-mcp.
-- Container image: `ghcr.io/mqlitehq/mqlite:0.3.0` (default port 6754).
+- Container image: `ghcr.io/mqlitehq/mqlite:0.3.1` (default port 6754).
   See [Deployment](deployment.html) for persistent storage, authentication and TLS.
-- Broker: `go install github.com/mqlitehq/mqlite/cmd/mqlite@v0.3.0`.
-- MCP server: `go install github.com/mqlitehq/mqlite/cmd/mqlite-mcp@v0.3.0`.
-- SDK: `go get github.com/mqlitehq/mqlite@v0.3.0` (Go ≥ 1.21).
+- Broker: `go install github.com/mqlitehq/mqlite/cmd/mqlite@v0.3.1`.
+- MCP server: `go install github.com/mqlitehq/mqlite/cmd/mqlite-mcp@v0.3.1`.
+- SDK: `go get github.com/mqlitehq/mqlite@v0.3.1` (Go ≥ 1.21).

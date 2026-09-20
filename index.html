@@ -88,6 +88,7 @@
     <a href="internals.html">Internals</a>
     <a href="api.html">API</a>
     <a href="cli.html">CLI</a>
+    <a href="access-keys.html">Access keys</a>
     <a href="deployment.html">Deployment</a>
     <a href="observability.html">Observability</a>
     <a href="operations.html">Operations</a>
@@ -105,7 +106,7 @@
   FIFO groups and topic fan-out — <strong>embedded in your Go process</strong> or served as a
   <strong>tiny HTTP broker</strong>. Same engine, same file, your choice.</p>
   <div class="chips">
-    <span class="chip v">latest release v0.3.0</span>
+    <span class="chip v">latest release v0.3.1</span>
     <span class="chip">docs track main</span>
     <span class="chip">pure Go · no CGO</span>
     <span class="chip">one binary · one file</span>
@@ -117,6 +118,7 @@
     <a class="btn primary" href="#quickstart">Quickstart</a>
     <a class="btn ghost" href="concepts.html">Read the concepts</a>
     <a class="btn ghost" href="operations.html">Production operations</a>
+    <a class="btn ghost" href="access-keys.html">Access keys</a>
     <a class="btn ghost" href="agents.html">I'm an AI agent</a>
   </div>
 </div>
@@ -163,7 +165,7 @@
       send/receive/settle, single-broker crash recovery, and O(log n) claims on a deep backlog.
       FIFO groups stay ordered even across consumer crashes and lock expiry.</p></div>
     <div class="why"><h3><em>3</em>Simple, unambiguous interface</h3>
-      <p>Every operation is <strong>one HTTP POST with a JSON body</strong> — 22 routes, curl-able by
+      <p>Every operation is <strong>one HTTP POST with a JSON body</strong> — 25 routes in v0.3.1, curl-able by
       construction, exactly one settlement verb per outcome (<code>Complete</code> /
       <code>Abandon</code> / <code>Reject</code> / <code>Defer</code>), no aliases. Easy for people; easy for
       <a href="agents.html">agents</a>.</p></div>
@@ -272,7 +274,7 @@ func main() {
 
 <section class="land" id="quickstart">
   <h2># quickstart</h2>
-  <p class="lede">Three ways in — they all drive the same engine. These examples pin v0.3.0; see <a href="deployment.html">Deployment</a> for installation and runtime settings.</p>
+  <p class="lede">Three ways in — they all drive the same engine. These examples pin v0.3.1; see <a href="deployment.html">Deployment</a> for installation and runtime settings.</p>
   <div class="tabs">
     <div class="tabbar">
       <button class="on" data-t="go">Embedded Go</button>
@@ -280,7 +282,7 @@ func main() {
       <button data-t="docker">Docker</button>
     </div>
     <div class="tabpane on" data-t="go">
-      <p>No server at all: one import, one file — the queue lives inside your process. <code>go get github.com/mqlitehq/mqlite@v0.3.0</code> (Go ≥ 1.21).</p>
+      <p>No server at all: one import, one file — the queue lives inside your process. <code>go get github.com/mqlitehq/mqlite@v0.3.1</code> (Go ≥ 1.21).</p>
       <pre><code class="language-go">package main
 
 import (
@@ -327,8 +329,8 @@ func main() {
     </div>
     <div class="tabpane" data-t="broker">
       <p>One tiny process, secure by default: it generates a <code>mqk_…</code> token and prints it if you don't set one. Every operation is one POST.</p>
-      <p>v0.3.0 uses port 6754 and schema token 5. Upgrading from v0.2.0 (port 8080, schema token 2) requires a new database; follow the <a href="operations.html#upgrade-and-rollback">upgrade and rollback procedure</a>.</p>
-      <pre><code class="language-bash">go install github.com/mqlitehq/mqlite/cmd/mqlite@v0.3.0   # default port 6754
+      <p>v0.3.1 uses port 6754 and schema token 5. Upgrading from v0.2.0 (port 8080, schema token 2) requires a new database; follow the <a href="operations.html#upgrade-and-rollback">upgrade and rollback procedure</a>.</p>
+      <pre><code class="language-bash">go install github.com/mqlitehq/mqlite/cmd/mqlite@v0.3.1   # default port 6754
 
 # start the broker on :6754 with a known token, in the background
 MQLITE_TOKENS=mqk_dev MQLITE_DB=file:./mq.db mqlite serve &
@@ -349,17 +351,30 @@ curl -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
     </div>
     <div class="tabpane" data-t="docker">
       <p>A named volume keeps queue data across container replacement. The admin console is available at <code>/ui</code>.</p>
-      <p>This example pins the v0.3.0 image. For production configuration and recovery, follow <a href="deployment.html">Deployment</a> and the <a href="operations.html">operations runbook</a>.</p>
+      <p>This example pins the v0.3.1 image. For production configuration and recovery, follow <a href="deployment.html">Deployment</a> and the <a href="operations.html">operations runbook</a>.</p>
       <pre><code class="language-bash">docker run -d --name mqlite -p 127.0.0.1:6754:6754 \
   -e MQLITE_TOKENS=mqk_dev \
   -e MQLITE_DB=file:/data/mq.db \
   -v mqdata:/data \
-  ghcr.io/mqlitehq/mqlite:0.3.0
+  ghcr.io/mqlitehq/mqlite:0.3.1
 
 curl http://localhost:6754/          # discovery card (no auth)
 # then open the admin console in a browser: http://localhost:6754/ui</code></pre>
     </div>
   </div>
+</section>
+
+<section class="land" id="access-keys">
+  <h2># one key for each application</h2>
+  <p class="lede"><strong>Available in v0.3.1.</strong> Keep a configured administrator token and issue separate application keys at runtime, with no broker restart.</p>
+  <div class="sem">
+    <a href="access-keys.html#choose-a-permission"><b>Send</b>send, schedule and cancel scheduled messages</a>
+    <a href="access-keys.html#choose-a-permission"><b>Listen</b>receive, settle, renew, peek and read queue statistics</a>
+    <a href="access-keys.html#choose-a-permission"><b>Manage</b>all application rights, administration and issuing or revoking keys</a>
+    <a href="access-keys.html#rotate-revoke-and-recover"><b>Rotate without a restart</b>create a replacement, switch the application, then revoke the old key</a>
+  </div>
+  <p>Permissions apply across one broker. Tokens are shown once; the database stores only their digests. Manage keys through the Go SDK, HTTP API, CLI, console or MCP.</p>
+  <p><a href="access-keys.html">Read the access key guide →</a></p>
 </section>
 
 <section class="land" id="operations">
@@ -378,7 +393,7 @@ curl http://localhost:6754/          # discovery card (no auth)
   <div class="quote">
     The API was shaped so a model can drive it without tripping: one POST per operation,
     one verb per outcome, a machine-readable discovery card at <code>GET /</code>, an
-    <b>MCP server</b> (<code>mqlite-mcp</code>, 14 tools), and
+    <b>MCP server</b> (<code>mqlite-mcp</code>, 17 tools in v0.3.1), and
     <a href="llms.txt"><code>llms.txt</code></a> / <a href="llms-full.txt"><code>llms-full.txt</code></a>
     for anything that reads the web. Copy-paste prompts and setup:
     <a href="agents.html"><b>For AI agents →</b></a>
