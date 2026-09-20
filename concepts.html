@@ -28,8 +28,8 @@
   </div>
 </div></nav>
 <div class="wrap">
-  <div class="stamp">Generated from <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/concepts.md">mqlite main · docs/concepts.md</a> — source v0.3.1; latest release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.3.0">v0.3.0</a>.
-  These docs track main; check release notes for published artifacts. The source changes are unreleased. Edit the canonical Markdown and re-run <code>tools/build.mjs</code>.</div>
+  <div class="stamp">Generated from <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/concepts.md">mqlite main · docs/concepts.md</a> — source v0.3.1; latest release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.3.1">v0.3.1</a>.
+  These docs track main; check release notes for published artifacts. Edit the canonical Markdown and re-run <code>tools/build.mjs</code>.</div>
   <main class="prose">
 <h1 id="core-concepts--subscription-filters">Core concepts &amp; subscription filters</h1>
 <blockquote>
@@ -545,8 +545,10 @@ gate in the topic fan-out from §1–§3):</p>
 <pre><code> Subscribe ──► compile + type-check ──► cache the program     (bad expr → 400)
  Publish   ──► for each subscription: run program(message) ──► route when true
 </code></pre>
-<p>Because the filter runs at publish, it sees the message&#39;s own fields and timestamps;
-evaluation is deterministic and replayable (it never reads a wall clock).</p>
+<p>The filter environment contains the message&#39;s own fields and timestamps. Use
+<code>enqueued_at</code> as the publish-time reference for repeatable routing decisions.
+The upstream <code>now()</code> builtin is also available and reads the wall clock, so an
+expression using it can produce different results for the same message.</p>
 <h2 id="6-setting-a-filter">6. Setting a filter</h2>
 <table>
 <thead>
@@ -561,7 +563,7 @@ evaluation is deterministic and replayable (it never reads a wall clock).</p>
 </tr>
 <tr>
 <td>Go SDK</td>
-<td><code>cli.Subscribe(ctx, &quot;orders&quot;, &quot;orders-gold&quot;, &amp;mqlite.Filter{Expr: </code> + &quot;<code>properties[\&quot;tier\&quot;]==\&quot;gold\&quot;</code>&quot; + <code>})</code></td>
+<td><code>cli.Subscribe(ctx, &quot;orders&quot;, &quot;orders-gold&quot;, &amp;mqlite.Filter{Expr: &quot;properties[\&quot;tier\&quot;]==\&quot;gold\&quot;&quot;})</code></td>
 </tr>
 <tr>
 <td>HTTP</td>
@@ -735,9 +737,9 @@ visible_at - enqueued_at &gt; duration(&quot;1d&quot;)
 <h3 id="expr-lang-reference">expr-lang reference</h3>
 <p>The filter engine <strong>is</strong> <a href="https://github.com/expr-lang/expr"><code>expr-lang/expr</code></a> (pinned
 at <strong>v1.17.8</strong>), so its full language — every operator, literal form, and built-in — is
-available and documented upstream. Only two things on this page are MQLite-specific: the
-<strong>message environment</strong> in §7 (the variables a filter sees) and the fail-closed boolean
-contract in §10; everything else is stock expr. When in doubt about a builtin&#39;s exact
+available and documented upstream. The <strong>message environment</strong> in §7, the duration
+helpers above and the fail-closed boolean contract in §10 are MQLite-specific;
+everything else is stock expr. When in doubt about a builtin&#39;s exact
 behavior, the upstream reference is authoritative.</p>
 <table>
 <thead>
@@ -784,9 +786,10 @@ behavior, the upstream reference is authoritative.</p>
 </tr>
 </tbody></table>
 <blockquote>
-<p>Caveat: a few upstream builtins that do IO or are non-deterministic are irrelevant
-here — the filter env exposes no such values and the evaluator is sandboxed
-(memory-safe, side-effect-free, always-terminating; see §10). The duration helpers
+<p>The evaluator exposes no file or network I/O APIs and is sandboxed
+(memory-safe, side-effect-free, always-terminating; see §10). This does not remove
+the upstream <code>now()</code> builtin: prefer message-derived timestamps when routing
+decisions must be repeatable. The duration helpers
 <code>days()</code>/<code>weeks()</code>/<code>duration(&quot;…d…w&quot;)</code> are MQLite extensions on top of expr&#39;s date
 functions, not part of stock expr.</p>
 </blockquote>
@@ -802,8 +805,8 @@ len(subject_parts) &gt;= 2 &amp;&amp; subject_parts[1] == &quot;eu&quot;
 body_text contains &quot;urgent&quot;
 </code></pre>
 <h2 id="10-filter-safety">10. Filter safety</h2>
-<p>Filters are safe to accept from untrusted callers — the env is the only input and
-there is no IO:</p>
+<p>Filters evaluate the message environment and available expr builtins. No file or
+network I/O APIs are exposed; <code>now()</code> can read the wall clock:</p>
 <ul>
 <li>expr is <strong>memory-safe, side-effect-free, and always-terminating</strong> by design (no file
 or network access, no unbounded loops).</li>

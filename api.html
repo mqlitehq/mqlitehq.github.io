@@ -28,8 +28,8 @@
   </div>
 </div></nav>
 <div class="wrap">
-  <div class="stamp">Generated from <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/api-reference.md">mqlite main · docs/api-reference.md</a> — source v0.3.1; latest release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.3.0">v0.3.0</a>.
-  These docs track main; check release notes for published artifacts. The source changes are unreleased. Edit the canonical Markdown and re-run <code>tools/build.mjs</code>.</div>
+  <div class="stamp">Generated from <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/api-reference.md">mqlite main · docs/api-reference.md</a> — source v0.3.1; latest release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.3.1">v0.3.1</a>.
+  These docs track main; check release notes for published artifacts. Edit the canonical Markdown and re-run <code>tools/build.mjs</code>.</div>
   <main class="prose">
 <h1 id="mqlite-http-api-reference">mqlite HTTP API reference</h1>
 <p>The broker speaks <strong>Connect-style JSON over HTTP</strong>. Every operation is a single
@@ -168,7 +168,7 @@ its database permissions, expiry or revocation. Remove it from configuration to
 withdraw that static grant. Database key operations never alter environment
 configuration.</p>
 <h3 id="createkey--listkeys--revokekey">CreateKey / ListKeys / RevokeKey</h3>
-<p>These methods are available in the v0.3.1 source tree; v0.3.0 does not implement
+<p>These methods are available in v0.3.1 and later; v0.3.0 does not implement
 them. All paths are <code>/mqlite.v1.AuthService/&lt;Method&gt;</code> and require <code>manage</code> with
 authentication enabled.</p>
 <table>

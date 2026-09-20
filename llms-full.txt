@@ -1,9 +1,9 @@
 mqlite main — full documentation bundle.
-Source version: v0.3.1. Latest recorded release: v0.3.0.
+Source version: v0.3.1. Latest recorded release: v0.3.1.
 These docs track main; consult release notes for published artifacts and upgrade requirements.
 Source of truth: https://github.com/mqlitehq/mqlite/tree/main/docs
 
-<!-- ===== mqlite main · source v0.3.1; latest release v0.3.0 · docs/concepts.md ===== -->
+<!-- ===== mqlite main · source v0.3.1; latest release v0.3.1 · docs/concepts.md ===== -->
 
 # Core concepts & subscription filters
 
@@ -299,15 +299,17 @@ gate in the topic fan-out from §1–§3):
  Publish   ──► for each subscription: run program(message) ──► route when true
 ```
 
-Because the filter runs at publish, it sees the message's own fields and timestamps;
-evaluation is deterministic and replayable (it never reads a wall clock).
+The filter environment contains the message's own fields and timestamps. Use
+`enqueued_at` as the publish-time reference for repeatable routing decisions.
+The upstream `now()` builtin is also available and reads the wall clock, so an
+expression using it can produce different results for the same message.
 
 ## 6. Setting a filter
 
 | surface | how |
 |---|---|
 | CLI | `mqlite subscribe orders orders-gold --expr 'properties["tier"]=="gold"'` |
-| Go SDK | `cli.Subscribe(ctx, "orders", "orders-gold", &mqlite.Filter{Expr: ` + "`properties[\"tier\"]==\"gold\"`" + `})` |
+| Go SDK | `cli.Subscribe(ctx, "orders", "orders-gold", &mqlite.Filter{Expr: "properties[\"tier\"]==\"gold\""})` |
 | HTTP | `POST /mqlite.v1.AdminService/Subscribe` body `{"topic":"orders","name":"orders-gold","filter":{"expr":"..."}}` |
 
 Re-subscribing with the same name and a new `expr` replaces the filter (recompiled on
@@ -409,9 +411,9 @@ visible_at - enqueued_at > duration("1d")
 
 The filter engine **is** [`expr-lang/expr`](https://github.com/expr-lang/expr) (pinned
 at **v1.17.8**), so its full language — every operator, literal form, and built-in — is
-available and documented upstream. Only two things on this page are MQLite-specific: the
-**message environment** in §7 (the variables a filter sees) and the fail-closed boolean
-contract in §10; everything else is stock expr. When in doubt about a builtin's exact
+available and documented upstream. The **message environment** in §7, the duration
+helpers above and the fail-closed boolean contract in §10 are MQLite-specific;
+everything else is stock expr. When in doubt about a builtin's exact
 behavior, the upstream reference is authoritative.
 
 | What | Where |
@@ -426,9 +428,10 @@ behavior, the upstream reference is authoritative.
 | Type-conversion builtins | <https://expr-lang.org/docs/language-definition#type-conversion-functions> |
 | Docs home | <https://expr-lang.org/docs/getting-started> |
 
-> Caveat: a few upstream builtins that do IO or are non-deterministic are irrelevant
-> here — the filter env exposes no such values and the evaluator is sandboxed
-> (memory-safe, side-effect-free, always-terminating; see §10). The duration helpers
+> The evaluator exposes no file or network I/O APIs and is sandboxed
+> (memory-safe, side-effect-free, always-terminating; see §10). This does not remove
+> the upstream `now()` builtin: prefer message-derived timestamps when routing
+> decisions must be repeatable. The duration helpers
 > `days()`/`weeks()`/`duration("…d…w")` are MQLite extensions on top of expr's date
 > functions, not part of stock expr.
 
@@ -448,8 +451,8 @@ body_text contains "urgent"
 
 ## 10. Filter safety
 
-Filters are safe to accept from untrusted callers — the env is the only input and
-there is no IO:
+Filters evaluate the message environment and available expr builtins. No file or
+network I/O APIs are exposed; `now()` can read the wall clock:
 
 - expr is **memory-safe, side-effect-free, and always-terminating** by design (no file
   or network access, no unbounded loops).
@@ -471,7 +474,7 @@ there is no IO:
   for the filter rules MQLite guarantees.
 
 
-<!-- ===== mqlite main · source v0.3.1; latest release v0.3.0 · docs/internals.md ===== -->
+<!-- ===== mqlite main · source v0.3.1; latest release v0.3.1 · docs/internals.md ===== -->
 
 # How mqlite works — building a reliable queue on one SQLite file
 
@@ -901,7 +904,7 @@ with the conformance suite as the judge.
 [benchmark.md](https://github.com/mqlitehq/mqlite/blob/main/docs/benchmark.md).*
 
 
-<!-- ===== mqlite main · source v0.3.1; latest release v0.3.0 · docs/api-reference.md ===== -->
+<!-- ===== mqlite main · source v0.3.1; latest release v0.3.1 · docs/api-reference.md ===== -->
 
 # mqlite HTTP API reference
 
@@ -1015,7 +1018,7 @@ configuration.
 
 ### CreateKey / ListKeys / RevokeKey
 
-These methods are available in the v0.3.1 source tree; v0.3.0 does not implement
+These methods are available in v0.3.1 and later; v0.3.0 does not implement
 them. All paths are `/mqlite.v1.AuthService/<Method>` and require `manage` with
 authentication enabled.
 
@@ -1431,7 +1434,7 @@ The Go SDK re-exports the sentinel errors (`mqlite.ErrLockLost`, `ErrDedupConfli
 client mode.
 
 
-<!-- ===== mqlite main · source v0.3.1; latest release v0.3.0 · docs/cli.md ===== -->
+<!-- ===== mqlite main · source v0.3.1; latest release v0.3.1 · docs/cli.md ===== -->
 
 # CLI reference (`mqlite`)
 
@@ -1524,7 +1527,7 @@ Serves the RPC API, `/metrics`, the open `/` + `/healthz`, and — unless
 
 ### `key create|list|revoke` — manage persistent access keys
 
-Available in the v0.3.1 source tree. In client mode, use an environment administrator
+Available in v0.3.1 and later. In client mode, use an environment administrator
 or a managed `manage` key as `MQLITE_TOKEN`. The broker can keep running while keys
 are created or revoked. Embedded mode directly manages the configured database
 and requires exclusive ownership; it cannot open a running local broker's DB.
@@ -1766,12 +1769,12 @@ See also: [api-reference.md](https://github.com/mqlitehq/mqlite/blob/main/docs/a
 [examples.md](https://github.com/mqlitehq/mqlite/blob/main/docs/examples.md) (Go SDK).
 
 
-<!-- ===== mqlite main · source v0.3.1; latest release v0.3.0 · docs/access-keys.md ===== -->
+<!-- ===== mqlite main · source v0.3.1; latest release v0.3.1 · docs/access-keys.md ===== -->
 
 # Access keys
 
-Runtime access keys are available in the **v0.3.1 source tree (unreleased)**.
-The published v0.3.0 supports configured administrator tokens only.
+Runtime access keys are available in **v0.3.1 and later**.
+Version v0.3.0 supports configured administrator tokens only.
 
 ## Choose a permission
 
@@ -1918,7 +1921,7 @@ revocation state or discard newer credentials. Review keys using a configured
 administrator before reopening traffic. See [backup and upgrade procedures](https://github.com/mqlitehq/mqlite/blob/main/docs/operations.md).
 
 
-<!-- ===== mqlite main · source v0.3.1; latest release v0.3.0 · docs/deployment.md ===== -->
+<!-- ===== mqlite main · source v0.3.1; latest release v0.3.1 · docs/deployment.md ===== -->
 
 # Deploying mqlite
 
@@ -1967,21 +1970,23 @@ and error reference: [api-reference.md](https://github.com/mqlitehq/mqlite/blob/
 ## Docker / GHCR
 
 > **Version and upgrade compatibility.**
-> These instructions target **v0.3.0**, with default port **6754** and schema token **5**.
+> These instructions target **v0.3.1**, with default port **6754** and schema token **5**.
+> Existing v0.3.0 databases remain compatible; back up before upgrading and retain
+> a configured administrator for rollback, since v0.3.0 ignores managed keys.
 > **v0.2.0 uses port 8080 and schema token 2.** Its database cannot be opened by
-> v0.3.0: preserve the old binary/database pair and follow the
+> v0.3.1: preserve the old binary/database pair and follow the
 > [upgrade and rollback procedure](https://github.com/mqlitehq/mqlite/blob/main/docs/operations.md#upgrade-and-rollback) before replacing it.
 
 The published image is multi-arch (amd64 + arm64):
 
 ```bash
-# v0.3.0, default port 6754
+# v0.3.1, default port 6754
 docker run -d --name mqlite -p 6754:6754 \
   -v mqlite-data:/data \
   -e MQLITE_DB=file:/data/mq.db \
   -e MQLITE_TOKENS=mqk_prod_CHANGEME \
   -e MQLITE_SYNC=FULL \
-  ghcr.io/mqlitehq/mqlite:0.3.0
+  ghcr.io/mqlitehq/mqlite:0.3.1
 ```
 
 - The named volume `mqlite-data` persists the SQLite file across restarts.
@@ -2000,7 +2005,7 @@ app            = "your-mqlite"
 primary_region = "sin"            # pick a region near you
 
 [build]
-  image = "ghcr.io/mqlitehq/mqlite:0.3.0"   # pinned image, no build on Fly
+  image = "ghcr.io/mqlitehq/mqlite:0.3.1"   # pinned image, no build on Fly
 
 [env]
   MQLITE_DB = "file:/data/mq.db"            # SQLite on the persistent volume
@@ -2077,12 +2082,11 @@ connects to the broker on `127.0.0.1:6754`, which is the only interface the brok
 above — so the proxy (with TLS + whatever access control you add) is the single entry
 point, not a bypassable layer over an all-interfaces socket.
 
-Runtime-managed keys in the upcoming v0.3.1 can be created and revoked without a
+Runtime-managed keys in v0.3.1 can be created and revoked without a
 restart. Use a configured administrator or managed `manage` key for the console,
 metrics scraper and key administration; use `send`/`listen` for applications.
 See [key commands](https://github.com/mqlitehq/mqlite/blob/main/docs/cli.md#key-createlistrevoke--manage-persistent-access-keys) and
-[key rotation](https://github.com/mqlitehq/mqlite/blob/main/docs/operations.md#key-rotation). Existing v0.3.0 deployment examples in this guide
-remain pinned to the published release and do not include managed keys.
+[key rotation](https://github.com/mqlitehq/mqlite/blob/main/docs/operations.md#key-rotation).
 
 ## Backup, restore and upgrades
 
@@ -2090,9 +2094,11 @@ Follow the [production runbook](https://github.com/mqlitehq/mqlite/blob/main/doc
 online snapshots, offline directory copies, isolated restore validation and rollback.
 Use a fresh restore directory so an old WAL/SHM cannot attach to the snapshot.
 
-**v0.2.0 databases use schema 2; v0.3.0 uses schema 5.** There is no
-in-place migration. Before the upgrade, account for retained work in every state,
-keep the old binary/database pair, and create the v0.3.0 database separately.
+**v0.2.0 databases use schema 2; v0.3.0 and v0.3.1 use schema 5.** There is no
+in-place migration from schema 2. Before upgrading from v0.2.0, account for retained
+work in every state, keep the old binary/database pair, and create the v0.3.1
+database separately. Upgrading from v0.3.0 reuses the existing database and adds
+managed-key storage; take a consistent backup first.
 See [upgrade and rollback](https://github.com/mqlitehq/mqlite/blob/main/docs/operations.md#upgrade-and-rollback).
 
 ## Turso (remote libSQL)
@@ -2140,7 +2146,7 @@ curl -H "Authorization: Bearer $T" -H 'Content-Type: application/json' \
 - [ ] Scrape `/metrics` (Prometheus) for queue depths — see [observability.md](https://github.com/mqlitehq/mqlite/blob/main/docs/observability.md).
 
 
-<!-- ===== mqlite main · source v0.3.1; latest release v0.3.0 · docs/observability.md ===== -->
+<!-- ===== mqlite main · source v0.3.1; latest release v0.3.1 · docs/observability.md ===== -->
 
 # Observability
 
@@ -2344,11 +2350,11 @@ resuming producers. See the [Prometheus function reference](https://prometheus.i
 for gauge and counter query semantics.
 
 
-<!-- ===== mqlite main · source v0.3.1; latest release v0.3.0 · docs/operations.md ===== -->
+<!-- ===== mqlite main · source v0.3.1; latest release v0.3.1 · docs/operations.md ===== -->
 
 # Production operations
 
-This runbook covers v0.3.0 and the upcoming v0.3.1 (port 6754, schema token 5).
+This runbook covers v0.3.1 and upgrades from v0.3.0 (port 6754, schema token 5).
 Runtime-managed access keys require v0.3.1; v0.3.0 supports configured tokens only.
 Upgrading from v0.2.0 changes both its default port (8080) and schema token (2);
 follow [upgrade and rollback](#upgrade-and-rollback) before replacing the broker.
@@ -2573,7 +2579,7 @@ in this release, so do not improvise a direct SQL table copy between schemas.
 rules behind these procedures.
 
 
-<!-- ===== mqlite main · source v0.3.1; latest release v0.3.0 · docs/mcp.md ===== -->
+<!-- ===== mqlite main · source v0.3.1; latest release v0.3.1 · docs/mcp.md ===== -->
 
 # MCP server (`mqlite-mcp`)
 
@@ -2688,7 +2694,7 @@ Environment tokens are not listed or revocable through these tools. Key tools ar
 unavailable when broker authentication is explicitly disabled.
 
 
-<!-- ===== mqlite main · source v0.3.1; latest release v0.3.0 · docs/examples.md ===== -->
+<!-- ===== mqlite main · source v0.3.1; latest release v0.3.1 · docs/examples.md ===== -->
 
 # Examples
 

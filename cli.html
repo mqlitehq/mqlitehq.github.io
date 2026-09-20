@@ -28,8 +28,8 @@
   </div>
 </div></nav>
 <div class="wrap">
-  <div class="stamp">Generated from <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/cli.md">mqlite main · docs/cli.md</a> — source v0.3.1; latest release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.3.0">v0.3.0</a>.
-  These docs track main; check release notes for published artifacts. The source changes are unreleased. Edit the canonical Markdown and re-run <code>tools/build.mjs</code>.</div>
+  <div class="stamp">Generated from <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/cli.md">mqlite main · docs/cli.md</a> — source v0.3.1; latest release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.3.1">v0.3.1</a>.
+  These docs track main; check release notes for published artifacts. Edit the canonical Markdown and re-run <code>tools/build.mjs</code>.</div>
   <main class="prose">
 <h1 id="cli-reference-mqlite">CLI reference (<code>mqlite</code>)</h1>
 <p>One binary, <strong>two modes</strong> — the same commands work against a local SQLite DB
@@ -157,7 +157,7 @@ a broker (<code>mqlite serve</code> + <code>--endpoint</code>) when you need man
 <p>Serves the RPC API, <code>/metrics</code>, the open <code>/</code> + <code>/healthz</code>, and — unless
 <code>MQLITE_UI=off</code> — the embedded admin console at <code>/ui</code>.</p>
 <h3 id="key-createlistrevoke--manage-persistent-access-keys"><code>key create|list|revoke</code> — manage persistent access keys</h3>
-<p>Available in the v0.3.1 source tree. In client mode, use an environment administrator
+<p>Available in v0.3.1 and later. In client mode, use an environment administrator
 or a managed <code>manage</code> key as <code>MQLITE_TOKEN</code>. The broker can keep running while keys
 are created or revoked. Embedded mode directly manages the configured database
 and requires exclusive ownership; it cannot open a running local broker&#39;s DB.</p>

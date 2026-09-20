@@ -55,12 +55,12 @@
 
 <div class="wrap">
 
-<div class="stamp">These docs track <a href="https://github.com/mqlitehq/mqlite/tree/main">main · source v0.3.1 (unreleased)</a>.
-  The latest release is <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.3.0">v0.3.0</a>
-  (default port 6754); installation examples pin that release. Access key management below requires the unreleased v0.3.1 source. Use the
-  <a href="https://github.com/mqlitehq/mqlite/tree/v0.3.0/docs">v0.3.0 docs</a>
+<div class="stamp">These docs track <a href="https://github.com/mqlitehq/mqlite/tree/main">main · source v0.3.1</a>.
+  The latest release is <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.3.1">v0.3.1</a>
+  (default port 6754); installation examples pin that release. Use the
+  <a href="https://github.com/mqlitehq/mqlite/tree/v0.3.1/docs">v0.3.1 docs</a>
   for the versioned reference, and follow the <a href="operations.html#upgrade-and-rollback">upgrade procedure</a>
-  when moving from v0.2.0 (port 8080, schema token 2) to v0.3.0 (schema token 5).</div>
+  when moving from v0.2.0 (port 8080, schema token 2) to v0.3.0 or later (schema token 5).</div>
 
 <div class="head">
   <h1># mqlite for AI agents</h1>
@@ -73,9 +73,9 @@
 <section class="blk">
   <h2># 1 · MCP server (recommended)</h2>
   <p class="lede"><code>mqlite-mcp</code> ships in the same repo — a dependency-free stdio MCP server that turns each tool call into one HTTP POST to the broker.</p>
-  <p>Install v0.3.0 with <code>go install github.com/mqlitehq/mqlite/cmd/mqlite-mcp@v0.3.0</code>,
+  <p>Install v0.3.1 with <code>go install github.com/mqlitehq/mqlite/cmd/mqlite-mcp@v0.3.1</code>,
   or use <code>mqlite-mcp</code> from a
-  <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.3.0">v0.3.0 release archive</a>,
+  <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.3.1">v0.3.1 release archive</a>,
   then register the installed binary with your MCP host:</p>
 <pre><code class="language-json">{
   "mcpServers": {
@@ -88,7 +88,7 @@
     }
   }
 }</code></pre>
-  <p>The v0.3.1 source defines <strong>17 tools</strong>. Its three key-management tools require matching v0.3.1 source builds of the broker and MCP server; they are unavailable in the published v0.3.0 binaries:</p>
+  <p>v0.3.1 provides <strong>17 tools</strong>. Its three key-management tools require a broker and MCP server running v0.3.1 or later; they are unavailable in v0.3.0 binaries:</p>
   <div class="tbl"><table>
     <tr><th>Tool</th><th>Does</th></tr>
     <tr><td><code>list_queues</code></td><td>list queues / subscriptions</td></tr>
@@ -136,7 +136,7 @@ Base URL:  &lt;MQLITE_ENDPOINT&gt;              the broker's origin, including t
 Auth:      every call needs the header    Authorization: Bearer &lt;MQLITE_TOKEN&gt;
 Protocol:  every operation is ONE HTTP POST with a JSON body to
            /mqlite.v1.QueueService/&lt;Method&gt;, /mqlite.v1.AdminService/&lt;Method&gt;,
-           or /mqlite.v1.AuthService/&lt;Method&gt; (v0.3.1 source).
+           or /mqlite.v1.AuthService/&lt;Method&gt; (v0.3.1 and later).
            GET / (no auth) returns a discovery card listing every endpoint.
 
 Rules:

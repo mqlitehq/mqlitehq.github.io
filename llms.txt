@@ -7,10 +7,10 @@
 Public documentation: https://mqlitehq.github.io/.
 Relative links below resolve against this website.
 
-NOTE ON VERSIONS: the latest release is v0.3.0 (default port 6754, schema token 5).
-This website tracks the v0.3.1 source (unreleased); runtime access keys and the new
-key-management tools require that source. Installation commands below pin v0.3.0. Use the
-[v0.3.0 documentation](https://github.com/mqlitehq/mqlite/tree/v0.3.0/docs)
+NOTE ON VERSIONS: the latest release is v0.3.1 (default port 6754, schema token 5).
+This website tracks main. Runtime access keys and key-management tools require
+v0.3.1 or later. Installation commands below pin v0.3.1. Use the
+[v0.3.1 documentation](https://github.com/mqlitehq/mqlite/tree/v0.3.1/docs)
 for the versioned reference. Upgrading from v0.2.0 (port 8080, schema token 2)
 requires a new database; follow [upgrade and rollback](operations.html#upgrade-and-rollback).
 
@@ -54,7 +54,7 @@ requires a new database; follow [upgrade and rollback](operations.html#upgrade-a
   histograms), /healthz, CLI (23 commands, including the key subcommand group), MCP server (mqlite-mcp, 17 tools). The local production
   boundary is one broker per persistent SQLite file; backups and recovery must be
   rehearsed. Use TLS and Bearer authentication for network access.
-- Access keys (v0.3.1 source, unreleased): configured MQLITE_TOKENS remain full
+- Access keys (v0.3.1 and later): configured MQLITE_TOKENS remain full
   administrators. Managed keys are persisted in the same DB and can be created,
   listed, expired and revoked at runtime using SDK/HTTP/CLI/console/MCP.
   send = send/schedule/cancel; listen = receive/settle/renew/peek/queue stats;
@@ -108,8 +108,8 @@ requires a new database; follow [upgrade and rollback](operations.html#upgrade-a
 - [MCP source](https://github.com/mqlitehq/mqlite/blob/main/docs/mcp.md).
 - [Releases](https://github.com/mqlitehq/mqlite/releases): binaries for
   linux/macos/windows (amd64+arm64), each archive contains mqlite + mqlite-mcp.
-- Container image: `ghcr.io/mqlitehq/mqlite:0.3.0` (default port 6754).
+- Container image: `ghcr.io/mqlitehq/mqlite:0.3.1` (default port 6754).
   See [Deployment](deployment.html) for persistent storage, authentication and TLS.
-- Broker: `go install github.com/mqlitehq/mqlite/cmd/mqlite@v0.3.0`.
-- MCP server: `go install github.com/mqlitehq/mqlite/cmd/mqlite-mcp@v0.3.0`.
-- SDK: `go get github.com/mqlitehq/mqlite@v0.3.0` (Go ≥ 1.21).
+- Broker: `go install github.com/mqlitehq/mqlite/cmd/mqlite@v0.3.1`.
+- MCP server: `go install github.com/mqlitehq/mqlite/cmd/mqlite-mcp@v0.3.1`.
+- SDK: `go get github.com/mqlitehq/mqlite@v0.3.1` (Go ≥ 1.21).
