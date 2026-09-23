@@ -7,10 +7,11 @@
 Public documentation: https://mqlitehq.github.io/.
 Relative links below resolve against this website.
 
-NOTE ON VERSIONS: the latest release is v0.3.1 (default port 6754, schema token 5).
-This website tracks main. Runtime access keys and key-management tools require
-v0.3.1 or later. Installation commands below pin v0.3.1. Use the
-[v0.3.1 documentation](https://github.com/mqlitehq/mqlite/tree/v0.3.1/docs)
+NOTE ON VERSIONS: the latest release is v0.3.2 (default port 6754, schema token 5).
+This website tracks main, currently source v0.3.2. Runtime access
+keys and key-management tools require v0.3.1 or later. Unified Observe, configured
+monitor credentials and the monitoring starter require v0.3.2 or later. Installation commands below pin v0.3.2. Use the
+[v0.3.2 documentation](https://github.com/mqlitehq/mqlite/tree/v0.3.2/docs)
 for the versioned reference. Upgrading from v0.2.0 (port 8080, schema token 2)
 requires a new database; follow [upgrade and rollback](operations.html#upgrade-and-rollback).
 
@@ -19,7 +20,7 @@ requires a new database; follow [upgrade and rollback](operations.html#upgrade-a
   default — a token is auto-generated if none is set).
 - Storage: local SQLite (pure-Go driver) or remote Turso/libSQL. Remote buys
   durability + geo-replication (~45 ms per durable commit), not throughput.
-- Wire protocol: JSON over HTTP, one POST per operation, 25 routes under
+- Wire protocol: JSON over HTTP, one POST per operation, 26 routes in source v0.3.2 under
   /mqlite.v1.QueueService/*, /mqlite.v1.AdminService/* and /mqlite.v1.AuthService/*. Message bodies are
   base64 in JSON. GET / is an open discovery card listing every endpoint.
 - Delivery: Peek-Lock (receive → work → settle with a lock_token) or
@@ -50,10 +51,26 @@ requires a new database; follow [upgrade and rollback](operations.html#upgrade-a
   capped by the queue default. Duplicate detection by message_id within a window.
 - Transactional outbox (embedded-only): business write + enqueue commit in ONE
   SQLite transaction via mq.Tx.
-- Ops: /ui embedded admin console, /metrics Prometheus (incl. per-RPC latency
-  histograms), /healthz, CLI (23 commands, including the key subcommand group), MCP server (mqlite-mcp, 17 tools). The local production
+- Ops: /ui embedded admin console, opt-in authenticated /metrics Prometheus
+  (incl. per-RPC latency histograms), /healthz, CLI (24 commands, including the key subcommand group), MCP server (mqlite-mcp, 18 tools in source v0.3.2). The local production
   boundary is one broker per persistent SQLite file; backups and recovery must be
   rehearsed. Use TLS and Bearer authentication for network access.
+- Unified observation (v0.3.2 and later): AdminService/Observe, SDK, CLI observe,
+  MCP observe, console and Prometheus share one metric contract. Track collection
+  success and freshness independently of scrape availability; unavailable values
+  are not zero. Process counters reset on restart. Use MQLITE_MONITOR_TOKENS for a
+  separate read-only collector credential; it permits only Observe and /metrics,
+  not payload access, consumption, administration or key issuance. Grafana queries
+  Prometheus and does not need the MQLite token. Reuse the supplied dashboard and
+  alert rules with an existing collector or the local monitoring starter.
+- Prometheus access (v0.3.2): disabled by default (/metrics returns 404 and
+  discovery omits metrics). Enable --metrics or MQLITE_METRICS=on to serve on the
+  API port; discovery then includes "metrics":"/metrics". Administrator auth must
+  stay enabled. Only configured monitor or administrator credentials and managed
+  manage keys may scrape. Observe works independently of this switch. Keep the
+  collector on a private network; block /metrics at any public API ingress.
+  Authentication does not make a public route private. On Fly.io, reuse an
+  external collector over the private network instead of adding a monitoring VM.
 - Access keys (v0.3.1 and later): configured MQLITE_TOKENS remain full
   administrators. Managed keys are persisted in the same DB and can be created,
   listed, expired and revoked at runtime using SDK/HTTP/CLI/console/MCP.
@@ -87,11 +104,12 @@ requires a new database; follow [upgrade and rollback](operations.html#upgrade-a
 - [Access keys](access-keys.html): permissions, issuance, rotation, expiry and revocation.
 - [Operations](operations.html): production scope, backup, restore, upgrade and rollback.
 - [Deployment](deployment.html): installation, persistent storage, tokens and TLS.
-- [Observability](observability.html): queue and DLQ depth, RPC latency and alerts.
+- [Observability](observability.html): canonical measurements, availability, credentials, dashboard and alerts.
+- [Cloud monitoring](observability-cloud.html): private authenticated collection on Fly.io, Alibaba Cloud, Azure and Kubernetes.
 - [For AI agents](agents.html): MCP server setup and a
   copy-paste system prompt for driving the raw HTTP API.
 - [Full docs bundle](llms-full.txt): concepts + internals + API + CLI + access keys + MCP + examples
-  + operations + deployment + observability as one plain-markdown file.
+  + operations + deployment + observability + cloud monitoring as one plain-markdown file.
 
 ## Source
 
@@ -104,12 +122,13 @@ requires a new database; follow [upgrade and rollback](operations.html#upgrade-a
 - [Operations source](https://github.com/mqlitehq/mqlite/blob/main/docs/operations.md).
 - [Deployment source](https://github.com/mqlitehq/mqlite/blob/main/docs/deployment.md).
 - [Observability source](https://github.com/mqlitehq/mqlite/blob/main/docs/observability.md).
+- [Cloud monitoring source](https://github.com/mqlitehq/mqlite/blob/main/docs/observability-cloud.md).
 - [Access key source](https://github.com/mqlitehq/mqlite/blob/main/docs/access-keys.md).
 - [MCP source](https://github.com/mqlitehq/mqlite/blob/main/docs/mcp.md).
 - [Releases](https://github.com/mqlitehq/mqlite/releases): binaries for
   linux/macos/windows (amd64+arm64), each archive contains mqlite + mqlite-mcp.
-- Container image: `ghcr.io/mqlitehq/mqlite:0.3.1` (default port 6754).
+- Container image: `ghcr.io/mqlitehq/mqlite:0.3.2` (default port 6754).
   See [Deployment](deployment.html) for persistent storage, authentication and TLS.
-- Broker: `go install github.com/mqlitehq/mqlite/cmd/mqlite@v0.3.1`.
-- MCP server: `go install github.com/mqlitehq/mqlite/cmd/mqlite-mcp@v0.3.1`.
-- SDK: `go get github.com/mqlitehq/mqlite@v0.3.1` (Go ≥ 1.21).
+- Broker: `go install github.com/mqlitehq/mqlite/cmd/mqlite@v0.3.2`.
+- MCP server: `go install github.com/mqlitehq/mqlite/cmd/mqlite-mcp@v0.3.2`.
+- SDK: `go get github.com/mqlitehq/mqlite@v0.3.2` (Go ≥ 1.21).

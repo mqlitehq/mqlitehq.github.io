@@ -20,9 +20,10 @@ choose documentation matching an installed binary.
 | `access-keys.html` | permissions, issuance, rotation and revocation | **generated** from `mqlite/docs/access-keys.md` |
 | `deployment.html` | installation and configuration | **generated** from `mqlite/docs/deployment.md` |
 | `observability.html` | metrics and operational alerts | **generated** from `mqlite/docs/observability.md` |
+| `observability-cloud.html` | authenticated cloud and Kubernetes metric collection | **generated** from `mqlite/docs/observability-cloud.md` |
 | `operations.html` | backup, restore, upgrades and incident response | **generated** from `mqlite/docs/operations.md` |
 | `llms.txt` | one-page machine-readable summary | by hand |
-| `llms-full.txt` | full docs bundle (markdown) | **generated** (all eight references + MCP + examples) |
+| `llms-full.txt` | full docs bundle (markdown) | **generated** (all nine references + MCP + examples) |
 | `site-metadata.json` | source version, latest recorded release, API/MCP/CLI surface, output inventory | **generated** from canonical source |
 | `assets/site.css` | shared chrome (true-black, mono, amber accent) | by hand |
 | `assets/site.js` | copy buttons · line numbers · tabs · highlight init | by hand |

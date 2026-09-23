@@ -91,6 +91,7 @@
     <a href="access-keys.html">Access keys</a>
     <a href="deployment.html">Deployment</a>
     <a href="observability.html">Observability</a>
+    <a href="observability-cloud.html">Cloud monitoring</a>
     <a href="operations.html">Operations</a>
     <a href="agents.html">For AI agents</a>
     <a class="gh" href="https://github.com/mqlitehq/mqlite">GitHub ↗</a>
@@ -106,8 +107,8 @@
   FIFO groups and topic fan-out — <strong>embedded in your Go process</strong> or served as a
   <strong>tiny HTTP broker</strong>. Same engine, same file, your choice.</p>
   <div class="chips">
-    <span class="chip v">latest release v0.3.1</span>
-    <span class="chip">docs track main</span>
+    <span class="chip v">latest release v0.3.2</span>
+    <span class="chip">docs source v0.3.2</span>
     <span class="chip">pure Go · no CGO</span>
     <span class="chip">one binary · one file</span>
     <span class="chip">JSON over HTTP · curl-able</span>
@@ -165,7 +166,7 @@
       send/receive/settle, single-broker crash recovery, and O(log n) claims on a deep backlog.
       FIFO groups stay ordered even across consumer crashes and lock expiry.</p></div>
     <div class="why"><h3><em>3</em>Simple, unambiguous interface</h3>
-      <p>Every operation is <strong>one HTTP POST with a JSON body</strong> — 25 routes in v0.3.1, curl-able by
+      <p>Every operation is <strong>one HTTP POST with a JSON body</strong> — 26 routes in source v0.3.2, curl-able by
       construction, exactly one settlement verb per outcome (<code>Complete</code> /
       <code>Abandon</code> / <code>Reject</code> / <code>Defer</code>), no aliases. Easy for people; easy for
       <a href="agents.html">agents</a>.</p></div>
@@ -239,13 +240,13 @@ func main() {
     <a href="concepts.html"><b>Scheduling &amp; TTL</b>deliver later; cancel a never-delivered scheduled message; per-message TTL capped by the queue</a>
     <a href="concepts.html"><b>Duplicate detection</b>message_id window collapses repeats; conflicts fail loud (409)</a>
     <a href="concepts.html"><b>Defer</b>set a message aside, fetch it back by sequence number</a>
-    <a href="api.html"><b>Ops built in</b>/ui console · /metrics histograms · discovery card · CLI · MCP server</a>
+    <a href="observability.html"><b>Ops built in</b>/ui console · unified Observe and /metrics · CLI · MCP · Grafana starter (v0.3.2)</a>
   </div>
 </section>
 
 <section class="land" id="honest">
   <h2># the honest part</h2>
-  <p class="lede">Measured, reproducible, published — including the unflattering rows. Full method: <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/benchmark.md">docs/benchmark.md</a>.</p>
+  <p class="lede">Published historical measurements from specific workloads; remeasure v0.3.2 with your payloads, concurrency and monitoring enabled before sizing production. Full method: <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/benchmark.md">docs/benchmark.md</a>.</p>
   <div class="numbers"><table>
     <tr><th>Setup</th><th>Measured</th><th>Read this as</th></tr>
     <tr><td>Local file DB, 12-core machine</td>
@@ -259,7 +260,7 @@ func main() {
         <td>you're buying durability + geo-replication, <strong>not</strong> throughput</td></tr>
     <tr><td>Memory / disk</td>
         <td class="num">25–34 MB RSS · file auto-shrinks when drained</td>
-        <td>fits the smallest VM you can rent</td></tr>
+        <td>measure current peak memory with your queue, payload and monitoring load</td></tr>
   </table></div>
   <h3 class="subh">when NOT to use mqlite — it is a single-writer, single-node queue by design</h3>
   <div class="numbers"><table>
@@ -274,7 +275,7 @@ func main() {
 
 <section class="land" id="quickstart">
   <h2># quickstart</h2>
-  <p class="lede">Three ways in — they all drive the same engine. These examples pin v0.3.1; see <a href="deployment.html">Deployment</a> for installation and runtime settings.</p>
+  <p class="lede">Three ways in — they all drive the same engine. These examples pin v0.3.2; see <a href="deployment.html">Deployment</a> for installation and runtime settings.</p>
   <div class="tabs">
     <div class="tabbar">
       <button class="on" data-t="go">Embedded Go</button>
@@ -282,7 +283,7 @@ func main() {
       <button data-t="docker">Docker</button>
     </div>
     <div class="tabpane on" data-t="go">
-      <p>No server at all: one import, one file — the queue lives inside your process. <code>go get github.com/mqlitehq/mqlite@v0.3.1</code> (Go ≥ 1.21).</p>
+      <p>No server at all: one import, one file — the queue lives inside your process. <code>go get github.com/mqlitehq/mqlite@v0.3.2</code> (Go ≥ 1.21).</p>
       <pre><code class="language-go">package main
 
 import (
@@ -329,8 +330,8 @@ func main() {
     </div>
     <div class="tabpane" data-t="broker">
       <p>One tiny process, secure by default: it generates a <code>mqk_…</code> token and prints it if you don't set one. Every operation is one POST.</p>
-      <p>v0.3.1 uses port 6754 and schema token 5. Upgrading from v0.2.0 (port 8080, schema token 2) requires a new database; follow the <a href="operations.html#upgrade-and-rollback">upgrade and rollback procedure</a>.</p>
-      <pre><code class="language-bash">go install github.com/mqlitehq/mqlite/cmd/mqlite@v0.3.1   # default port 6754
+      <p>v0.3.2 uses port 6754 and schema token 5. Upgrading from v0.2.0 (port 8080, schema token 2) requires a new database; follow the <a href="operations.html#upgrade-and-rollback">upgrade and rollback procedure</a>.</p>
+      <pre><code class="language-bash">go install github.com/mqlitehq/mqlite/cmd/mqlite@v0.3.2   # default port 6754
 
 # start the broker on :6754 with a known token, in the background
 MQLITE_TOKENS=mqk_dev MQLITE_DB=file:./mq.db mqlite serve &
@@ -351,12 +352,12 @@ curl -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
     </div>
     <div class="tabpane" data-t="docker">
       <p>A named volume keeps queue data across container replacement. The admin console is available at <code>/ui</code>.</p>
-      <p>This example pins the v0.3.1 image. For production configuration and recovery, follow <a href="deployment.html">Deployment</a> and the <a href="operations.html">operations runbook</a>.</p>
+      <p>This example pins the v0.3.2 image. For production configuration and recovery, follow <a href="deployment.html">Deployment</a> and the <a href="operations.html">operations runbook</a>.</p>
       <pre><code class="language-bash">docker run -d --name mqlite -p 127.0.0.1:6754:6754 \
   -e MQLITE_TOKENS=mqk_dev \
   -e MQLITE_DB=file:/data/mq.db \
   -v mqdata:/data \
-  ghcr.io/mqlitehq/mqlite:0.3.1
+  ghcr.io/mqlitehq/mqlite:0.3.2
 
 curl http://localhost:6754/          # discovery card (no auth)
 # then open the admin console in a browser: http://localhost:6754/ui</code></pre>
@@ -366,7 +367,7 @@ curl http://localhost:6754/          # discovery card (no auth)
 
 <section class="land" id="access-keys">
   <h2># one key for each application</h2>
-  <p class="lede"><strong>Available in v0.3.1.</strong> Keep a configured administrator token and issue separate application keys at runtime, with no broker restart.</p>
+  <p class="lede"><strong>Available since v0.3.1.</strong> Keep a configured administrator token and issue separate application keys at runtime, with no broker restart.</p>
   <div class="sem">
     <a href="access-keys.html#choose-a-permission"><b>Send</b>send, schedule and cancel scheduled messages</a>
     <a href="access-keys.html#choose-a-permission"><b>Listen</b>receive, settle, renew, peek and read queue statistics</a>
@@ -380,10 +381,12 @@ curl http://localhost:6754/          # discovery card (no auth)
 <section class="land" id="operations">
   <h2># run it in production</h2>
   <p class="lede">Start with one broker over a persistent local SQLite file. Choose a durability setting and rehearse recovery before putting messages into production.</p>
+  <p>Prometheus collection is off by default. Enable <code>--metrics</code> or <code>MQLITE_METRICS=on</code> to serve authenticated <code>/metrics</code> on the API port, and give the collector a separate <code>MQLITE_MONITOR_TOKENS</code> credential. Keep collection on a private network; if the API has public ingress, deny <code>/metrics</code> there. The starter includes Prometheus, Grafana, a dashboard and verification scenarios.</p>
   <div class="sem">
     <a href="operations.html"><b>Operations runbook</b>production boundary, backups, restore, upgrades and rollback</a>
     <a href="deployment.html"><b>Deployment</b>installation, one broker, persistent storage, authentication and TLS</a>
-    <a href="observability.html"><b>Observability</b>queue depth, dead letters, RPC latency and actionable alerts</a>
+    <a href="observability.html"><b>Observability</b>one metric contract for SDK, CLI, MCP, console and Prometheus (v0.3.2)</a>
+    <a href="observability-cloud.html"><b>Cloud monitoring</b>authenticated collection for existing Grafana, Fly.io, Alibaba Cloud, Azure and Kubernetes</a>
     <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/conformance.md"><b>Conformance</b>delivery guarantees, recovery contracts and the tests behind them</a>
   </div>
 </section>
@@ -393,7 +396,7 @@ curl http://localhost:6754/          # discovery card (no auth)
   <div class="quote">
     The API was shaped so a model can drive it without tripping: one POST per operation,
     one verb per outcome, a machine-readable discovery card at <code>GET /</code>, an
-    <b>MCP server</b> (<code>mqlite-mcp</code>, 17 tools in v0.3.1), and
+    <b>MCP server</b> (<code>mqlite-mcp</code>, 18 tools in source v0.3.2), and
     <a href="llms.txt"><code>llms.txt</code></a> / <a href="llms-full.txt"><code>llms-full.txt</code></a>
     for anything that reads the web. Copy-paste prompts and setup:
     <a href="agents.html"><b>For AI agents →</b></a>

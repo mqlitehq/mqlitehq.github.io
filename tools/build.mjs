@@ -20,6 +20,7 @@ export const PAGES = [
   ['access-keys.md', 'access-keys.html', 'Access keys', 'Issue, scope, rotate, expire, and revoke broker access keys at runtime.'],
   ['deployment.md', 'deployment.html', 'Deployment', 'Configure and run one broker with Docker, systemd, or remote Turso storage.'],
   ['observability.md', 'observability.html', 'Observability', 'Monitor broker health, queue state, delivery failures, and storage.'],
+  ['observability-cloud.md', 'observability-cloud.html', 'Cloud monitoring', 'Connect authenticated broker metrics to existing collectors on Fly.io, Alibaba Cloud, Azure, or Kubernetes.'],
   ['operations.md', 'operations.html', 'Operations', 'Back up, restore, upgrade, and operate a single-broker deployment.'],
 ];
 export const BUNDLE_FILES = [...PAGES.map(([src]) => src), 'mcp.md', 'examples.md'];

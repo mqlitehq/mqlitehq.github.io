@@ -22,13 +22,14 @@
     <a href="access-keys.html">Access keys</a>
     <a href="deployment.html">Deployment</a>
     <a href="observability.html">Observability</a>
+    <a href="observability-cloud.html">Cloud monitoring</a>
     <a href="operations.html">Operations</a>
     <a href="agents.html">For AI agents</a>
     <a class="gh" href="https://github.com/mqlitehq/mqlite">GitHub ↗</a>
   </div>
 </div></nav>
 <div class="wrap">
-  <div class="stamp">Generated from <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/cli.md">mqlite main · docs/cli.md</a> — source v0.3.1; latest release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.3.1">v0.3.1</a>.
+  <div class="stamp">Generated from <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/cli.md">mqlite main · docs/cli.md</a> — source v0.3.2; latest release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.3.2">v0.3.2</a>.
   These docs track main; check release notes for published artifacts. Edit the canonical Markdown and re-run <code>tools/build.mjs</code>.</div>
   <main class="prose">
 <h1 id="cli-reference-mqlite">CLI reference (<code>mqlite</code>)</h1>
@@ -63,8 +64,16 @@ broker over HTTP. <strong>Client mode wins if <code>MQLITE_ENDPOINT</code> is se
 <td>client mode: a running broker + its Bearer token</td>
 </tr>
 <tr>
+<td><code>MQLITE_MONITOR_TOKENS</code></td>
+<td>optional comma-separated read-only credentials for <code>observe</code> and <code>/metrics</code>; requires administrator auth and credentials distinct from administrators</td>
+</tr>
+<tr>
 <td><code>MQLITE_TOKENS</code></td>
 <td>broker (<code>serve</code>) administrator Bearer tokens; <strong>unset → a <code>mqk_…</code> token is generated + printed</strong>, <code>=off</code> disables auth; additional managed keys live in the database</td>
+</tr>
+<tr>
+<td><code>MQLITE_METRICS</code></td>
+<td>authenticated Prometheus <code>/metrics</code> on the API port; <code>on</code>/<code>true</code>/<code>1</code> enables, <code>off</code>/<code>false</code>/<code>0</code> disables (default); requires administrator auth</td>
 </tr>
 <tr>
 <td><code>MQLITE_SYNC</code></td>
@@ -145,6 +154,11 @@ a broker (<code>mqlite serve</code> + <code>--endpoint</code>) when you need man
 <td>listen address</td>
 </tr>
 <tr>
+<td><code>--metrics</code></td>
+<td><code>false</code></td>
+<td>enable authenticated <code>/metrics</code> on the API port; overrides <code>MQLITE_METRICS</code>; <code>--metrics=false</code> disables</td>
+</tr>
+<tr>
 <td><code>--insecure-allow-remote</code></td>
 <td><code>false</code></td>
 <td>with auth disabled, allow a non-loopback bind (otherwise refused)</td>
@@ -154,8 +168,24 @@ a broker (<code>mqlite serve</code> + <code>--endpoint</code>) when you need man
 <code>MQLITE_ADDR</code> &gt; <code>:6754</code>; a blank value is rejected). With auth disabled
 (<code>MQLITE_TOKENS=off</code>) the broker <strong>refuses a non-loopback bind</strong> unless
 <code>--insecure-allow-remote</code> is passed, and <strong><code>MQLITE_CORS</code> defaults to off</strong>.</p>
-<p>Serves the RPC API, <code>/metrics</code>, the open <code>/</code> + <code>/healthz</code>, and — unless
-<code>MQLITE_UI=off</code> — the embedded admin console at <code>/ui</code>.</p>
+<p>Serves the RPC API, the open <code>/</code> + <code>/healthz</code>, and — unless <code>MQLITE_UI=off</code> —
+the embedded admin console at <code>/ui</code>. Enable Prometheus on the same API port with
+one flag:</p>
+<pre><code class="language-bash">MQLITE_DB=file:./mq.db MQLITE_TOKENS=mqk_dev mqlite serve \
+  --addr 127.0.0.1:6754 --metrics
+</code></pre>
+<p>Equivalent environment configuration is <code>MQLITE_METRICS=on</code>. Values
+<code>on</code>/<code>true</code>/<code>1</code> enable metrics; <code>off</code>/<code>false</code>/<code>0</code> disable it. Values are
+case-insensitive; unset or empty disables metrics. Invalid values fail startup.
+<code>--metrics=false</code> overrides an environment-provided enabled value.
+Administrator auth must remain enabled. Scrapes accept configured administrators,
+managed <code>manage</code> keys, or configured monitor credentials; send/listen keys cannot
+scrape metrics.</p>
+<p>When enabled, the open discovery card includes <code>&quot;metrics&quot;:&quot;/metrics&quot;</code>, which
+resolves against the same origin. When disabled, the field is omitted and the
+route returns <code>404</code> even with valid credentials. No separate address or URL
+configuration is needed. If the API is publicly reachable, so is this route;
+keep metrics off public ingress with path filtering or a private-only broker.</p>
 <h3 id="key-createlistrevoke--manage-persistent-access-keys"><code>key create|list|revoke</code> — manage persistent access keys</h3>
 <p>Available in v0.3.1 and later. In client mode, use an environment administrator
 or a managed <code>manage</code> key as <code>MQLITE_TOKEN</code>. The broker can keep running while keys
@@ -512,6 +542,27 @@ mqlite schedule orders &#39;{&quot;id&quot;:1}&#39; --at 2027-01-02T15:04:05Z   
 <h3 id="receive-deferred-queue---seq---fetch-deferred-messages-by-seq"><code>receive-deferred &lt;queue&gt; --seq …</code> — fetch deferred messages by seq</h3>
 <pre><code class="language-bash">mqlite receive-deferred orders --seq 42,57      # re-locks them and prints tokens to settle
 </code></pre>
+<h3 id="observe--canonical-observation"><code>observe</code> — canonical observation</h3>
+<p>Available in <strong>v0.3.2 and later</strong>. Remote mode requires a v0.3.2 or later broker;
+configured monitor credentials are also new in v0.3.2.</p>
+<pre><code class="language-bash">mqlite observe --output json
+MQLITE_ENDPOINT=http://127.0.0.1:6754 MQLITE_TOKEN=&quot;$MONITOR_TOKEN&quot; mqlite observe
+</code></pre>
+<p>Both output modes print the complete canonical JSON snapshot, including collection
+availability/freshness, queue gauges, committed message effects, storage operations,
+maintenance, filter failures, and HTTP request/authentication measurements. It is the
+same data contract as SDK <code>Observe</code>, MCP <code>observe</code>, and the HTTP <code>Observe</code> route;
+<code>/metrics</code> serializes these measurements for Prometheus.</p>
+<p>Check <code>collection.state</code> before interpreting queue counts. An unavailable collection
+has <code>queues: null</code>, not zero messages; process counters remain usable when the
+configured credential can authenticate. Durations use seconds, timestamps use epoch
+milliseconds, and process counters reset on restart. Embedded mode marks HTTP as
+<code>not_applicable</code>. Runtime <code>read_available</code> and <code>db_size_available</code> distinguish unknown
+or unsupported measurements from real zeroes. See <a href="observability.html">observability.md</a>.</p>
+<p>A configured <code>MQLITE_MONITOR_TOKENS</code> credential can call only <code>observe</code> and <code>/metrics</code>.
+It also opens the console&#39;s read-only overview/metrics views. <code>manage</code> includes
+observation; managed <code>send</code>/<code>listen</code> keys do not gain broker-wide monitoring. Monitor
+credentials are configured at startup and cannot be created through <code>key create</code>.</p>
 <h3 id="status--backend-snapshot"><code>status</code> — backend snapshot</h3>
 <pre><code class="language-bash">mqlite status                 # backend, location, schema, ping, size, queue/subscription counts
 </code></pre>

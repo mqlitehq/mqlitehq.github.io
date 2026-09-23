@@ -22,212 +22,492 @@
     <a href="access-keys.html">Access keys</a>
     <a href="deployment.html">Deployment</a>
     <a href="observability.html">Observability</a>
+    <a href="observability-cloud.html">Cloud monitoring</a>
     <a href="operations.html">Operations</a>
     <a href="agents.html">For AI agents</a>
     <a class="gh" href="https://github.com/mqlitehq/mqlite">GitHub ↗</a>
   </div>
 </div></nav>
 <div class="wrap">
-  <div class="stamp">Generated from <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/observability.md">mqlite main · docs/observability.md</a> — source v0.3.1; latest release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.3.1">v0.3.1</a>.
+  <div class="stamp">Generated from <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/observability.md">mqlite main · docs/observability.md</a> — source v0.3.2; latest release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.3.2">v0.3.2</a>.
   These docs track main; check release notes for published artifacts. Edit the canonical Markdown and re-run <code>tools/build.mjs</code>.</div>
   <main class="prose">
 <h1 id="observability">Observability</h1>
-<p>The broker exposes Prometheus metrics at <strong><code>GET /metrics</code></strong> (requiring a Bearer key
-with <code>manage</code> permission when auth is enabled; <code>/</code>, <code>/healthz</code> and the enabled static <code>/ui</code>
-console are open, while its API calls still require authentication). This guide
-wires <code>/metrics</code> into Prometheus + Grafana and suggests alerts.</p>
-<h2 id="metrics">Metrics</h2>
-<p>Prometheus text format (<code>text/plain; version=0.0.4</code>). Per-queue <strong>gauges</strong>
-(subscriptions appear as their backing queue name) plus a per-RPC latency <strong>histogram</strong>:</p>
+<p>The canonical <code>Observe</code> interface, configured monitor credentials and the
+monitoring starter require <strong>v0.3.2 or later</strong>. Earlier releases expose only the
+legacy metrics described under <a href="#compatibility-from-v031">compatibility</a>.</p>
+<p>MQLite exposes one canonical observation through <code>AdminService/Observe</code>, the Go
+SDK, CLI, MCP, console and Prometheus <code>/metrics</code>. Queue snapshots and committed
+message effects originate in the engine. HTTP request measurements originate in
+the server; pure embedded use marks that domain <code>not_applicable</code>. Grafana derives
+rates, time windows and percentiles from these values instead of maintaining
+another set of message counters.</p>
+<p>Prometheus scraping is disabled by default. Enable authenticated <code>/metrics</code> on
+the existing API port with <code>MQLITE_METRICS=on</code> or <code>mqlite serve --metrics</code>:</p>
+<pre><code class="language-sh">MQLITE_DB=file:/data/mq.db \
+MQLITE_TOKENS=&quot;$ADMIN_TOKEN&quot; \
+MQLITE_MONITOR_TOKENS=&quot;$MONITOR_TOKEN&quot; \
+MQLITE_METRICS=on \
+mqlite serve --addr 127.0.0.1:6754
+</code></pre>
+<p>This local example exposes both the API and metrics on loopback. The exporter
+shares the broker&#39;s process, engine and counters; it needs no extra port or VM.
+The Go SDK uses <code>WithMetrics(true)</code> alongside <code>WithTokens(...)</code> and optionally
+<code>WithMonitorTokens(...)</code>. Enabling metrics without administrator auth is rejected.</p>
+<p>When enabled, <code>GET /</code> automatically includes <code>&quot;metrics&quot;:&quot;/metrics&quot;</code>; clients
+resolve this against the same origin. When disabled, discovery omits the field
+and <code>/metrics</code> returns <code>404</code> even with valid credentials.</p>
+<p>In production, use a private broker address or an ingress that blocks <code>/metrics</code>
+from the public Internet while allowing private collectors. API and metrics
+share a port, so a port-level firewall cannot separate them. Bearer authentication
+protects the data but does not hide a publicly reachable route. The monitor
+credential remains required on private networks.</p>
+<p>For a runnable broker, Prometheus and Grafana stack, see
+<a href="https://github.com/mqlitehq/mqlite/blob/main/ops/observability/README.md">the local observability demo</a>. For an existing
+platform, use the <a href="observability-cloud.html">cloud and Kubernetes guide</a>.</p>
+<h2 id="read-only-monitoring-access">Read-only monitoring access</h2>
+<p>Configure a separate scraper credential in <code>MQLITE_MONITOR_TOKENS</code>, alongside
+configured administrator credentials in <code>MQLITE_TOKENS</code>. Monitoring credentials
+can read <code>/metrics</code> and <code>AdminService/Observe</code>. They cannot send, receive, peek at
+message bodies, manage queues, inspect administrative configuration or issue keys.
+Administrator credentials and managed <code>manage</code> keys retain monitoring access.</p>
+<p>Configured monitor credentials do not query the database during authentication,
+so they can observe storage failure. Managed keys still require their current
+revocation and expiry state to be checked; no monitoring cache bypasses that check.
+Do not reuse an administrator token as a monitor token. Configuration changes
+require a broker restart; the demo&#39;s startup wrapper reads separate secret files.</p>
+<p>A Prometheus job should reference a mounted secret file:</p>
+<pre><code class="language-yaml">scrape_configs:
+  - job_name: mqlite
+    # The native listener is plain HTTP. Use https only when a TLS proxy
+    # terminates TLS in front of the private broker.
+    scheme: http
+    metrics_path: /metrics
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    authorization:
+      type: Bearer
+      credentials_file: /run/secrets/mqlite-monitor.token
+    static_configs:
+      - targets: [mqlite.internal.example:6754]
+</code></pre>
+<p>If a TLS proxy fronts the listener, use the correct TLS CA rather than disabling
+certificate checks. Grafana connects to Prometheus and does not need the MQLite
+token. See the
+<a href="https://prometheus.io/docs/prometheus/latest/configuration/configuration/">Prometheus authorization reference</a>.</p>
+<h2 id="availability-and-freshness">Availability and freshness</h2>
+<p>The native snapshot includes <code>sampled_at_ms</code>, a collection status, last successful
+collection time and elapsed collection duration. A failed queue read is unavailable,
+not an empty list of healthy queues. Prometheus responds with available in-process
+measurements and <code>mqlite_collection_success 0</code>, omitting queue gauges that could not
+be collected. Failure before the endpoint, including invalid scrape credentials,
+causes Prometheus <code>up</code> to become zero instead.</p>
+<p>Queue counts are actual retained rows from a grouped database query. They describe
+stored states, not guaranteed immediate delivery eligibility: visibility, TTL,
+lease expiry awaiting maintenance and ordering rules can affect claims. Different
+measurement domains are sampled at different instants. The observation is not an
+atomic transaction encompassing every database, HTTP and in-process counter.</p>
+<p><code>/healthz</code> is open process liveness. <code>mqlite_storage_read_available</code> reports a real
+storage read probe; success does not prove writes, end-to-end delivery or data
+integrity. Failed read latency is absent, not zero. Local storage size is unavailable
+for memory/remote backends, not a fabricated zero-byte database.</p>
+<h3 id="collection-cost-and-interval">Collection cost and interval</h3>
+<p>Each observation collects the full queue inventory with one grouped message scan
+and a storage read probe. The scan includes retained rows, so its cost grows with
+backlog as well as queue count. A local SQLite database uses the same single-writer
+connection for application work and collection; monitoring is not free or isolated
+from message-operation latency.</p>
+<p>Start production scraping at 15 seconds, measure collection duration and actual
+send/receive latency under the expected retained backlog, then adjust the scrape
+and native/console polling intervals. Each native observation or Prometheus scrape
+collects its own snapshot. Grafana dashboard refreshes query Prometheus instead
+of adding direct broker scans. The local demonstration uses a faster interval to
+make transitions visible; choose production cadence from measured workload needs.</p>
+<p>RPC/result and storage/error dimensions have fixed vocabularies, but their
+zero-initialized counters and histogram buckets still produce many series. Queue
+dimensions grow with the configured inventory. Measure scrape response size,
+duration and series count before increasing inventory or polling frequency; a
+working small demo does not establish a large-deployment capacity limit.</p>
+<h2 id="metric-contract">Metric contract</h2>
+<p>Prometheus uses text exposition 0.0.4. Labels are bounded categories except for
+configured entity names. Credentials, key IDs, message IDs, payloads, expressions,
+raw URLs and free-text errors are never labels. Durations use seconds; timestamps
+use Unix seconds in Prometheus and epoch milliseconds in native JSON.</p>
 <table>
 <thead>
 <tr>
-<th>Metric</th>
+<th>Family</th>
 <th>Type</th>
-<th>Labels</th>
-<th>Meaning</th>
+<th>Labels / meaning</th>
 </tr>
 </thead>
 <tbody><tr>
+<td><code>mqlite_info</code></td>
+<td>gauge, value 1</td>
+<td><code>version</code>, <code>backend</code>, <code>schema_version</code></td>
+</tr>
+<tr>
+<td><code>mqlite_start_time_seconds</code></td>
+<td>gauge</td>
+<td>Engine start timestamp</td>
+</tr>
+<tr>
+<td><code>mqlite_sample_timestamp_seconds</code></td>
+<td>gauge</td>
+<td>Snapshot timestamp</td>
+</tr>
+<tr>
+<td><code>mqlite_collection_success</code></td>
+<td>gauge</td>
+<td>1 when queue collection succeeds, otherwise 0</td>
+</tr>
+<tr>
+<td><code>mqlite_collection_status</code></td>
+<td>gauge, value 1</td>
+<td><code>state</code>, bounded <code>error_code</code></td>
+</tr>
+<tr>
+<td><code>mqlite_collection_last_success_timestamp_seconds</code></td>
+<td>gauge</td>
+<td>Last successful collection, 0 before one succeeds</td>
+</tr>
+<tr>
+<td><code>mqlite_collection_duration_seconds</code></td>
+<td>gauge</td>
+<td>Queue collection elapsed time</td>
+</tr>
+<tr>
+<td><code>mqlite_entities</code></td>
+<td>gauge</td>
+<td>`kind=queue</td>
+</tr>
+<tr>
 <td><code>mqlite_queue_messages</code></td>
 <td>gauge</td>
-<td><code>queue</code>, <code>state</code></td>
-<td>messages by state: <code>active</code>, <code>locked</code>, <code>deferred</code>, <code>scheduled</code>, <code>dead_lettered</code></td>
+<td><code>queue</code>, `state=active</td>
 </tr>
 <tr>
-<td><code>mqlite_queue_total</code></td>
+<td><code>mqlite_queue_retained_messages</code></td>
 <td>gauge</td>
-<td><code>queue</code></td>
-<td>total messages in the queue</td>
+<td><code>queue</code>; all retained rows including unexpected states</td>
 </tr>
 <tr>
-<td><code>mqlite_queue_oldest_message_age_ms</code></td>
+<td><code>mqlite_queue_unexpected_messages</code></td>
 <td>gauge</td>
-<td><code>queue</code></td>
-<td>age of the oldest active or locked message (ms); 0 when neither exists</td>
+<td><code>queue</code>; retained rows outside the five normal states</td>
 </tr>
 <tr>
-<td><code>mqlite_messages_completed_total</code></td>
+<td><code>mqlite_queue_oldest_message_age_seconds</code></td>
+<td>gauge</td>
+<td><code>queue</code>; original enqueue age of oldest active/locked row, 0 if none</td>
+</tr>
+<tr>
+<td><code>mqlite_message_events_total</code></td>
 <td>counter</td>
-<td><code>queue</code></td>
-<td>messages successfully completed, cumulative since broker start</td>
+<td><code>queue</code>, <code>event</code>; confirmed effects defined below</td>
+</tr>
+<tr>
+<td><code>mqlite_rpc_requests_total</code></td>
+<td>counter</td>
+<td><code>rpc</code>, <code>code</code>; registered RPC requests including authentication rejection</td>
+</tr>
+<tr>
+<td><code>mqlite_rpc_request_duration_seconds_total</code></td>
+<td>counter</td>
+<td>Same labels; cumulative whole-request elapsed time, including authentication</td>
 </tr>
 <tr>
 <td><code>mqlite_rpc_duration_seconds</code></td>
 <td>histogram</td>
-<td><code>rpc</code>, <code>le</code></td>
-<td>RPC handler latency by method (<code>_bucket</code> + <code>_sum</code> + <code>_count</code>)</td>
+<td><code>rpc</code>; post-authentication handler latency, preserving the existing timing scope</td>
+</tr>
+<tr>
+<td><code>mqlite_authentication_total</code></td>
+<td>counter</td>
+<td>`outcome=success</td>
+</tr>
+<tr>
+<td><code>mqlite_storage_operations_total</code></td>
+<td>counter</td>
+<td><code>operation</code>, <code>outcome</code>, <code>error_code</code></td>
+</tr>
+<tr>
+<td><code>mqlite_storage_operation_duration_seconds</code></td>
+<td>histogram</td>
+<td>Same labels; storage-operation elapsed time</td>
+</tr>
+<tr>
+<td><code>mqlite_storage_retries_total</code></td>
+<td>counter</td>
+<td>Same labels; safe retry attempts within the observed operation</td>
+</tr>
+<tr>
+<td><code>mqlite_storage_pool_connections</code></td>
+<td>gauge</td>
+<td>`state=max_open</td>
+</tr>
+<tr>
+<td><code>mqlite_storage_pool_waits_total</code></td>
+<td>counter</td>
+<td>Connection-pool waits</td>
+</tr>
+<tr>
+<td><code>mqlite_storage_pool_wait_duration_seconds_total</code></td>
+<td>counter</td>
+<td>Cumulative pool waiting time, distinct from SQL execution</td>
+</tr>
+<tr>
+<td><code>mqlite_storage_read_available</code></td>
+<td>gauge</td>
+<td>Storage read probe succeeded, 0 or 1</td>
+</tr>
+<tr>
+<td><code>mqlite_storage_ping_seconds</code></td>
+<td>gauge</td>
+<td>Read round trip; omitted on failure</td>
+</tr>
+<tr>
+<td><code>mqlite_storage_size_available</code></td>
+<td>gauge</td>
+<td>Local footprint can be reported, 0 or 1</td>
+</tr>
+<tr>
+<td><code>mqlite_storage_size_bytes</code></td>
+<td>gauge</td>
+<td>Local DB plus WAL/shared-memory footprint; omitted if unavailable</td>
+</tr>
+<tr>
+<td><code>mqlite_maintenance_enabled</code></td>
+<td>gauge</td>
+<td><code>task</code>; disabled/inapplicable task is 0</td>
+</tr>
+<tr>
+<td><code>mqlite_maintenance_runs_total</code></td>
+<td>counter</td>
+<td><code>task</code>, `outcome=success</td>
+</tr>
+<tr>
+<td><code>mqlite_maintenance_duration_seconds</code></td>
+<td>histogram</td>
+<td><code>task</code>; maintenance pass elapsed time</td>
+</tr>
+<tr>
+<td><code>mqlite_maintenance_last_success_timestamp_seconds</code></td>
+<td>gauge</td>
+<td><code>task</code>; last successful pass, 0 before success</td>
+</tr>
+<tr>
+<td><code>mqlite_filter_failures_total</code></td>
+<td>counter</td>
+<td>Routing failures, `stage=compile</td>
 </tr>
 </tbody></table>
-<pre><code># HELP mqlite_queue_messages Messages in a queue by state.
-# TYPE mqlite_queue_messages gauge
-mqlite_queue_messages{queue=&quot;orders&quot;,state=&quot;active&quot;} 42
-...
-mqlite_queue_total{queue=&quot;orders&quot;} 45
-mqlite_queue_oldest_message_age_ms{queue=&quot;orders&quot;} 1873
-# TYPE mqlite_messages_completed_total counter
-mqlite_messages_completed_total{queue=&quot;orders&quot;} 1280431
-# TYPE mqlite_rpc_duration_seconds histogram
-mqlite_rpc_duration_seconds_bucket{rpc=&quot;QueueService/Receive&quot;,le=&quot;0.01&quot;} 37
-mqlite_rpc_duration_seconds_bucket{rpc=&quot;QueueService/Receive&quot;,le=&quot;+Inf&quot;} 84
-mqlite_rpc_duration_seconds_sum{rpc=&quot;QueueService/Receive&quot;} 1.426651
-mqlite_rpc_duration_seconds_count{rpc=&quot;QueueService/Receive&quot;} 84
-</code></pre>
-<p><code>mqlite_messages_completed_total</code> is a <strong>lifetime count of processed (Completed)
-messages</strong> — it keeps growing after the message row is deleted, so you can answer &quot;how
-many were handled&quot; even on an empty queue. It is <strong>in-process and resets on broker
-restart</strong> (no durable counter); <code>rate()</code> / <code>increase()</code> handle observed resets, so they estimate processed
-throughput across restarts. Completions between the last scrape and a restart can
-be missed; this counter is not a durable business ledger:</p>
-<pre><code class="language-promql">sum(rate(mqlite_messages_completed_total[5m])) by (queue)   # processed msg/s
-increase(mqlite_messages_completed_total[1h])               # processed in the last hour
-</code></pre>
-<p>The histogram makes a <strong>slow dequeue visible</strong> — e.g. p99 receive latency in Grafana:</p>
-<pre><code class="language-promql">histogram_quantile(0.99, sum by (le) (rate(mqlite_rpc_duration_seconds_bucket{rpc=&quot;QueueService/Receive&quot;}[5m])))
-</code></pre>
-<p>A rising <code>CompleteBatch</code> tail can indicate writer contention or slow storage.
-<code>Receive</code> duration also includes normal long-poll waiting (<code>wait_time_ms</code>), including
-empty results; a high receive p99 alone does not establish contention. Correlate it
-with nonempty request logs, backlog and completion latency. The <code>rpc</code> label is the shortened RPC name
-(<code>/mqlite.v1.QueueService/Send</code> → <code>QueueService/Send</code>); only RPCs are timed, not
-<code>/metrics</code> / <code>/healthz</code> / <code>/ui</code>.</p>
-<p>Quick check:</p>
-<pre><code class="language-bash">curl -H &quot;Authorization: Bearer $MQLITE_TOKEN&quot; https://&lt;host&gt;/metrics
-</code></pre>
-<h2 id="access-log">Access log</h2>
-<p>When a request logger is configured, the broker emits <strong>one line per RPC</strong> with
-per-request context, so lines are distinguishable and long durations are explained.
-The level is the HTTP status (<code>2xx</code> info · <code>4xx</code> warn · <code>5xx</code> error), and the RPC path
-is shortened (<code>/mqlite.v1.QueueService/Send</code> → <code>QueueService/Send</code>):</p>
-<pre><code>QueueService/Send          status=200 queue=orders n=1 msg_id=order-42 dur=2ms
-QueueService/CompleteBatch status=200 queue=orders n=16              dur=324ms
-QueueService/Complete      status=200 queue=orders seq=42            dur=1ms
-QueueService/Complete      status=409 queue=orders seq=42 code=lock_lost dur=1ms
-QueueService/Receive       status=200 queue=orders msgs=3           dur=8ms
-</code></pre>
-<p>Fields: <code>queue</code> (every queue/admin op), <code>msgs</code> (<code>Receive</code>/<code>Peek</code>) and <code>n</code>
-(<code>Send</code>/<code>CompleteBatch</code>/<code>Redrive</code>/<code>Purge</code>) counts, <code>seq</code> (single settles), <code>msg_id</code>
-(single <code>Send</code>, when supplied), and <code>code</code> on a <code>4xx</code>/<code>5xx</code> (e.g. <code>lock_lost</code>,
-<code>not_found</code>). <strong>An empty <code>Receive</code> (<code>msgs=0</code>) is logged at Debug</strong>, not Info — an idle
-long-poll that returns nothing (up to <code>wait_time_ms</code>, max 20s) is expected noise, so the
-default Info stream stays clean; enable Debug to see them. (A <em>slow</em> <code>Receive</code> that does
-return messages stays at Info, so genuine slowness is still visible.)</p>
-<h2 id="prometheus-scrape-config">Prometheus scrape config</h2>
-<p><code>/metrics</code> needs the Bearer token, so set <code>authorization</code> on the scrape job:</p>
-<pre><code class="language-yaml">scrape_configs:
-  - job_name: mqlite
-    scheme: https              # http if you terminate TLS elsewhere
-    metrics_path: /metrics
-    authorization:
-      type: Bearer
-      credentials: mqk_prod_CHANGEME   # configured administrator or managed manage key; use a credentials file
-    static_configs:
-      - targets: [&quot;your-mqlite.fly.dev&quot;]
-</code></pre>
-<blockquote>
-<p>On Fly with scale-to-zero, scraping <code>/metrics</code> wakes the machine — fine, but it
-means the broker won&#39;t fully idle while Prometheus polls. Lengthen <code>scrape_interval</code>
-or accept it stays warm.</p>
-</blockquote>
-<h2 id="useful-promql">Useful PromQL</h2>
-<pre><code class="language-promql"># backlog waiting to be processed, per queue
+<p>Histograms serialize finite cumulative <code>_bucket</code> samples, a <code>+Inf</code> bucket,
+<code>_count</code> and <code>_sum</code>. Whole-request duration currently supplies a sum and request
+count, not a histogram: their ratio is a mean, never a percentile.</p>
+<p>Storage operations are <code>read</code>, <code>write</code> and <code>transaction</code>; outcomes are <code>ok</code>,
+<code>error</code>, <code>rejected</code> and <code>outcome_unknown</code>. <code>rejected</code> with error code <code>application</code>
+means the operation was rejected by application/transaction callback logic; it is
+not evidence of a database outage. Counts represent logical engine storage-wrapper
+calls, not individual messages or every SQL statement inside a transaction.
+Retries are counted separately. Internal maintenance and observation reads are
+included; collecting a snapshot itself contributes read/probe operations.
+Error categories are empty on success or one of
+<code>canceled</code>, <code>closed</code>, <code>busy</code>, <code>connection</code>, <code>full</code>, <code>corrupt</code>, <code>io</code>,
+<code>application</code>, <code>outcome_unknown</code>, <code>other</code>. Fixed storage outcome/error combinations
+and registered RPC/result combinations are initialized to zero, so the first
+event can be detected after an earlier successful scrape. Use <code>rate</code>/<code>increase</code>
+across observed samples; a first scrape after an event cannot reconstruct its time.
+Maintenance tasks are <code>locks</code>, <code>scheduled</code>, <code>ttl</code>,
+<code>dedup</code>, <code>receipts</code>, <code>retention</code>, <code>reclaim</code>. Check enabled status and each task&#39;s
+actual cadence before alerting on its last-success time.
+Canceled passes during normal shutdown are <code>interrupted</code>, not successful passes
+or maintenance errors; they do not advance the last-success timestamp.
+Filter counters cover compilation/evaluation failures while routing published
+messages. Invalid <code>Subscribe</code> configuration is an RPC <code>invalid_argument</code> result;
+deliberate <code>TestFilter</code> validation is not a routing failure.</p>
+<h3 id="message-effects">Message effects</h3>
+<p>Counters increase for confirmed effects, after transaction commit. A rollback,
+transaction retry or exact receive/settlement replay does not create a second
+committed effect. An uncertain remote outcome is not classified as a known
+rollback. Counters are process-local and reset at restart; unobserved activity
+before a crash can be lost. They are operational measurements, not a durable
+billing or business audit ledger.
+Custom raw SQL through <code>EngineTx.SQL</code> is not attributed to message-effect events.
+Queue gauges still report the actual retained database rows, including unexpected
+states; do not use event counters to reconstruct changes made outside the normal
+message operations.</p>
+<table>
+<thead>
+<tr>
+<th>Event</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>enqueued</code></td>
+<td>New queue copies; topic fanout counts actual copies, not producer requests</td>
+</tr>
+<tr>
+<td><code>scheduled</code></td>
+<td>Enqueued copies initially scheduled; a subset of enqueue activity</td>
+</tr>
+<tr>
+<td><code>deduplicated</code>, <code>dedup_conflict</code></td>
+<td>Suppressed duplicates and conflicting dedup attempts</td>
+</tr>
+<tr>
+<td><code>delivered</code>, <code>redelivered</code></td>
+<td>Committed claims; redelivery is a subset, not additional unique messages</td>
+</tr>
+<tr>
+<td><code>completed</code>, <code>receive_deleted</code></td>
+<td>Successful completion removals and receive-and-delete removals</td>
+</tr>
+<tr>
+<td><code>abandoned</code>, <code>deferred</code>, <code>rejected</code></td>
+<td>Confirmed settlement effects</td>
+</tr>
+<tr>
+<td><code>dead_lettered</code></td>
+<td>Transitions into the DLQ, including automatic paths</td>
+</tr>
+<tr>
+<td><code>ttl_discarded</code>, <code>retention_deleted</code></td>
+<td>TTL discard and dead-letter retention deletion</td>
+</tr>
+<tr>
+<td><code>purged</code>, <code>canceled</code>, <code>redriven</code></td>
+<td>Administrative DLQ purge, scheduled cancellation and redrive effects</td>
+</tr>
+<tr>
+<td><code>lock_expired</code>, <code>recovered</code>, <code>activated</code></td>
+<td>Expired-lease handling, startup recovery and scheduled activation</td>
+</tr>
+</tbody></table>
+<p>Some events overlap. For example, rejection can also enter the DLQ; do not sum all
+events into a message ledger. A claim does not prove a response reached the client,
+and completion means the consumer reported success, not independently verified
+business-side processing. Broker redelivery, client HTTP retry and storage retry
+are separate concepts.</p>
+<h3 id="compatibility-from-v031">Compatibility from v0.3.1</h3>
+<p>Prometheus scraping is now disabled by default. On upgrade, enable
+<code>MQLITE_METRICS=on</code> or <code>--metrics</code> to keep scraping the same API port, and configure
+a monitor token for the collector. All five pre-existing families remain available
+when enabled. These compatibility views read canonical values; they do not
+maintain separate counters:</p>
+<table>
+<thead>
+<tr>
+<th>Existing family</th>
+<th>Canonical mapping</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>mqlite_queue_messages</code></td>
+<td>Same queue state gauges</td>
+</tr>
+<tr>
+<td><code>mqlite_queue_total</code></td>
+<td>Same value as <code>mqlite_queue_retained_messages</code>; still a gauge</td>
+</tr>
+<tr>
+<td><code>mqlite_queue_oldest_message_age_ms</code></td>
+<td>Canonical seconds multiplied by 1000</td>
+</tr>
+<tr>
+<td><code>mqlite_messages_completed_total</code></td>
+<td><code>mqlite_message_events_total{event=&quot;completed&quot;}</code></td>
+</tr>
+<tr>
+<td><code>mqlite_rpc_duration_seconds</code></td>
+<td>Same post-authentication handler histogram</td>
+</tr>
+</tbody></table>
+<p>The ambiguous <code>queue_total</code> and millisecond age names are deprecated for new
+consumers; use the canonical names. They are retained until the next minor version
+(v0.4.0), when any removal requires an explicit migration. No independent lifetime
+completion counter is introduced.</p>
+<h2 id="dashboard-and-useful-queries">Dashboard and useful queries</h2>
+<p>The provisioned dashboard offers instance/queue selection, traffic, backlog,
+request/authentication results, storage, maintenance and active alerts. Empty
+samples remain “No data” or “Not available”; they are not replaced with green zeros.</p>
+<pre><code class="language-promql"># Stored queue states, not immediate claim eligibility
 mqlite_queue_messages{state=&quot;active&quot;}
 
-# dead-letter queue size (poison messages) — watch this
-mqlite_queue_messages{state=&quot;dead_lettered&quot;}
+# Observed completion throughput; rate handles observed counter resets
+sum by (instance, queue) (rate(mqlite_message_events_total{event=&quot;completed&quot;}[5m]))
 
-# in-flight (locked) right now
-mqlite_queue_messages{state=&quot;locked&quot;}
+# Handler p95; Receive includes intentional long-poll waiting
+histogram_quantile(0.95, sum by (instance, rpc, le) (
+  rate(mqlite_rpc_duration_seconds_bucket[5m])))
 
-# oldest active/locked message age in seconds (is anything stuck?)
-mqlite_queue_oldest_message_age_ms / 1000
+# Whole-request arithmetic mean, including authentication
+sum by (instance, rpc) (rate(mqlite_rpc_request_duration_seconds_total[5m]))
+/
+sum by (instance, rpc) (rate(mqlite_rpc_requests_total[5m]))
 
-# observed completion rate (msgs/s) over 5m — a counter
-sum by (queue) (rate(mqlite_messages_completed_total[5m]))
-
-# net change in retained DLQ depth over 5m — a gauge, not failure throughput
-delta(mqlite_queue_messages{state=&quot;dead_lettered&quot;}[5m])
+# Newly observed dead-letter transitions, not net DLQ depth change
+increase(mqlite_message_events_total{event=&quot;dead_lettered&quot;}[5m])
 </code></pre>
-<p>Queue totals and per-state depths are <strong>gauges</strong>. Do not apply <code>rate()</code> or
-<code>increase()</code> to them as enqueue/failure counters. <code>delta()</code> describes net depth
-change over the selected interval; retention, redrive and purge can reduce that
-depth even while new failures arrive. There is no enqueue-message counter in this
-release. RPC counts measure calls, which may contain batches or fail, so they are
-not a substitute for message ingress counts. Use producer-side acknowledgement
-metrics when that rate is needed.</p>
-<h2 id="grafana">Grafana</h2>
-<p>Point Grafana at the Prometheus datasource and build a per-queue board:</p>
-<ul>
-<li><strong>Backlog</strong> (timeseries): <code>mqlite_queue_messages{state=&quot;active&quot;}</code> legend <code>{{queue}}</code>.</li>
-<li><strong>DLQ</strong> (timeseries / stat): <code>mqlite_queue_messages{state=&quot;dead_lettered&quot;}</code>.</li>
-<li><strong>In-flight</strong>: <code>mqlite_queue_messages{state=&quot;locked&quot;}</code>.</li>
-<li><strong>Oldest age (s)</strong>: <code>mqlite_queue_oldest_message_age_ms / 1000</code>.</li>
-<li><strong>Total</strong>: <code>mqlite_queue_total</code>.</li>
-</ul>
-<p>Use a <code>queue</code> template variable: <code>label_values(mqlite_queue_total, queue)</code>.</p>
-<h2 id="alerting">Alerting</h2>
-<pre><code class="language-yaml">groups:
-  - name: mqlite
-    rules:
-      - alert: MqliteDLQPresent
-        expr: mqlite_queue_messages{state=&quot;dead_lettered&quot;} &gt; 0
-        for: 5m
-        annotations: { summary: &quot;Retained dead letters on {{ $labels.queue }} need review&quot; }
-
-      - alert: MqliteScrapeUnavailable
-        expr: up{job=&quot;mqlite&quot;} == 0
-        for: 2m
-        annotations: { summary: &quot;MQLite metrics scrape is unavailable; check process, network and credentials&quot; }
-
-      - alert: MqliteBacklogStuck
-        expr: mqlite_queue_oldest_message_age_ms &gt; 300000   # 5 min
-        for: 5m
-        annotations: { summary: &quot;Oldest active/locked message on {{ $labels.queue }} is &gt;5m old — consumers behind?&quot; }
-
-      - alert: MqliteBacklogHigh
-        expr: mqlite_queue_messages{state=&quot;active&quot;} &gt; 10000
-        for: 10m
-        annotations: { summary: &quot;Backlog on {{ $labels.queue }} &gt; 10k active&quot; }
-</code></pre>
-<p>Tune thresholds to your throughput (see <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/benchmark.md">benchmark.md</a> for real numbers).
-The broker bounds retained dead letters by default (<a href="https://github.com/mqlitehq/mqlite/blob/main/docs/retention.md">retention.md</a>).
-A nonempty or growing DLQ still needs review; a flat depth may mean retention is
-evicting failures as quickly as new ones arrive.</p>
-<h2 id="readiness-and-operational-signals">Readiness and operational signals</h2>
-<p><code>/healthz</code> is open and reports process liveness only. The authenticated
-<code>AdminService/Status</code> response includes <code>ping_ms</code> (<code>-1</code> means its storage read
-failed); HTTP 200 alone is not a readiness verdict. A dedicated send/receive/complete
-canary checks writes and consumption. Keep its queue separate from application
-traffic and compare the returned identity and full body with what it sent.</p>
-<p>Collect free disk, memory, OOM/restart counts, log errors and backup age with your
-existing host/container monitoring. The metrics listed above do not expose those
-signals. Set disk alerts before space is exhausted, leaving room for the largest
-expected backlog, WAL growth and a backup. Alert thresholds and restore targets
-belong to the application; tune the example rules to its retention and schedule.</p>
-<p>For a full disk, repeated crash, failed restore or growing DLQ, follow the
-<a href="operations.html#incident-actions">incident actions</a> and verify a canary before
-resuming producers. See the <a href="https://prometheus.io/docs/prometheus/latest/querying/functions/">Prometheus function reference</a>
-for gauge and counter query semantics.</p>
+<p>Apply <code>rate</code>/<code>increase</code> to counters, not queue depth gauges. <code>delta</code> on depth is net
+retained-state change and cannot measure failure throughput. Do not subtract sends
+and receives to infer loss, count locked rows as live consumers, or sum the same
+database snapshot from duplicate collectors. Requests may contain batches. Alert
+thresholds should match the application&#39;s SLA and minimum request volume.</p>
+<h2 id="runbooks">Runbooks</h2>
+<h3 id="scrape-or-collection-failure">Scrape or collection failure</h3>
+<p>Inspect the Prometheus target&#39;s <code>lastError</code> first. A down target can mean a stopped
+broker, route/TLS failure, invalid scraper credentials or an endpoint failure.
+With a working configured monitor credential, <code>up=1</code> and <code>collection_success=0</code>
+means metrics are reachable but the queue snapshot failed. Check bounded storage
+errors and broker logs; do not treat omitted gauges as zero. Preserve evidence
+before intervention. After recovery, verify a fresh successful snapshot and a
+controlled send/receive/complete canary.</p>
+<h3 id="queue-backlog-and-dead-letters">Queue backlog and dead letters</h3>
+<p>Compare oldest active/locked age, depth, delivery and completion trends with the
+application&#39;s intended schedule. Check consumers, lease duration and ordering.
+Scheduled/deferred work may be intentional. Inspect dead-letter reasons and fix
+the failure before redrive. Retention, purge and redrive can reduce depth while new
+failures continue. Unexpected retained states require investigation, not deletion
+just to silence the graph. Filter failure is distinct from a normal non-match.</p>
+<h3 id="authentication-and-integration">Authentication and integration</h3>
+<p>Use aggregate outcomes to distinguish missing/invalid credentials, revoked or
+expired keys and insufficient permissions. Client connection failures that never
+reach MQLite need client telemetry. Grafana datasource failure is a different hop
+from Prometheus scrape failure. Rotate the configured monitor token by allowing
+both old/new distinct monitoring tokens temporarily, restarting the broker,
+updating the scraper file, confirming at least two successful scrapes, then removing
+the old token and restarting. Never grant the scraper send/manage privileges to
+fix a routing error.</p>
+<h3 id="storage-and-maintenance">Storage and maintenance</h3>
+<p>Check the read probe, operation outcome, error category, retry count and pool
+waiting. <code>outcome_unknown</code> requires idempotent reconciliation; a blind resend can
+produce duplicates. A healthy read does not prove write availability. Check
+maintenance enabled status and cadence before declaring a stalled task. Reuse
+host/container monitoring for free disk, CPU, OOM and volume health. For disk-full,
+restore or integrity incidents, follow <a href="operations.html#incident-actions">operations.md</a>.</p>
+<h2 id="logs-alerts-and-validation">Logs, alerts and validation</h2>
+<p>Request logs retain operation/status context, queue and item counts; empty Receive
+responses are debug noise by default. Logs can help diagnose a slow nonempty
+request without placing payloads, credentials or unbounded errors into metric
+labels. Normal long polling can raise Receive latency without a storage problem.</p>
+<p>The <a href="https://github.com/mqlitehq/mqlite/blob/main/ops/observability/prometheus/rules.yml">example rules</a> cover sustained scrape,
+collection/storage failure, stale collection, unexpected states, backlog age,
+retained DLQ, repeated auth failures, uncertain outcomes, maintenance and filter
+failures. Tune them before production. Prometheus evaluates conditions; configure
+Alertmanager or the platform&#39;s notification receiver separately. The local demo&#39;s
+short <code>MQLiteDemoDeadLetter</code> rule is explicitly a test rule, not production policy.</p>
+<p>The <a href="https://github.com/mqlitehq/mqlite/blob/main/test/observability/verify.py">real stack verifier</a> checks authenticated
+scraping, monitor isolation, canonical/native agreement, actual message identity
+and body, replay, redelivery, scheduled/deferred work, DLQ firing/resolution,
+TTL discard/dead-letter handling, retention deletion, configuration/routing filter
+errors, credential outcomes, Grafana provisioning and every panel query. Deliberate
+invalid queries and missing datasources verify that the checker rejects failures.
+<code>--faults</code> also
+interrupts only that isolated stack to verify scrape-auth recovery, Grafana
+connection failure/recovery and persistence/counter reset after broker restart.
+Managed-cloud/Kubernetes deployment validation remains environment-specific.</p>
 
   </main>
 </div>

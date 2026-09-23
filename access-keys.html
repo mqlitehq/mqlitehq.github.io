@@ -22,13 +22,14 @@
     <a href="access-keys.html">Access keys</a>
     <a href="deployment.html">Deployment</a>
     <a href="observability.html">Observability</a>
+    <a href="observability-cloud.html">Cloud monitoring</a>
     <a href="operations.html">Operations</a>
     <a href="agents.html">For AI agents</a>
     <a class="gh" href="https://github.com/mqlitehq/mqlite">GitHub ↗</a>
   </div>
 </div></nav>
 <div class="wrap">
-  <div class="stamp">Generated from <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/access-keys.md">mqlite main · docs/access-keys.md</a> — source v0.3.1; latest release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.3.1">v0.3.1</a>.
+  <div class="stamp">Generated from <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/access-keys.md">mqlite main · docs/access-keys.md</a> — source v0.3.2; latest release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.3.2">v0.3.2</a>.
   These docs track main; check release notes for published artifacts. Edit the canonical Markdown and re-run <code>tools/build.mjs</code>.</div>
   <main class="prose">
 <h1 id="access-keys">Access keys</h1>
@@ -68,6 +69,13 @@ available for recovery. Existing configured token strings remain valid; every ne
 generated token uses <code>mqk_</code> followed by 64 lowercase hexadecimal characters. The
 broker stores only the SHA-256 digest of managed tokens, together with their public
 ID, name, permissions and lifecycle timestamps. Names need not be unique.</p>
+<p>For read-only monitoring in <strong>v0.3.2 and later</strong>, configure distinct
+<code>MQLITE_MONITOR_TOKENS</code> alongside administrator authentication. These credentials
+grant only <code>Observe</code> and <code>/metrics</code>,
+including the console&#39;s monitoring views; they cannot read message bodies, consume,
+publish or manage keys. <code>monitor</code> is a configuration capability, not a managed-key
+permission. It works independently of the key database during a storage outage.
+See the <a href="observability.html">monitoring starter</a> for configuration and rotation.</p>
 <p>Managed authentication performs one indexed database query for every request,
 without caching credentials. On Turso this includes a remote round trip; measure
 the application&#39;s request latency and throughput with its intended credentials
@@ -130,7 +138,8 @@ permanent authentication/authorization failures, including settlement and renewa
 See the complete <a href="api.html#createkey--listkeys--revokekey">request/response contract</a>.
 All require <code>Authorization: Bearer &lt;administrator-token&gt;</code>. Authentication disabled
 with <code>MQLITE_TOKENS=off</code> does not enable anonymous key administration.</p>
-<p>The console at <code>/ui/</code> accepts a configured administrator or managed <code>manage</code> key.
+<p>The console at <code>/ui/</code> accepts a configured administrator or managed <code>manage</code> key
+for administration; configured monitor credentials open its observability views.
 Open <strong>Access keys</strong> to create, inspect and revoke credentials. Save the newly
 created secret before dismissing its one-time display. The console explains when
 an older broker does not support the feature. Application <code>send</code>/<code>listen</code> keys

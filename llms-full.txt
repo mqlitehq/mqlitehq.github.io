@@ -1,9 +1,9 @@
 mqlite main — full documentation bundle.
-Source version: v0.3.1. Latest recorded release: v0.3.1.
+Source version: v0.3.2. Latest recorded release: v0.3.2.
 These docs track main; consult release notes for published artifacts and upgrade requirements.
 Source of truth: https://github.com/mqlitehq/mqlite/tree/main/docs
 
-<!-- ===== mqlite main · source v0.3.1; latest release v0.3.1 · docs/concepts.md ===== -->
+<!-- ===== mqlite main · source v0.3.2; latest release v0.3.2 · docs/concepts.md ===== -->
 
 # Core concepts & subscription filters
 
@@ -474,7 +474,7 @@ network I/O APIs are exposed; `now()` can read the wall clock:
   for the filter rules MQLite guarantees.
 
 
-<!-- ===== mqlite main · source v0.3.1; latest release v0.3.1 · docs/internals.md ===== -->
+<!-- ===== mqlite main · source v0.3.2; latest release v0.3.2 · docs/internals.md ===== -->
 
 # How mqlite works — building a reliable queue on one SQLite file
 
@@ -904,7 +904,7 @@ with the conformance suite as the judge.
 [benchmark.md](https://github.com/mqlitehq/mqlite/blob/main/docs/benchmark.md).*
 
 
-<!-- ===== mqlite main · source v0.3.1; latest release v0.3.1 · docs/api-reference.md ===== -->
+<!-- ===== mqlite main · source v0.3.2; latest release v0.3.2 · docs/api-reference.md ===== -->
 
 # mqlite HTTP API reference
 
@@ -916,10 +916,11 @@ and the Go SDK, so the two can't drift) and the server's error mapping.
 
 ## Conventions
 
-- **Transport:** HTTP `POST`, `Content-Type: application/json`. (The open discovery,
-  health, and metrics endpoints below are `GET`.)
+- **Transport:** HTTP `POST`, `Content-Type: application/json`. Discovery and
+  health use open `GET` endpoints; opt-in metrics uses authenticated `GET` on the same port.
 - **`body`** is **base64** in JSON (Go marshals `[]byte` as base64).
-- **Timestamps** are **epoch milliseconds** (UTC) integers; so are durations (`*_ms`).
+- **Timestamps** are **epoch milliseconds** (UTC) integers. Message durations use
+  `*_ms`; observability durations explicitly named `*_seconds` retain fractional seconds.
 - **Sequence numbers** (`seq_number`) are broker-assigned integers, strictly increasing
   and **never reused** (they may gap) — **the handle you settle with**, valid only while
   the message lives. You never set them.
@@ -955,7 +956,8 @@ loud now.
 
 ```bash
 # Talking to the broker directly. mqlite serves JSON-over-HTTP on TCP 6754 and terminates
-# no TLS of its own, so this is plain http.
+# no TLS of its own, so this is plain http. When enabled, /metrics uses the
+# same listener; terminate TLS in a reverse proxy when required.
 BASE_URL=http://127.0.0.1:6754
 
 # Behind a reverse proxy. Public HTTPS on 443 (which the URL omits, as usual) terminates at
@@ -969,6 +971,8 @@ same JSON-over-HTTP API listens on when nothing is proxying for you.
 The discovery card's `endpoints` are route **paths**, deliberately relative: they resolve
 against the origin that served the card, so they inherit its scheme, host and port. Fetch the
 card from `$BASE_URL` and the paths are usable as-is.
+The optional `metrics` field is the same-origin path `/metrics` when enabled;
+it is omitted by default. Resolve it against `$BASE_URL` like the other paths.
 
 ## Auth
 
@@ -1003,11 +1007,22 @@ receiving, settling and renewing change message state.
 | `send` | `QueueService/Send`, `Schedule`, `Cancel` |
 | `listen` | `QueueService/Receive`, `ReceiveDeferred`, `Peek`, `Stats`, `Complete`, `CompleteBatch`, `Abandon`, `Reject`, `Defer`, `Renew`, `RenewBatch` |
 | `manage` | All `AdminService` methods, all `AuthService` methods, and `/metrics` |
+| configured monitor | `AdminService/Observe` and `/metrics` only |
 
 Both receive modes require `listen`, including receive-and-delete. Batch and
 idempotent replay paths use the same permission checks as the original operation.
-The current web console requires `manage` because it lists and manages the whole
-broker. The public static page alone grants no access to its API.
+The console's administration views require `manage`. A configured monitor token
+opens only its observability views. The public static page alone grants no API access.
+
+In v0.3.2 and later, `MQLITE_MONITOR_TOKENS` configures comma-separated read-only
+monitoring credentials alongside administrator authentication. The embedded equivalent is
+`WithMonitorTokens`. Monitor and administrator credentials must be distinct;
+configuring monitor tokens with authentication disabled is rejected. Monitor
+credentials authenticate without querying the key database, so collection failures
+remain observable. They cannot peek at bodies, receive, send, change configuration
+or issue keys. They are rotated through configuration and a broker restart, not
+the managed-key API; `monitor` is not a managed-key permission. See
+[observability](https://github.com/mqlitehq/mqlite/blob/main/docs/observability.md) for a ready-to-run monitoring stack.
 
 Configured administrators and managed `manage` keys have identical operation
 rights. Configured credentials are checked first: explicitly placing an existing
@@ -1015,6 +1030,52 @@ managed token in `MQLITE_TOKENS` grants it administrator rights independently of
 its database permissions, expiry or revocation. Remove it from configuration to
 withdraw that static grant. Database key operations never alter environment
 configuration.
+
+### Observe
+
+Available in **v0.3.2 and later**; older brokers do not implement this route.
+
+`POST /mqlite.v1.AdminService/Observe` with `{}` returns the canonical broker
+observation used by `/metrics`, the SDK `Observe`, CLI `observe`, MCP `observe`
+and console. Requires `manage` or a configured monitor credential.
+
+| Field | Meaning |
+|---|---|
+| `sampled_at_ms`, `started_at_ms`, `backend`, `version` | Queue sampling instant, engine lifetime and non-sensitive identity |
+| `access` | Request capability: `manage`, `monitor` or `anonymous`; SDK embedded mode uses `embedded` |
+| `collection` | Queue collection `state`, `last_success_at_ms`, `duration_seconds`, bounded `error_code` |
+| `queue_count`, `subscription_count`, `queues` | Actual retained state counts and age; counts are usable only when collection is `available` |
+| `runtime` | Schema version, read-probe availability/latency and local footprint availability/bytes; no DSN or path |
+| `messages` | Engine-lifetime `{queue,event,count}` effects, recorded after confirmed commits |
+| `storage` | Bounded operation outcomes, durations, retries and database connection pool measurements |
+| `maintenance`, `filters` | Maintenance enablement, results/durations/last success and filter failures |
+| `http` | Request outcomes/full elapsed time, final authentication outcomes and post-auth handler histograms |
+
+Successful authentication returns HTTP 200 even if queue collection is
+`unavailable`: `queues` is then `null`, with an explicit failure code and the
+last successful collection time. In-memory counters remain available. Never
+interpret absent queues or unavailable sizes/probes as zero. Authentication itself
+still fails closed; a managed key may be unusable while its database is unavailable.
+Pure embedded observations mark the HTTP domain `not_applicable`.
+
+The observation is sampled over an interval, not a transaction spanning every
+runtime counter. Its queue gauges share one aggregate SQL read and one engine
+clock value. Counters reset on engine/process restart; they are not a durable
+message ledger. Histograms contain cumulative finite buckets and a total count
+that is also the Prometheus `+Inf` bucket. The existing handler histogram excludes
+authentication; whole-request duration includes it and normal Receive long polls.
+
+The shared decoder bounds observations to 32 MiB and rejects incomplete objects,
+inconsistent availability and malformed histogram data. The complete JSON schema
+is represented by [`wire/observability.go`](https://github.com/mqlitehq/mqlite/blob/main/wire/observability.go) and
+[`engine/observability.go`](https://github.com/mqlitehq/mqlite/blob/main/engine/observability.go); metric semantics and
+compatibility aliases are specified in [observability](https://github.com/mqlitehq/mqlite/blob/main/docs/observability.md).
+
+```bash
+curl -fsS "$BASE_URL/mqlite.v1.AdminService/Observe" \
+  -H "Authorization: Bearer $MQLITE_TOKEN" \
+  -H 'Content-Type: application/json' -d '{}'
+```
 
 ### CreateKey / ListKeys / RevokeKey
 
@@ -1080,14 +1141,18 @@ curl "$BASE_URL/"                    # what is this? (no auth)
 # → {"name":"mqlite","version":"<the broker's version>","description":"...","status":"ok",
 #    "auth":"bearer","docs":"https://github.com/mqlitehq/mqlite",
 #    "endpoints":["/mqlite.v1.QueueService/Send", ...every RPC route...],
-#    "health":"/healthz","metrics":"/metrics"}
+#    "health":"/healthz","ui":"/ui"}
 curl "$BASE_URL/healthz"             # ok
 ```
 
 The card's `auth` is `"bearer"` when RPCs require a token or `"none"` when auth is off,
 so an agent can branch on it directly. `endpoints` is the **complete** list of RPC route
-paths (it always matches what the broker serves — a pinned contract), while `health` and
-`metrics` are the well-known non-RPC routes.
+paths (it always matches what the broker serves — a pinned contract). `health` is
+the relative liveness path. The optional `metrics` field is `"/metrics"` when
+`--metrics` or `MQLITE_METRICS=on` enables the exporter on the API port. It is
+omitted when disabled, and the route returns `404` even with valid credentials.
+Enabling metrics requires administrator auth; the advertised route still requires
+a monitor or administrator credential. No separate URL configuration is needed.
 
 `/ui` serves the **embedded admin console** (a static single-page app baked into the
 binary) and is auth-exempt — the page itself loads without a token; its API calls
@@ -1098,7 +1163,7 @@ which case `/ui` 404s and the card's optional `ui` field is omitted.
 
 | Method | Path | Auth | Returns |
 |---|---|---|---|
-| `GET` | `/metrics` | Bearer with `manage` | Prometheus text: `mqlite_queue_messages{queue,state}` gauges |
+| `GET` | `/metrics` (when enabled) | Bearer with `manage` or configured monitor | Prometheus text: `mqlite_queue_messages{queue,state}` gauges |
 
 ## QueueService
 
@@ -1434,7 +1499,7 @@ The Go SDK re-exports the sentinel errors (`mqlite.ErrLockLost`, `ErrDedupConfli
 client mode.
 
 
-<!-- ===== mqlite main · source v0.3.1; latest release v0.3.1 · docs/cli.md ===== -->
+<!-- ===== mqlite main · source v0.3.2; latest release v0.3.2 · docs/cli.md ===== -->
 
 # CLI reference (`mqlite`)
 
@@ -1457,7 +1522,9 @@ mqlite <command> [flags] [args]
 | `MQLITE_DB` | embedded DB DSN: `file:./mq.db` / `:memory:` / `libsql://<db>.turso.io` |
 | `MQLITE_DB_AUTH_TOKEN` | auth token for a remote libSQL/Turso DSN |
 | `MQLITE_ENDPOINT` + `MQLITE_TOKEN` | client mode: a running broker + its Bearer token |
+| `MQLITE_MONITOR_TOKENS` | optional comma-separated read-only credentials for `observe` and `/metrics`; requires administrator auth and credentials distinct from administrators |
 | `MQLITE_TOKENS` | broker (`serve`) administrator Bearer tokens; **unset → a `mqk_…` token is generated + printed**, `=off` disables auth; additional managed keys live in the database |
+| `MQLITE_METRICS` | authenticated Prometheus `/metrics` on the API port; `on`/`true`/`1` enables, `off`/`false`/`0` disables (default); requires administrator auth |
 | `MQLITE_SYNC` | `NORMAL` (default) / `FULL` / `OFF` / `EXTRA` durability (embedded/serve). An unrecognized value is **rejected at startup** — a typo never silently downgrades to `NORMAL`. |
 | `MQLITE_DLQ_MAX_AGE` · `MQLITE_DLQ_MAX_COUNT` · `MQLITE_DLQ_MAX_BYTES` | broker DLQ retention (`serve`); on by default, disable with `MQLITE_DLQ_RETENTION=off` |
 
@@ -1515,6 +1582,7 @@ MQLITE_DB=file:/data/mq.db MQLITE_TOKENS=mqk_dev mqlite serve --addr :6754
 | Flag | Default | |
 |---|---|---|
 | `--addr` | `:6754` | listen address |
+| `--metrics` | `false` | enable authenticated `/metrics` on the API port; overrides `MQLITE_METRICS`; `--metrics=false` disables |
 | `--insecure-allow-remote` | `false` | with auth disabled, allow a non-loopback bind (otherwise refused) |
 
 The listen address may also come from **`MQLITE_ADDR`** (precedence: `--addr` >
@@ -1522,8 +1590,28 @@ The listen address may also come from **`MQLITE_ADDR`** (precedence: `--addr` >
 (`MQLITE_TOKENS=off`) the broker **refuses a non-loopback bind** unless
 `--insecure-allow-remote` is passed, and **`MQLITE_CORS` defaults to off**.
 
-Serves the RPC API, `/metrics`, the open `/` + `/healthz`, and — unless
-`MQLITE_UI=off` — the embedded admin console at `/ui`.
+Serves the RPC API, the open `/` + `/healthz`, and — unless `MQLITE_UI=off` —
+the embedded admin console at `/ui`. Enable Prometheus on the same API port with
+one flag:
+
+```bash
+MQLITE_DB=file:./mq.db MQLITE_TOKENS=mqk_dev mqlite serve \
+  --addr 127.0.0.1:6754 --metrics
+```
+
+Equivalent environment configuration is `MQLITE_METRICS=on`. Values
+`on`/`true`/`1` enable metrics; `off`/`false`/`0` disable it. Values are
+case-insensitive; unset or empty disables metrics. Invalid values fail startup.
+`--metrics=false` overrides an environment-provided enabled value.
+Administrator auth must remain enabled. Scrapes accept configured administrators,
+managed `manage` keys, or configured monitor credentials; send/listen keys cannot
+scrape metrics.
+
+When enabled, the open discovery card includes `"metrics":"/metrics"`, which
+resolves against the same origin. When disabled, the field is omitted and the
+route returns `404` even with valid credentials. No separate address or URL
+configuration is needed. If the API is publicly reachable, so is this route;
+keep metrics off public ingress with path filtering or a private-only broker.
 
 ### `key create|list|revoke` — manage persistent access keys
 
@@ -1723,6 +1811,34 @@ Cancel a scheduled message before it activates with **`cancel <queue> <seq>`**.
 mqlite receive-deferred orders --seq 42,57      # re-locks them and prints tokens to settle
 ```
 
+### `observe` — canonical observation
+
+Available in **v0.3.2 and later**. Remote mode requires a v0.3.2 or later broker;
+configured monitor credentials are also new in v0.3.2.
+
+```bash
+mqlite observe --output json
+MQLITE_ENDPOINT=http://127.0.0.1:6754 MQLITE_TOKEN="$MONITOR_TOKEN" mqlite observe
+```
+
+Both output modes print the complete canonical JSON snapshot, including collection
+availability/freshness, queue gauges, committed message effects, storage operations,
+maintenance, filter failures, and HTTP request/authentication measurements. It is the
+same data contract as SDK `Observe`, MCP `observe`, and the HTTP `Observe` route;
+`/metrics` serializes these measurements for Prometheus.
+
+Check `collection.state` before interpreting queue counts. An unavailable collection
+has `queues: null`, not zero messages; process counters remain usable when the
+configured credential can authenticate. Durations use seconds, timestamps use epoch
+milliseconds, and process counters reset on restart. Embedded mode marks HTTP as
+`not_applicable`. Runtime `read_available` and `db_size_available` distinguish unknown
+or unsupported measurements from real zeroes. See [observability.md](https://github.com/mqlitehq/mqlite/blob/main/docs/observability.md).
+
+A configured `MQLITE_MONITOR_TOKENS` credential can call only `observe` and `/metrics`.
+It also opens the console's read-only overview/metrics views. `manage` includes
+observation; managed `send`/`listen` keys do not gain broker-wide monitoring. Monitor
+credentials are configured at startup and cannot be created through `key create`.
+
 ### `status` — backend snapshot
 ```bash
 mqlite status                 # backend, location, schema, ping, size, queue/subscription counts
@@ -1769,7 +1885,7 @@ See also: [api-reference.md](https://github.com/mqlitehq/mqlite/blob/main/docs/a
 [examples.md](https://github.com/mqlitehq/mqlite/blob/main/docs/examples.md) (Go SDK).
 
 
-<!-- ===== mqlite main · source v0.3.1; latest release v0.3.1 · docs/access-keys.md ===== -->
+<!-- ===== mqlite main · source v0.3.2; latest release v0.3.2 · docs/access-keys.md ===== -->
 
 # Access keys
 
@@ -1795,6 +1911,14 @@ available for recovery. Existing configured token strings remain valid; every ne
 generated token uses `mqk_` followed by 64 lowercase hexadecimal characters. The
 broker stores only the SHA-256 digest of managed tokens, together with their public
 ID, name, permissions and lifecycle timestamps. Names need not be unique.
+
+For read-only monitoring in **v0.3.2 and later**, configure distinct
+`MQLITE_MONITOR_TOKENS` alongside administrator authentication. These credentials
+grant only `Observe` and `/metrics`,
+including the console's monitoring views; they cannot read message bodies, consume,
+publish or manage keys. `monitor` is a configuration capability, not a managed-key
+permission. It works independently of the key database during a storage outage.
+See the [monitoring starter](https://github.com/mqlitehq/mqlite/blob/main/docs/observability.md) for configuration and rotation.
 
 Managed authentication performs one indexed database query for every request,
 without caching credentials. On Turso this includes a remote round trip; measure
@@ -1873,7 +1997,8 @@ See the complete [request/response contract](https://github.com/mqlitehq/mqlite/
 All require `Authorization: Bearer <administrator-token>`. Authentication disabled
 with `MQLITE_TOKENS=off` does not enable anonymous key administration.
 
-The console at `/ui/` accepts a configured administrator or managed `manage` key.
+The console at `/ui/` accepts a configured administrator or managed `manage` key
+for administration; configured monitor credentials open its observability views.
 Open **Access keys** to create, inspect and revoke credentials. Save the newly
 created secret before dismissing its one-time display. The console explains when
 an older broker does not support the feature. Application `send`/`listen` keys
@@ -1921,7 +2046,7 @@ revocation state or discard newer credentials. Review keys using a configured
 administrator before reopening traffic. See [backup and upgrade procedures](https://github.com/mqlitehq/mqlite/blob/main/docs/operations.md).
 
 
-<!-- ===== mqlite main · source v0.3.1; latest release v0.3.1 · docs/deployment.md ===== -->
+<!-- ===== mqlite main · source v0.3.2; latest release v0.3.2 · docs/deployment.md ===== -->
 
 # Deploying mqlite
 
@@ -1944,6 +2069,8 @@ Everything is read from the environment — the DB string is never compiled in.
 | `MQLITE_DB` | `file:/data/mq.db` (local) or `libsql://<db>.turso.io` (remote) |
 | `MQLITE_DB_AUTH_TOKEN` | auth token for a remote libSQL/Turso DSN |
 | `MQLITE_TOKENS` | comma-separated administrator Bearer tokens (**set this in production**) |
+| `MQLITE_MONITOR_TOKENS` | v0.3.2+: optional comma-separated credentials for `Observe` and `/metrics` only; requires auth and distinct administrator credentials |
+| `MQLITE_METRICS` | v0.3.2+: opt-in authenticated `/metrics` on the API port; `on`/`true`/`1` enables, `off`/`false`/`0` disables (default); requires administrator auth |
 | `MQLITE_SYNC` | durability: `NORMAL` (default) / `FULL` / `OFF` / `EXTRA` (local file only); an unrecognized value is rejected at startup |
 | `MQLITE_DLQ_MAX_AGE` · `MQLITE_DLQ_MAX_COUNT` · `MQLITE_DLQ_MAX_BYTES` | DLQ retention bounds (defaults 14d / 1,000,000 per queue; byte cap off; `MQLITE_DLQ_RETENTION=off` to disable) — see [retention.md](https://github.com/mqlitehq/mqlite/blob/main/docs/retention.md) |
 | `MQLITE_MAX_MESSAGE_BYTES` | reject larger bodies (default 1 MiB) |
@@ -1970,30 +2097,37 @@ and error reference: [api-reference.md](https://github.com/mqlitehq/mqlite/blob/
 ## Docker / GHCR
 
 > **Version and upgrade compatibility.**
-> These instructions target **v0.3.1**, with default port **6754** and schema token **5**.
-> Existing v0.3.0 databases remain compatible; back up before upgrading and retain
-> a configured administrator for rollback, since v0.3.0 ignores managed keys.
+> These instructions target **v0.3.2**, with default port **6754** and schema token **5**.
+> Existing v0.3.0/v0.3.1 databases remain compatible; back up before upgrading and
+> retain a configured administrator. Existing Prometheus scrapers require
+> `MQLITE_METRICS=on` after upgrading; metrics is now disabled by default.
+> Rolling back to v0.3.1 also requires its
+> previous monitoring configuration; v0.3.0 additionally ignores managed keys.
 > **v0.2.0 uses port 8080 and schema token 2.** Its database cannot be opened by
-> v0.3.1: preserve the old binary/database pair and follow the
+> v0.3.2: preserve the old binary/database pair and follow the
 > [upgrade and rollback procedure](https://github.com/mqlitehq/mqlite/blob/main/docs/operations.md#upgrade-and-rollback) before replacing it.
 
 The published image is multi-arch (amd64 + arm64):
 
 ```bash
-# v0.3.1, default port 6754
+# v0.3.2, default port 6754
 docker run -d --name mqlite -p 6754:6754 \
   -v mqlite-data:/data \
   -e MQLITE_DB=file:/data/mq.db \
   -e MQLITE_TOKENS=mqk_prod_CHANGEME \
+  -e MQLITE_MONITOR_TOKENS=mqk_monitor_CHANGEME \
   -e MQLITE_SYNC=FULL \
-  ghcr.io/mqlitehq/mqlite:0.3.1
+  ghcr.io/mqlitehq/mqlite:0.3.2
 ```
 
 - The named volume `mqlite-data` persists the SQLite file across restarts.
 - Pin a version tag in production; `:0.3` tracks patches, `:latest` the newest release.
   Images `>= 0.3.0` listen on `6754`; **`0.2.x` and earlier listen on `8080`** — if you pin an
   older tag, publish the port it actually uses.
-- Verify: `curl http://localhost:6754/` (discovery card) and `/healthz`.
+- Verify: `curl http://localhost:6754/` (discovery card) and `/healthz`. Metrics is
+  disabled by default. For a private broker or an ingress that blocks public
+  `/metrics`, add `-e MQLITE_METRICS=on` and give the collector a monitor token.
+  Scraping uses the same API port; enabled discovery includes `"metrics":"/metrics"`.
 
 ## Fly.io (minimal cost)
 
@@ -2005,7 +2139,7 @@ app            = "your-mqlite"
 primary_region = "sin"            # pick a region near you
 
 [build]
-  image = "ghcr.io/mqlitehq/mqlite:0.3.1"   # pinned image, no build on Fly
+  image = "ghcr.io/mqlitehq/mqlite:0.3.2"   # pinned image, no build on Fly
 
 [env]
   MQLITE_DB = "file:/data/mq.db"            # SQLite on the persistent volume
@@ -2030,16 +2164,37 @@ primary_region = "sin"            # pick a region near you
 ```bash
 fly apps create your-mqlite
 fly volume create data --size 1 --region sin     # 1 GB SQLite volume (region-bound)
-fly secrets set MQLITE_TOKENS=mqk_prod_CHANGEME  # broker auth (a Fly secret, not in fly.toml)
+fly secrets set MQLITE_TOKENS=mqk_prod_CHANGEME \
+                MQLITE_MONITOR_TOKENS=mqk_monitor_CHANGEME # broker secrets, not in fly.toml
 fly deploy --ha=false                            # single machine
 curl https://your-mqlite.fly.dev/                # discovery card
 ```
 
+The public recipe leaves metrics disabled. Enabling `MQLITE_METRICS=on` also
+makes `/metrics` reachable through this public HTTP service; authentication
+protects its contents but does not make the route private.
+
+For private monitoring without another Fly Machine, remove `[http_service]` and
+any public `[[services]]` entries, set `MQLITE_ADDR=fly-local-6pn:6754` and
+`MQLITE_METRICS=on`, and connect clients and the collector through Fly's private
+network. From your workstation, `fly proxy 6754:6754 --app your-mqlite` opens a
+loopback tunnel; Prometheus can scrape `http://127.0.0.1:6754/metrics` using the
+monitor token. Start the Machine before connecting: direct private access does
+not provide the public recipe's autostart behavior.
+
+If the API must stay public, enable metrics only when your existing ingress
+actually blocks public `/metrics` while preserving private collector access;
+otherwise leave it disabled. See [cloud and Kubernetes monitoring](https://github.com/mqlitehq/mqlite/blob/main/docs/observability-cloud.md#flyio)
+and Fly's [private networking](https://fly.io/docs/networking/private-networking/)
+and [proxy](https://fly.io/docs/flyctl/proxy/) references.
+
 **Cost:** with `auto_stop_machines="stop"` + `min_machines_running=0` the machine
 runs only while serving requests (cold-starts in seconds, stops when idle), so the
-steady-state cost is essentially the 1 GB volume. mqlite uses ~25–34 MB RSS for any
-workload, so 256 MB has ~8× headroom — see [benchmark.md](https://github.com/mqlitehq/mqlite/blob/main/docs/benchmark.md). For sizing
-and a full cost note, [benchmark.md](https://github.com/mqlitehq/mqlite/blob/main/docs/benchmark.md).
+idle storage charges remain while the machine is stopped. The historical workloads
+in [benchmark.md](https://github.com/mqlitehq/mqlite/blob/main/docs/benchmark.md) measured roughly 25–34 MB RSS; these are not memory
+limits for other workloads or versions. Size the current broker using your message
+sizes, concurrency, queue count and monitoring load, and measure peak memory under
+that traffic. Continuous requests, including monitoring, can keep the machine active.
 
 ## systemd (bare metal)
 
@@ -2082,9 +2237,12 @@ connects to the broker on `127.0.0.1:6754`, which is the only interface the brok
 above — so the proxy (with TLS + whatever access control you add) is the single entry
 point, not a bypassable layer over an all-interfaces socket.
 
-Runtime-managed keys in v0.3.1 can be created and revoked without a
-restart. Use a configured administrator or managed `manage` key for the console,
-metrics scraper and key administration; use `send`/`listen` for applications.
+Runtime-managed keys in v0.3.1 and later can be created and revoked without a
+restart. Use a configured administrator or managed `manage` key for console and
+key administration; use `send`/`listen` for applications. In v0.3.2 and later, use
+distinct configured `MQLITE_MONITOR_TOKENS` for a read-only metrics scraper or
+console monitoring views. These credentials are changed through configuration
+and a broker restart.
 See [key commands](https://github.com/mqlitehq/mqlite/blob/main/docs/cli.md#key-createlistrevoke--manage-persistent-access-keys) and
 [key rotation](https://github.com/mqlitehq/mqlite/blob/main/docs/operations.md#key-rotation).
 
@@ -2094,11 +2252,13 @@ Follow the [production runbook](https://github.com/mqlitehq/mqlite/blob/main/doc
 online snapshots, offline directory copies, isolated restore validation and rollback.
 Use a fresh restore directory so an old WAL/SHM cannot attach to the snapshot.
 
-**v0.2.0 databases use schema 2; v0.3.0 and v0.3.1 use schema 5.** There is no
+**v0.2.0 databases use schema 2; v0.3.0 through v0.3.2 use schema 5.** There is no
 in-place migration from schema 2. Before upgrading from v0.2.0, account for retained
-work in every state, keep the old binary/database pair, and create the v0.3.1
+work in every state, keep the old binary/database pair, and create the v0.3.2
 database separately. Upgrading from v0.3.0 reuses the existing database and adds
-managed-key storage; take a consistent backup first.
+managed-key storage; upgrading from v0.3.1 leaves the schema unchanged. Take a
+consistent backup first. `Observe` and configured monitor credentials require
+v0.3.2; restore compatible monitoring configuration when rolling back.
 See [upgrade and rollback](https://github.com/mqlitehq/mqlite/blob/main/docs/operations.md#upgrade-and-rollback).
 
 ## Turso (remote libSQL)
@@ -2143,219 +2303,508 @@ curl -H "Authorization: Bearer $T" -H 'Content-Type: application/json' \
 - [ ] One active broker per database; no overlapping replacement.
 - [ ] Verified backup and rehearsed restore meet the application's RPO/RTO.
 - [ ] Free-disk, restart/error and queue-age alerts; an authenticated write/consume canary.
-- [ ] Scrape `/metrics` (Prometheus) for queue depths — see [observability.md](https://github.com/mqlitehq/mqlite/blob/main/docs/observability.md).
+- [ ] Enable `MQLITE_METRICS=on` for authenticated Prometheus scraping on the API port; use private routing or public-ingress path filtering to keep `/metrics` private — see [observability.md](https://github.com/mqlitehq/mqlite/blob/main/docs/observability.md).
 
 
-<!-- ===== mqlite main · source v0.3.1; latest release v0.3.1 · docs/observability.md ===== -->
+<!-- ===== mqlite main · source v0.3.2; latest release v0.3.2 · docs/observability.md ===== -->
 
 # Observability
 
-The broker exposes Prometheus metrics at **`GET /metrics`** (requiring a Bearer key
-with `manage` permission when auth is enabled; `/`, `/healthz` and the enabled static `/ui`
-console are open, while its API calls still require authentication). This guide
-wires `/metrics` into Prometheus + Grafana and suggests alerts.
+The canonical `Observe` interface, configured monitor credentials and the
+monitoring starter require **v0.3.2 or later**. Earlier releases expose only the
+legacy metrics described under [compatibility](#compatibility-from-v031).
 
-## Metrics
+MQLite exposes one canonical observation through `AdminService/Observe`, the Go
+SDK, CLI, MCP, console and Prometheus `/metrics`. Queue snapshots and committed
+message effects originate in the engine. HTTP request measurements originate in
+the server; pure embedded use marks that domain `not_applicable`. Grafana derives
+rates, time windows and percentiles from these values instead of maintaining
+another set of message counters.
 
-Prometheus text format (`text/plain; version=0.0.4`). Per-queue **gauges**
-(subscriptions appear as their backing queue name) plus a per-RPC latency **histogram**:
+Prometheus scraping is disabled by default. Enable authenticated `/metrics` on
+the existing API port with `MQLITE_METRICS=on` or `mqlite serve --metrics`:
 
-| Metric | Type | Labels | Meaning |
-|---|---|---|---|
-| `mqlite_queue_messages` | gauge | `queue`, `state` | messages by state: `active`, `locked`, `deferred`, `scheduled`, `dead_lettered` |
-| `mqlite_queue_total` | gauge | `queue` | total messages in the queue |
-| `mqlite_queue_oldest_message_age_ms` | gauge | `queue` | age of the oldest active or locked message (ms); 0 when neither exists |
-| `mqlite_messages_completed_total` | counter | `queue` | messages successfully completed, cumulative since broker start |
-| `mqlite_rpc_duration_seconds` | histogram | `rpc`, `le` | RPC handler latency by method (`_bucket` + `_sum` + `_count`) |
-
-```
-# HELP mqlite_queue_messages Messages in a queue by state.
-# TYPE mqlite_queue_messages gauge
-mqlite_queue_messages{queue="orders",state="active"} 42
-...
-mqlite_queue_total{queue="orders"} 45
-mqlite_queue_oldest_message_age_ms{queue="orders"} 1873
-# TYPE mqlite_messages_completed_total counter
-mqlite_messages_completed_total{queue="orders"} 1280431
-# TYPE mqlite_rpc_duration_seconds histogram
-mqlite_rpc_duration_seconds_bucket{rpc="QueueService/Receive",le="0.01"} 37
-mqlite_rpc_duration_seconds_bucket{rpc="QueueService/Receive",le="+Inf"} 84
-mqlite_rpc_duration_seconds_sum{rpc="QueueService/Receive"} 1.426651
-mqlite_rpc_duration_seconds_count{rpc="QueueService/Receive"} 84
+```sh
+MQLITE_DB=file:/data/mq.db \
+MQLITE_TOKENS="$ADMIN_TOKEN" \
+MQLITE_MONITOR_TOKENS="$MONITOR_TOKEN" \
+MQLITE_METRICS=on \
+mqlite serve --addr 127.0.0.1:6754
 ```
 
-`mqlite_messages_completed_total` is a **lifetime count of processed (Completed)
-messages** — it keeps growing after the message row is deleted, so you can answer "how
-many were handled" even on an empty queue. It is **in-process and resets on broker
-restart** (no durable counter); `rate()` / `increase()` handle observed resets, so they estimate processed
-throughput across restarts. Completions between the last scrape and a restart can
-be missed; this counter is not a durable business ledger:
-```promql
-sum(rate(mqlite_messages_completed_total[5m])) by (queue)   # processed msg/s
-increase(mqlite_messages_completed_total[1h])               # processed in the last hour
-```
+This local example exposes both the API and metrics on loopback. The exporter
+shares the broker's process, engine and counters; it needs no extra port or VM.
+The Go SDK uses `WithMetrics(true)` alongside `WithTokens(...)` and optionally
+`WithMonitorTokens(...)`. Enabling metrics without administrator auth is rejected.
 
-The histogram makes a **slow dequeue visible** — e.g. p99 receive latency in Grafana:
-```promql
-histogram_quantile(0.99, sum by (le) (rate(mqlite_rpc_duration_seconds_bucket{rpc="QueueService/Receive"}[5m])))
-```
-A rising `CompleteBatch` tail can indicate writer contention or slow storage.
-`Receive` duration also includes normal long-poll waiting (`wait_time_ms`), including
-empty results; a high receive p99 alone does not establish contention. Correlate it
-with nonempty request logs, backlog and completion latency. The `rpc` label is the shortened RPC name
-(`/mqlite.v1.QueueService/Send` → `QueueService/Send`); only RPCs are timed, not
-`/metrics` / `/healthz` / `/ui`.
+When enabled, `GET /` automatically includes `"metrics":"/metrics"`; clients
+resolve this against the same origin. When disabled, discovery omits the field
+and `/metrics` returns `404` even with valid credentials.
 
-Quick check:
+In production, use a private broker address or an ingress that blocks `/metrics`
+from the public Internet while allowing private collectors. API and metrics
+share a port, so a port-level firewall cannot separate them. Bearer authentication
+protects the data but does not hide a publicly reachable route. The monitor
+credential remains required on private networks.
 
-```bash
-curl -H "Authorization: Bearer $MQLITE_TOKEN" https://<host>/metrics
-```
+For a runnable broker, Prometheus and Grafana stack, see
+[the local observability demo](https://github.com/mqlitehq/mqlite/blob/main/ops/observability/README.md). For an existing
+platform, use the [cloud and Kubernetes guide](https://github.com/mqlitehq/mqlite/blob/main/docs/observability-cloud.md).
 
-## Access log
+## Read-only monitoring access
 
-When a request logger is configured, the broker emits **one line per RPC** with
-per-request context, so lines are distinguishable and long durations are explained.
-The level is the HTTP status (`2xx` info · `4xx` warn · `5xx` error), and the RPC path
-is shortened (`/mqlite.v1.QueueService/Send` → `QueueService/Send`):
+Configure a separate scraper credential in `MQLITE_MONITOR_TOKENS`, alongside
+configured administrator credentials in `MQLITE_TOKENS`. Monitoring credentials
+can read `/metrics` and `AdminService/Observe`. They cannot send, receive, peek at
+message bodies, manage queues, inspect administrative configuration or issue keys.
+Administrator credentials and managed `manage` keys retain monitoring access.
 
-```
-QueueService/Send          status=200 queue=orders n=1 msg_id=order-42 dur=2ms
-QueueService/CompleteBatch status=200 queue=orders n=16              dur=324ms
-QueueService/Complete      status=200 queue=orders seq=42            dur=1ms
-QueueService/Complete      status=409 queue=orders seq=42 code=lock_lost dur=1ms
-QueueService/Receive       status=200 queue=orders msgs=3           dur=8ms
-```
+Configured monitor credentials do not query the database during authentication,
+so they can observe storage failure. Managed keys still require their current
+revocation and expiry state to be checked; no monitoring cache bypasses that check.
+Do not reuse an administrator token as a monitor token. Configuration changes
+require a broker restart; the demo's startup wrapper reads separate secret files.
 
-Fields: `queue` (every queue/admin op), `msgs` (`Receive`/`Peek`) and `n`
-(`Send`/`CompleteBatch`/`Redrive`/`Purge`) counts, `seq` (single settles), `msg_id`
-(single `Send`, when supplied), and `code` on a `4xx`/`5xx` (e.g. `lock_lost`,
-`not_found`). **An empty `Receive` (`msgs=0`) is logged at Debug**, not Info — an idle
-long-poll that returns nothing (up to `wait_time_ms`, max 20s) is expected noise, so the
-default Info stream stays clean; enable Debug to see them. (A *slow* `Receive` that does
-return messages stays at Info, so genuine slowness is still visible.)
-
-## Prometheus scrape config
-
-`/metrics` needs the Bearer token, so set `authorization` on the scrape job:
+A Prometheus job should reference a mounted secret file:
 
 ```yaml
 scrape_configs:
   - job_name: mqlite
-    scheme: https              # http if you terminate TLS elsewhere
+    # The native listener is plain HTTP. Use https only when a TLS proxy
+    # terminates TLS in front of the private broker.
+    scheme: http
     metrics_path: /metrics
+    scrape_interval: 15s
+    scrape_timeout: 10s
     authorization:
       type: Bearer
-      credentials: mqk_prod_CHANGEME   # configured administrator or managed manage key; use a credentials file
+      credentials_file: /run/secrets/mqlite-monitor.token
     static_configs:
-      - targets: ["your-mqlite.fly.dev"]
+      - targets: [mqlite.internal.example:6754]
 ```
 
-> On Fly with scale-to-zero, scraping `/metrics` wakes the machine — fine, but it
-> means the broker won't fully idle while Prometheus polls. Lengthen `scrape_interval`
-> or accept it stays warm.
+If a TLS proxy fronts the listener, use the correct TLS CA rather than disabling
+certificate checks. Grafana connects to Prometheus and does not need the MQLite
+token. See the
+[Prometheus authorization reference](https://prometheus.io/docs/prometheus/latest/configuration/configuration/).
 
-## Useful PromQL
+## Availability and freshness
+
+The native snapshot includes `sampled_at_ms`, a collection status, last successful
+collection time and elapsed collection duration. A failed queue read is unavailable,
+not an empty list of healthy queues. Prometheus responds with available in-process
+measurements and `mqlite_collection_success 0`, omitting queue gauges that could not
+be collected. Failure before the endpoint, including invalid scrape credentials,
+causes Prometheus `up` to become zero instead.
+
+Queue counts are actual retained rows from a grouped database query. They describe
+stored states, not guaranteed immediate delivery eligibility: visibility, TTL,
+lease expiry awaiting maintenance and ordering rules can affect claims. Different
+measurement domains are sampled at different instants. The observation is not an
+atomic transaction encompassing every database, HTTP and in-process counter.
+
+`/healthz` is open process liveness. `mqlite_storage_read_available` reports a real
+storage read probe; success does not prove writes, end-to-end delivery or data
+integrity. Failed read latency is absent, not zero. Local storage size is unavailable
+for memory/remote backends, not a fabricated zero-byte database.
+
+### Collection cost and interval
+
+Each observation collects the full queue inventory with one grouped message scan
+and a storage read probe. The scan includes retained rows, so its cost grows with
+backlog as well as queue count. A local SQLite database uses the same single-writer
+connection for application work and collection; monitoring is not free or isolated
+from message-operation latency.
+
+Start production scraping at 15 seconds, measure collection duration and actual
+send/receive latency under the expected retained backlog, then adjust the scrape
+and native/console polling intervals. Each native observation or Prometheus scrape
+collects its own snapshot. Grafana dashboard refreshes query Prometheus instead
+of adding direct broker scans. The local demonstration uses a faster interval to
+make transitions visible; choose production cadence from measured workload needs.
+
+RPC/result and storage/error dimensions have fixed vocabularies, but their
+zero-initialized counters and histogram buckets still produce many series. Queue
+dimensions grow with the configured inventory. Measure scrape response size,
+duration and series count before increasing inventory or polling frequency; a
+working small demo does not establish a large-deployment capacity limit.
+
+## Metric contract
+
+Prometheus uses text exposition 0.0.4. Labels are bounded categories except for
+configured entity names. Credentials, key IDs, message IDs, payloads, expressions,
+raw URLs and free-text errors are never labels. Durations use seconds; timestamps
+use Unix seconds in Prometheus and epoch milliseconds in native JSON.
+
+| Family | Type | Labels / meaning |
+| --- | --- | --- |
+| `mqlite_info` | gauge, value 1 | `version`, `backend`, `schema_version` |
+| `mqlite_start_time_seconds` | gauge | Engine start timestamp |
+| `mqlite_sample_timestamp_seconds` | gauge | Snapshot timestamp |
+| `mqlite_collection_success` | gauge | 1 when queue collection succeeds, otherwise 0 |
+| `mqlite_collection_status` | gauge, value 1 | `state`, bounded `error_code` |
+| `mqlite_collection_last_success_timestamp_seconds` | gauge | Last successful collection, 0 before one succeeds |
+| `mqlite_collection_duration_seconds` | gauge | Queue collection elapsed time |
+| `mqlite_entities` | gauge | `kind=queue|subscription`; queue count excludes subscriptions and topic routing names |
+| `mqlite_queue_messages` | gauge | `queue`, `state=active|locked|deferred|scheduled|dead_lettered` |
+| `mqlite_queue_retained_messages` | gauge | `queue`; all retained rows including unexpected states |
+| `mqlite_queue_unexpected_messages` | gauge | `queue`; retained rows outside the five normal states |
+| `mqlite_queue_oldest_message_age_seconds` | gauge | `queue`; original enqueue age of oldest active/locked row, 0 if none |
+| `mqlite_message_events_total` | counter | `queue`, `event`; confirmed effects defined below |
+| `mqlite_rpc_requests_total` | counter | `rpc`, `code`; registered RPC requests including authentication rejection |
+| `mqlite_rpc_request_duration_seconds_total` | counter | Same labels; cumulative whole-request elapsed time, including authentication |
+| `mqlite_rpc_duration_seconds` | histogram | `rpc`; post-authentication handler latency, preserving the existing timing scope |
+| `mqlite_authentication_total` | counter | `outcome=success|missing|invalid|expired|revoked|permission_denied|backend_error` |
+| `mqlite_storage_operations_total` | counter | `operation`, `outcome`, `error_code` |
+| `mqlite_storage_operation_duration_seconds` | histogram | Same labels; storage-operation elapsed time |
+| `mqlite_storage_retries_total` | counter | Same labels; safe retry attempts within the observed operation |
+| `mqlite_storage_pool_connections` | gauge | `state=max_open|open|in_use|idle` |
+| `mqlite_storage_pool_waits_total` | counter | Connection-pool waits |
+| `mqlite_storage_pool_wait_duration_seconds_total` | counter | Cumulative pool waiting time, distinct from SQL execution |
+| `mqlite_storage_read_available` | gauge | Storage read probe succeeded, 0 or 1 |
+| `mqlite_storage_ping_seconds` | gauge | Read round trip; omitted on failure |
+| `mqlite_storage_size_available` | gauge | Local footprint can be reported, 0 or 1 |
+| `mqlite_storage_size_bytes` | gauge | Local DB plus WAL/shared-memory footprint; omitted if unavailable |
+| `mqlite_maintenance_enabled` | gauge | `task`; disabled/inapplicable task is 0 |
+| `mqlite_maintenance_runs_total` | counter | `task`, `outcome=success|error|interrupted` |
+| `mqlite_maintenance_duration_seconds` | histogram | `task`; maintenance pass elapsed time |
+| `mqlite_maintenance_last_success_timestamp_seconds` | gauge | `task`; last successful pass, 0 before success |
+| `mqlite_filter_failures_total` | counter | Routing failures, `stage=compile|evaluate`; normal filter mismatch is not an error |
+
+Histograms serialize finite cumulative `_bucket` samples, a `+Inf` bucket,
+`_count` and `_sum`. Whole-request duration currently supplies a sum and request
+count, not a histogram: their ratio is a mean, never a percentile.
+
+Storage operations are `read`, `write` and `transaction`; outcomes are `ok`,
+`error`, `rejected` and `outcome_unknown`. `rejected` with error code `application`
+means the operation was rejected by application/transaction callback logic; it is
+not evidence of a database outage. Counts represent logical engine storage-wrapper
+calls, not individual messages or every SQL statement inside a transaction.
+Retries are counted separately. Internal maintenance and observation reads are
+included; collecting a snapshot itself contributes read/probe operations.
+Error categories are empty on success or one of
+`canceled`, `closed`, `busy`, `connection`, `full`, `corrupt`, `io`,
+`application`, `outcome_unknown`, `other`. Fixed storage outcome/error combinations
+and registered RPC/result combinations are initialized to zero, so the first
+event can be detected after an earlier successful scrape. Use `rate`/`increase`
+across observed samples; a first scrape after an event cannot reconstruct its time.
+Maintenance tasks are `locks`, `scheduled`, `ttl`,
+`dedup`, `receipts`, `retention`, `reclaim`. Check enabled status and each task's
+actual cadence before alerting on its last-success time.
+Canceled passes during normal shutdown are `interrupted`, not successful passes
+or maintenance errors; they do not advance the last-success timestamp.
+Filter counters cover compilation/evaluation failures while routing published
+messages. Invalid `Subscribe` configuration is an RPC `invalid_argument` result;
+deliberate `TestFilter` validation is not a routing failure.
+
+### Message effects
+
+Counters increase for confirmed effects, after transaction commit. A rollback,
+transaction retry or exact receive/settlement replay does not create a second
+committed effect. An uncertain remote outcome is not classified as a known
+rollback. Counters are process-local and reset at restart; unobserved activity
+before a crash can be lost. They are operational measurements, not a durable
+billing or business audit ledger.
+Custom raw SQL through `EngineTx.SQL` is not attributed to message-effect events.
+Queue gauges still report the actual retained database rows, including unexpected
+states; do not use event counters to reconstruct changes made outside the normal
+message operations.
+
+| Event | Meaning |
+| --- | --- |
+| `enqueued` | New queue copies; topic fanout counts actual copies, not producer requests |
+| `scheduled` | Enqueued copies initially scheduled; a subset of enqueue activity |
+| `deduplicated`, `dedup_conflict` | Suppressed duplicates and conflicting dedup attempts |
+| `delivered`, `redelivered` | Committed claims; redelivery is a subset, not additional unique messages |
+| `completed`, `receive_deleted` | Successful completion removals and receive-and-delete removals |
+| `abandoned`, `deferred`, `rejected` | Confirmed settlement effects |
+| `dead_lettered` | Transitions into the DLQ, including automatic paths |
+| `ttl_discarded`, `retention_deleted` | TTL discard and dead-letter retention deletion |
+| `purged`, `canceled`, `redriven` | Administrative DLQ purge, scheduled cancellation and redrive effects |
+| `lock_expired`, `recovered`, `activated` | Expired-lease handling, startup recovery and scheduled activation |
+
+Some events overlap. For example, rejection can also enter the DLQ; do not sum all
+events into a message ledger. A claim does not prove a response reached the client,
+and completion means the consumer reported success, not independently verified
+business-side processing. Broker redelivery, client HTTP retry and storage retry
+are separate concepts.
+
+### Compatibility from v0.3.1
+
+Prometheus scraping is now disabled by default. On upgrade, enable
+`MQLITE_METRICS=on` or `--metrics` to keep scraping the same API port, and configure
+a monitor token for the collector. All five pre-existing families remain available
+when enabled. These compatibility views read canonical values; they do not
+maintain separate counters:
+
+| Existing family | Canonical mapping |
+| --- | --- |
+| `mqlite_queue_messages` | Same queue state gauges |
+| `mqlite_queue_total` | Same value as `mqlite_queue_retained_messages`; still a gauge |
+| `mqlite_queue_oldest_message_age_ms` | Canonical seconds multiplied by 1000 |
+| `mqlite_messages_completed_total` | `mqlite_message_events_total{event="completed"}` |
+| `mqlite_rpc_duration_seconds` | Same post-authentication handler histogram |
+
+The ambiguous `queue_total` and millisecond age names are deprecated for new
+consumers; use the canonical names. They are retained until the next minor version
+(v0.4.0), when any removal requires an explicit migration. No independent lifetime
+completion counter is introduced.
+
+## Dashboard and useful queries
+
+The provisioned dashboard offers instance/queue selection, traffic, backlog,
+request/authentication results, storage, maintenance and active alerts. Empty
+samples remain “No data” or “Not available”; they are not replaced with green zeros.
 
 ```promql
-# backlog waiting to be processed, per queue
+# Stored queue states, not immediate claim eligibility
 mqlite_queue_messages{state="active"}
 
-# dead-letter queue size (poison messages) — watch this
-mqlite_queue_messages{state="dead_lettered"}
+# Observed completion throughput; rate handles observed counter resets
+sum by (instance, queue) (rate(mqlite_message_events_total{event="completed"}[5m]))
 
-# in-flight (locked) right now
-mqlite_queue_messages{state="locked"}
+# Handler p95; Receive includes intentional long-poll waiting
+histogram_quantile(0.95, sum by (instance, rpc, le) (
+  rate(mqlite_rpc_duration_seconds_bucket[5m])))
 
-# oldest active/locked message age in seconds (is anything stuck?)
-mqlite_queue_oldest_message_age_ms / 1000
+# Whole-request arithmetic mean, including authentication
+sum by (instance, rpc) (rate(mqlite_rpc_request_duration_seconds_total[5m]))
+/
+sum by (instance, rpc) (rate(mqlite_rpc_requests_total[5m]))
 
-# observed completion rate (msgs/s) over 5m — a counter
-sum by (queue) (rate(mqlite_messages_completed_total[5m]))
-
-# net change in retained DLQ depth over 5m — a gauge, not failure throughput
-delta(mqlite_queue_messages{state="dead_lettered"}[5m])
+# Newly observed dead-letter transitions, not net DLQ depth change
+increase(mqlite_message_events_total{event="dead_lettered"}[5m])
 ```
 
-Queue totals and per-state depths are **gauges**. Do not apply `rate()` or
-`increase()` to them as enqueue/failure counters. `delta()` describes net depth
-change over the selected interval; retention, redrive and purge can reduce that
-depth even while new failures arrive. There is no enqueue-message counter in this
-release. RPC counts measure calls, which may contain batches or fail, so they are
-not a substitute for message ingress counts. Use producer-side acknowledgement
-metrics when that rate is needed.
+Apply `rate`/`increase` to counters, not queue depth gauges. `delta` on depth is net
+retained-state change and cannot measure failure throughput. Do not subtract sends
+and receives to infer loss, count locked rows as live consumers, or sum the same
+database snapshot from duplicate collectors. Requests may contain batches. Alert
+thresholds should match the application's SLA and minimum request volume.
 
-## Grafana
+## Runbooks
 
-Point Grafana at the Prometheus datasource and build a per-queue board:
+### Scrape or collection failure
 
-- **Backlog** (timeseries): `mqlite_queue_messages{state="active"}` legend `{{queue}}`.
-- **DLQ** (timeseries / stat): `mqlite_queue_messages{state="dead_lettered"}`.
-- **In-flight**: `mqlite_queue_messages{state="locked"}`.
-- **Oldest age (s)**: `mqlite_queue_oldest_message_age_ms / 1000`.
-- **Total**: `mqlite_queue_total`.
+Inspect the Prometheus target's `lastError` first. A down target can mean a stopped
+broker, route/TLS failure, invalid scraper credentials or an endpoint failure.
+With a working configured monitor credential, `up=1` and `collection_success=0`
+means metrics are reachable but the queue snapshot failed. Check bounded storage
+errors and broker logs; do not treat omitted gauges as zero. Preserve evidence
+before intervention. After recovery, verify a fresh successful snapshot and a
+controlled send/receive/complete canary.
 
-Use a `queue` template variable: `label_values(mqlite_queue_total, queue)`.
+### Queue backlog and dead letters
 
-## Alerting
+Compare oldest active/locked age, depth, delivery and completion trends with the
+application's intended schedule. Check consumers, lease duration and ordering.
+Scheduled/deferred work may be intentional. Inspect dead-letter reasons and fix
+the failure before redrive. Retention, purge and redrive can reduce depth while new
+failures continue. Unexpected retained states require investigation, not deletion
+just to silence the graph. Filter failure is distinct from a normal non-match.
 
-```yaml
-groups:
-  - name: mqlite
-    rules:
-      - alert: MqliteDLQPresent
-        expr: mqlite_queue_messages{state="dead_lettered"} > 0
-        for: 5m
-        annotations: { summary: "Retained dead letters on {{ $labels.queue }} need review" }
+### Authentication and integration
 
-      - alert: MqliteScrapeUnavailable
-        expr: up{job="mqlite"} == 0
-        for: 2m
-        annotations: { summary: "MQLite metrics scrape is unavailable; check process, network and credentials" }
+Use aggregate outcomes to distinguish missing/invalid credentials, revoked or
+expired keys and insufficient permissions. Client connection failures that never
+reach MQLite need client telemetry. Grafana datasource failure is a different hop
+from Prometheus scrape failure. Rotate the configured monitor token by allowing
+both old/new distinct monitoring tokens temporarily, restarting the broker,
+updating the scraper file, confirming at least two successful scrapes, then removing
+the old token and restarting. Never grant the scraper send/manage privileges to
+fix a routing error.
 
-      - alert: MqliteBacklogStuck
-        expr: mqlite_queue_oldest_message_age_ms > 300000   # 5 min
-        for: 5m
-        annotations: { summary: "Oldest active/locked message on {{ $labels.queue }} is >5m old — consumers behind?" }
+### Storage and maintenance
 
-      - alert: MqliteBacklogHigh
-        expr: mqlite_queue_messages{state="active"} > 10000
-        for: 10m
-        annotations: { summary: "Backlog on {{ $labels.queue }} > 10k active" }
+Check the read probe, operation outcome, error category, retry count and pool
+waiting. `outcome_unknown` requires idempotent reconciliation; a blind resend can
+produce duplicates. A healthy read does not prove write availability. Check
+maintenance enabled status and cadence before declaring a stalled task. Reuse
+host/container monitoring for free disk, CPU, OOM and volume health. For disk-full,
+restore or integrity incidents, follow [operations.md](https://github.com/mqlitehq/mqlite/blob/main/docs/operations.md#incident-actions).
+
+## Logs, alerts and validation
+
+Request logs retain operation/status context, queue and item counts; empty Receive
+responses are debug noise by default. Logs can help diagnose a slow nonempty
+request without placing payloads, credentials or unbounded errors into metric
+labels. Normal long polling can raise Receive latency without a storage problem.
+
+The [example rules](https://github.com/mqlitehq/mqlite/blob/main/ops/observability/prometheus/rules.yml) cover sustained scrape,
+collection/storage failure, stale collection, unexpected states, backlog age,
+retained DLQ, repeated auth failures, uncertain outcomes, maintenance and filter
+failures. Tune them before production. Prometheus evaluates conditions; configure
+Alertmanager or the platform's notification receiver separately. The local demo's
+short `MQLiteDemoDeadLetter` rule is explicitly a test rule, not production policy.
+
+The [real stack verifier](https://github.com/mqlitehq/mqlite/blob/main/test/observability/verify.py) checks authenticated
+scraping, monitor isolation, canonical/native agreement, actual message identity
+and body, replay, redelivery, scheduled/deferred work, DLQ firing/resolution,
+TTL discard/dead-letter handling, retention deletion, configuration/routing filter
+errors, credential outcomes, Grafana provisioning and every panel query. Deliberate
+invalid queries and missing datasources verify that the checker rejects failures.
+`--faults` also
+interrupts only that isolated stack to verify scrape-auth recovery, Grafana
+connection failure/recovery and persistence/counter reset after broker restart.
+Managed-cloud/Kubernetes deployment validation remains environment-specific.
+
+
+<!-- ===== mqlite main · source v0.3.2; latest release v0.3.2 · docs/observability-cloud.md ===== -->
+
+# Cloud and Kubernetes monitoring
+
+These examples require **MQLite v0.3.2 or later**, including configured monitor
+credentials and the canonical metric families.
+
+MQLite exposes native Prometheus metrics on the API port when `MQLITE_METRICS=on`
+is set; it is disabled by default. The same dashboard and metric definitions work
+with a private Prometheus collector or a compatible managed service. Keep the
+broker's metrics authenticated: configure a distinct `MQLITE_MONITOR_TOKENS`
+credential, give only that credential to the collector, and keep administrator
+credentials out of monitoring configuration. See [observability.md](https://github.com/mqlitehq/mqlite/blob/main/docs/observability.md)
+for the metric contract and the runnable local stack.
+
+## Common integration
+
+```text
+MQLite :6754/metrics <-- private route + monitor Bearer token -- collector
+                                                          |
+                                              Prometheus-compatible storage
+                                                          |
+                                               existing Grafana + rules
 ```
 
-Tune thresholds to your throughput (see [benchmark.md](https://github.com/mqlitehq/mqlite/blob/main/docs/benchmark.md) for real numbers).
-The broker bounds retained dead letters by default ([retention.md](https://github.com/mqlitehq/mqlite/blob/main/docs/retention.md)).
-A nonempty or growing DLQ still needs review; a flat depth may mean retention is
-evicting failures as quickly as new ones arrive.
+1. Locate the collector in the broker's private network, or provide a TLS route
+   reachable only from approved collectors. Configure the correct CA; do not
+   disable TLS certificate verification. Enable `MQLITE_METRICS=on`. API and
+   metrics share a port, so keeping `/metrics` off the public Internet requires
+   either a private-only broker or public-ingress path filtering. A port-level
+   firewall cannot separate HTTP paths, and Bearer auth does not hide the route.
+2. Configure `/metrics` on the broker's API port (default `6754`), a 15-second
+   starting interval and a shorter scrape timeout. Use a secret file or your
+   collector's secret reference; do not put the credential into target URLs,
+   labels or dashboard JSON.
+3. Verify `up{job="mqlite"} == 1` and `mqlite_collection_success == 1`. Scrape success
+   alone does not establish database availability or successful business processing.
+4. Import the [standard dashboard](https://github.com/mqlitehq/mqlite/blob/main/ops/observability/grafana/dashboards/mqlite.json),
+   select the platform datasource, and adopt the [rule groups](https://github.com/mqlitehq/mqlite/blob/main/ops/observability/prometheus/rules.yml).
+   Keep the `job="mqlite"` label or deliberately adjust the rules to your collector.
+5. Configure the platform's notification receiver and test delivery separately.
+   Firing rules prove condition evaluation, not that an email or page was delivered.
+
+The [existing-broker job](https://github.com/mqlitehq/mqlite/blob/main/ops/observability/prometheus/existing-broker.example.yml)
+is a reusable starting point. Prometheus supports Bearer authorization through
+`credentials_file`; a cloud console may expose a different secret-binding mechanism.
+Do not paste a local filesystem path into a managed service unless that service
+actually mounts that file. [Prometheus configuration reference](https://prometheus.io/docs/prometheus/latest/configuration/configuration/).
+
+## Alibaba Cloud: ECS or ACK
+
+For ECS, Managed Service for Prometheus supports application endpoints reachable
+by its collectors. Place the collector in the correct VPC and configure custom
+metric collection for the private broker address and port. Limit security-group
+access to the collector's actual source network; a publicly reachable metrics port
+is unnecessary. The official guide also covers reachable non-ECS machines in the
+same VPC. [Alibaba Cloud application metric collection](https://www.alibabacloud.com/help/en/cms/cloudmonitor-2-0/collect-application-metrics-of-ecs-deployment-to-the-prometheus-instance).
+
+Use your service's custom scrape job and credential support to supply the monitor
+Bearer token. Confirm the generated scrape configuration, target status and actual
+query result. If the selected managed collector cannot securely attach the header,
+run a small private Prometheus collector with the supplied job and use the
+platform's supported remote-write integration; do not switch off MQLite auth.
+ECS custom job discovery and update procedures are documented in
+[service discovery rules](https://www.alibabacloud.com/help/en/arms/prometheus-monitoring/manage-service-discovery-rules-for-ecs-environments).
+
+For ACK, use your installed collector's supported ServiceMonitor/PodMonitor or
+custom-job mechanism. The [Kubernetes examples](https://github.com/mqlitehq/mqlite/blob/main/ops/observability/kubernetes/README.md)
+target upstream Prometheus Operator. Check the actual CRD version, namespace
+selectors and Secret access in your ACK installation before applying them.
+
+## Fly.io
+
+Use the existing Fly Machine for MQLite and run Prometheus/Grafana locally or in
+an existing monitoring platform. No second Fly Machine is required for export.
+
+For private-only access:
+
+1. Remove public `[http_service]` and `[[services]]` entries from `fly.toml`.
+2. Set `MQLITE_ADDR=fly-local-6pn:6754` and `MQLITE_METRICS=on`, preserving
+   administrator auth and a distinct configured monitor token.
+3. Connect your collector through Fly's 6PN or a WireGuard peer and scrape
+   `your-mqlite-app.internal:6754/metrics` with the monitor token. For a local
+   inspection tunnel, run `fly proxy 6754:6754 --app <app>`; a local Prometheus
+   process can use `127.0.0.1:6754` as its target. A Docker collector needs a
+   deliberate route to the host tunnel; its own `127.0.0.1` is the container.
+
+Fly's private network is scoped by organization/network configuration. It adds
+a network boundary; it does not replace MQLite authentication. These connections
+require the Machine to be running. See [private networking](https://fly.io/docs/networking/private-networking/),
+[app services](https://fly.io/docs/networking/app-services/) and
+[`fly proxy`](https://fly.io/docs/flyctl/proxy/).
+
+If the broker API must remain public, turning on metrics makes its route reachable
+through that same service. Use an existing ingress with an actual public
+`/metrics` deny rule while permitting private collection; otherwise leave metrics
+disabled. A monitor token restricts data access, but does not make a public path
+private. The examples do not assume Fly's public proxy filters paths.
+
+Fly's automatic custom-metrics stanza documents a port and path but no per-target
+MQLite Bearer credential. Adding `[metrics]` alone is therefore not a verified way
+to scrape this authenticated endpoint. Use the reusable authenticated Prometheus
+job and validate a real scrape. [Fly custom metrics](https://fly.io/docs/monitoring/metrics/).
+
+If you use Fly's managed Prometheus-compatible query endpoint in Grafana, its Fly
+access token authenticates Grafana to that service. It is separate from the MQLite
+monitor token used for scraping. Follow Fly's documented token-type authorization
+scheme. Fly's managed metrics service does not supply alert notifications; configure
+your Grafana/Prometheus alerting path explicitly. The official metrics guide explains
+these boundaries and its retention limits. [Fly metrics authentication and alerting](https://fly.io/docs/monitoring/metrics/).
+
+Keep the broker's single-writer SQLite volume model. Ensure the monitored Machine
+is running when a private collector scrapes it; do not assume a stopped Machine is
+healthy or that every private request uses Fly Proxy auto-start. Monitoring cadence
+and scale-to-zero policy need a deliberate choice for the actual routing setup.
+
+## Azure: VM or AKS
+
+A private VM collector can use the same TLS/Bearer job. For AKS with Azure managed
+Prometheus, use its documented custom scrape mechanism and namespace-scoped Secret
+access. Azure's managed ServiceMonitor/PodMonitor CRDs use a different API group
+from upstream Prometheus Operator, so the supplied upstream manifest cannot be
+copied unchanged. Check the collector's supported fields, RBAC and Kubernetes
+version-specific requirements. [Azure custom scrape CRDs and authentication](https://learn.microsoft.com/en-us/azure/azure-monitor/containers/prometheus-metrics-scrape-crd).
+
+For an existing upstream operator installation on AKS, use the upstream
+[Kubernetes examples](https://github.com/mqlitehq/mqlite/blob/main/ops/observability/kubernetes/README.md). Do not run duplicate
+scrape jobs unless their replica labels and downstream deduplication are designed;
+otherwise dashboards may double-count process counters or duplicate database gauges.
+
+## Production handoff checklist
+
+| Concern | Required check |
+| --- | --- |
+| Credentials | Monitor token differs from admin; no body access, queue management or key issuance; secret never appears in labels |
+| Networking | Collector can reach the selected private/TLS endpoint; public access remains restricted |
+| Persistence | Broker database and monitoring history have suitable volumes, retention and backup policies |
+| Rules | Thresholds fit application SLA; notification routing was actually tested |
+| Freshness | Missing scrape, failed queue collection and unavailable backend measurements remain distinguishable from zero |
+| Scale | Record scrape duration and series count; queue labels scale with configured queues, not message count |
+| Host health | Reuse cloud/node/container monitoring for disk space, CPU, memory, OOM and volume health |
+| Upgrades | Pin reviewed images; validate exporter protocol, dashboard queries and alerts after upgrade |
+
+No Alibaba Cloud, Fly.io, Azure managed service or Kubernetes cluster is created by
+the local demo. Provider setup above is reusable guidance, with environment-specific
+validation steps. Local integration evidence must not be presented as a managed-cloud
+deployment test.
 
 
-## Readiness and operational signals
-
-`/healthz` is open and reports process liveness only. The authenticated
-`AdminService/Status` response includes `ping_ms` (`-1` means its storage read
-failed); HTTP 200 alone is not a readiness verdict. A dedicated send/receive/complete
-canary checks writes and consumption. Keep its queue separate from application
-traffic and compare the returned identity and full body with what it sent.
-
-Collect free disk, memory, OOM/restart counts, log errors and backup age with your
-existing host/container monitoring. The metrics listed above do not expose those
-signals. Set disk alerts before space is exhausted, leaving room for the largest
-expected backlog, WAL growth and a backup. Alert thresholds and restore targets
-belong to the application; tune the example rules to its retention and schedule.
-
-For a full disk, repeated crash, failed restore or growing DLQ, follow the
-[incident actions](https://github.com/mqlitehq/mqlite/blob/main/docs/operations.md#incident-actions) and verify a canary before
-resuming producers. See the [Prometheus function reference](https://prometheus.io/docs/prometheus/latest/querying/functions/)
-for gauge and counter query semantics.
-
-
-<!-- ===== mqlite main · source v0.3.1; latest release v0.3.1 · docs/operations.md ===== -->
+<!-- ===== mqlite main · source v0.3.2; latest release v0.3.2 · docs/operations.md ===== -->
 
 # Production operations
 
-This runbook covers v0.3.1 and upgrades from v0.3.0 (port 6754, schema token 5).
+This runbook covers v0.3.2 and upgrades from v0.3.0/v0.3.1 (port 6754, schema token 5).
 Runtime-managed access keys require v0.3.1; v0.3.0 supports configured tokens only.
+Unified `Observe` and configured monitor credentials require v0.3.2.
 Upgrading from v0.2.0 changes both its default port (8080) and schema token (2);
 follow [upgrade and rollback](#upgrade-and-rollback) before replacing the broker.
 See [deployment](https://github.com/mqlitehq/mqlite/blob/main/docs/deployment.md) for installation and [observability](https://github.com/mqlitehq/mqlite/blob/main/docs/observability.md)
@@ -2425,7 +2874,10 @@ not an archive. Leave space for a new backup and WAL growth during a long read.
 
 Use a separate managed key for each producer, consumer or administrator. A
 `manage` key can issue or revoke keys, including other administrators; a `send`
-or `listen` key cannot. The current console and metrics scraper require `manage`.
+or `listen` key cannot. Console administration requires `manage`; use distinct
+configured `MQLITE_MONITOR_TOKENS` for a read-only metrics scraper or monitoring
+view. These credentials do not rely on the key database. See the
+[monitoring starter](https://github.com/mqlitehq/mqlite/blob/main/docs/observability.md) and [cloud integration guide](https://github.com/mqlitehq/mqlite/blob/main/docs/observability-cloud.md).
 Create managed keys with `mqlite key create`, move clients to the replacement,
 then `mqlite key revoke --id <old-id>`. These changes persist in the database and
 take effect without restarting the broker. Revocation rejects new authentication
@@ -2542,13 +2994,32 @@ establish database compatibility, and MQLite does not run schema migrations.
 | Rollback before candidate accepts business writes | Stop the candidate and restore the matched old binary plus old snapshot/configuration; verify before resuming clients. |
 | Rollback after candidate accepts business writes | First preserve candidate data and reconcile new messages and external effects. Blindly restoring the old snapshot would discard those new writes. |
 
-For **v0.3.0 → v0.3.1**, schema token **5** and the port remain unchanged.
+For **v0.3.1 → v0.3.2**, schema token **5**, port **6754**, message data and
+managed-key storage remain unchanged. Follow the same-schema procedure above;
+do not overlap brokers. Validate existing key permissions and a complete canary
+cycle, then check `Observe`, the monitor credential and the new dashboard/rules.
+Prometheus scraping is now disabled by default: set `MQLITE_METRICS=on` or use
+`--metrics` to retain `/metrics` on the API port, and keep the route off public
+ingress. Configure the collector with its distinct monitor token.
+Process counters reset at restart; existing Prometheus history is separate from
+the broker database.
+
+When rolling back to v0.3.1, stop the candidate before starting the old binary.
+Existing managed keys retain their permissions, but v0.3.1 has no `Observe`
+endpoint or configured monitor credentials. Pause v0.3.2-only observers and
+restore the previous authorized scraper/rule configuration; the old `/metrics`
+endpoint requires an administrator. Keep administrator authentication enabled.
+Preserve writes accepted by the candidate rather than blindly restoring the
+pre-upgrade snapshot. The two deprecated metric aliases remain available in
+v0.3.2; see [metric compatibility](https://github.com/mqlitehq/mqlite/blob/main/docs/observability.md#compatibility-from-v031).
+
+For **v0.3.0 → v0.3.1 or v0.3.2**, schema token **5** and the port remain unchanged.
 The candidate adds the independent `access_keys` table without rewriting existing
 queue or message tables. Rehearse opening a restored copy first. Rolling back to
 v0.3.0 preserves that extra table, but the old binary cannot authenticate managed
 keys or enforce their permissions: reconnect clients with configured administrator
-tokens, or keep them stopped until v0.3.1 is restored. A database with an unrelated,
-incompatible table named `access_keys` is rejected without modifying it.
+tokens, or keep them stopped until v0.3.1 or later is restored. A database with an
+unrelated, incompatible table named `access_keys` is rejected without modifying it.
 
 For **v0.2.0 → v0.3.0**, schema **2 → 5** and default port **8080 → 6754** both
 change. Before the cutover, stop producers and account for **every queue and
@@ -2579,13 +3050,13 @@ in this release, so do not improvise a direct SQL table copy between schemas.
 rules behind these procedures.
 
 
-<!-- ===== mqlite main · source v0.3.1; latest release v0.3.1 · docs/mcp.md ===== -->
+<!-- ===== mqlite main · source v0.3.2; latest release v0.3.2 · docs/mcp.md ===== -->
 
 # MCP server (`mqlite-mcp`)
 
 `mqlite-mcp` is a [Model Context Protocol](https://modelcontextprotocol.io) server
 that exposes the mqlite broker as **agent tools** — so an AI agent (Claude, etc.) can
-create queues, send, receive, settle messages, and manage access keys without writing any HTTP. It is a
+observe broker health, create queues, send, receive, settle messages, and manage access keys without writing any HTTP. It is a
 thin, **dependency-free** forwarder: it speaks MCP (JSON-RPC 2.0 over stdio) and turns
 each tool call into one HTTP POST to the broker. Stdlib + the in-repo `wire` contract
 only — no MCP SDK, no CGO (the same ethos as the rest of mqlite).
@@ -2602,7 +3073,7 @@ it with the broker endpoint + token:
 | Env | Default | Meaning |
 |---|---|---|
 | `MQLITE_ENDPOINT` | `http://127.0.0.1:6754` | the broker base URL |
-| `MQLITE_TOKEN` | — | configured administrator or managed broker access key; tool calls follow its permissions |
+| `MQLITE_TOKEN` | — | configured administrator, monitor credential, or managed broker access key; tool calls follow its permissions |
 
 ## Connect an agent host
 
@@ -2631,6 +3102,7 @@ models misuse them):
 
 | Tool | Does |
 |---|---|
+| `observe` | complete canonical observation; takes no arguments; requires monitor or manage |
 | `list_queues` | list queues/subscriptions |
 | `create_queue` | create/update a queue by name |
 | `send` | send a message (`queue`, `body`, optional `message_id`/`group_id`) |
@@ -2651,6 +3123,24 @@ models misuse them):
 
 Settlement is by `lock_token` from `receive` — delivery is at-least-once, so an agent
 should treat handlers as idempotent. Full HTTP semantics: [api-reference.md](https://github.com/mqlitehq/mqlite/blob/main/docs/api-reference.md).
+
+## Read-only observation
+
+The `observe` tool requires **v0.3.2 or later** of both `mqlite-mcp` and the broker.
+Configured monitor credentials also require a v0.3.2 or later broker.
+
+Call `observe` with `{}` to get the same canonical JSON snapshot as the HTTP route,
+Go SDK and CLI: availability/freshness, queue gauges, process message effects,
+storage operations, maintenance, filters and HTTP measurements. The tool does not
+recompute counters. An unavailable queue collection remains explicit even when the
+HTTP request succeeds; inspect `collection.state` and runtime availability flags.
+Process counters reset when the broker restarts. See [observability.md](https://github.com/mqlitehq/mqlite/blob/main/docs/observability.md).
+
+Use a credential configured in the broker's `MQLITE_MONITOR_TOKENS` as this process's
+`MQLITE_TOKEN` for a read-only monitoring agent. The tool inventory stays the same,
+but the broker permits only `observe` for this credential; other tool calls return
+`permission_denied`. Managed `send`/`listen` credentials cannot observe the whole
+broker, and monitor is not a managed-key permission.
 
 ## Access key management
 
@@ -2694,7 +3184,7 @@ Environment tokens are not listed or revocable through these tools. Key tools ar
 unavailable when broker authentication is explicitly disabled.
 
 
-<!-- ===== mqlite main · source v0.3.1; latest release v0.3.1 · docs/examples.md ===== -->
+<!-- ===== mqlite main · source v0.3.2; latest release v0.3.2 · docs/examples.md ===== -->
 
 # Examples
 
