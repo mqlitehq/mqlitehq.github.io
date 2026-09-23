@@ -22,13 +22,14 @@
     <a href="access-keys.html">Access keys</a>
     <a href="deployment.html">Deployment</a>
     <a href="observability.html">Observability</a>
+    <a href="observability-cloud.html">Cloud monitoring</a>
     <a href="operations.html">Operations</a>
     <a href="agents.html">For AI agents</a>
     <a class="gh" href="https://github.com/mqlitehq/mqlite">GitHub ↗</a>
   </div>
 </div></nav>
 <div class="wrap">
-  <div class="stamp">Generated from <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/deployment.md">mqlite main · docs/deployment.md</a> — source v0.3.1; latest release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.3.1">v0.3.1</a>.
+  <div class="stamp">Generated from <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/deployment.md">mqlite main · docs/deployment.md</a> — source v0.3.2; latest release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.3.2">v0.3.2</a>.
   These docs track main; check release notes for published artifacts. Edit the canonical Markdown and re-run <code>tools/build.mjs</code>.</div>
   <main class="prose">
 <h1 id="deploying-mqlite">Deploying mqlite</h1>
@@ -62,6 +63,14 @@ this guide covers the broker (<code>mqlite serve</code>). Pick a target:</p>
 <tr>
 <td><code>MQLITE_TOKENS</code></td>
 <td>comma-separated administrator Bearer tokens (<strong>set this in production</strong>)</td>
+</tr>
+<tr>
+<td><code>MQLITE_MONITOR_TOKENS</code></td>
+<td>v0.3.2+: optional comma-separated credentials for <code>Observe</code> and <code>/metrics</code> only; requires auth and distinct administrator credentials</td>
+</tr>
+<tr>
+<td><code>MQLITE_METRICS</code></td>
+<td>v0.3.2+: opt-in authenticated <code>/metrics</code> on the API port; <code>on</code>/<code>true</code>/<code>1</code> enables, <code>off</code>/<code>false</code>/<code>0</code> disables (default); requires administrator auth</td>
 </tr>
 <tr>
 <td><code>MQLITE_SYNC</code></td>
@@ -102,28 +111,35 @@ and error reference: <a href="api.html">api-reference.md</a>.</p>
 <h2 id="docker--ghcr">Docker / GHCR</h2>
 <blockquote>
 <p><strong>Version and upgrade compatibility.</strong>
-These instructions target <strong>v0.3.1</strong>, with default port <strong>6754</strong> and schema token <strong>5</strong>.
-Existing v0.3.0 databases remain compatible; back up before upgrading and retain
-a configured administrator for rollback, since v0.3.0 ignores managed keys.
+These instructions target <strong>v0.3.2</strong>, with default port <strong>6754</strong> and schema token <strong>5</strong>.
+Existing v0.3.0/v0.3.1 databases remain compatible; back up before upgrading and
+retain a configured administrator. Existing Prometheus scrapers require
+<code>MQLITE_METRICS=on</code> after upgrading; metrics is now disabled by default.
+Rolling back to v0.3.1 also requires its
+previous monitoring configuration; v0.3.0 additionally ignores managed keys.
 <strong>v0.2.0 uses port 8080 and schema token 2.</strong> Its database cannot be opened by
-v0.3.1: preserve the old binary/database pair and follow the
+v0.3.2: preserve the old binary/database pair and follow the
 <a href="operations.html#upgrade-and-rollback">upgrade and rollback procedure</a> before replacing it.</p>
 </blockquote>
 <p>The published image is multi-arch (amd64 + arm64):</p>
-<pre><code class="language-bash"># v0.3.1, default port 6754
+<pre><code class="language-bash"># v0.3.2, default port 6754
 docker run -d --name mqlite -p 6754:6754 \
   -v mqlite-data:/data \
   -e MQLITE_DB=file:/data/mq.db \
   -e MQLITE_TOKENS=mqk_prod_CHANGEME \
+  -e MQLITE_MONITOR_TOKENS=mqk_monitor_CHANGEME \
   -e MQLITE_SYNC=FULL \
-  ghcr.io/mqlitehq/mqlite:0.3.1
+  ghcr.io/mqlitehq/mqlite:0.3.2
 </code></pre>
 <ul>
 <li>The named volume <code>mqlite-data</code> persists the SQLite file across restarts.</li>
 <li>Pin a version tag in production; <code>:0.3</code> tracks patches, <code>:latest</code> the newest release.
 Images <code>&gt;= 0.3.0</code> listen on <code>6754</code>; <strong><code>0.2.x</code> and earlier listen on <code>8080</code></strong> — if you pin an
 older tag, publish the port it actually uses.</li>
-<li>Verify: <code>curl http://localhost:6754/</code> (discovery card) and <code>/healthz</code>.</li>
+<li>Verify: <code>curl http://localhost:6754/</code> (discovery card) and <code>/healthz</code>. Metrics is
+disabled by default. For a private broker or an ingress that blocks public
+<code>/metrics</code>, add <code>-e MQLITE_METRICS=on</code> and give the collector a monitor token.
+Scraping uses the same API port; enabled discovery includes <code>&quot;metrics&quot;:&quot;/metrics&quot;</code>.</li>
 </ul>
 <h2 id="flyio-minimal-cost">Fly.io (minimal cost)</h2>
 <p>A scale-to-zero, single-machine recipe — cheapest way to run it online. Save as
@@ -132,7 +148,7 @@ older tag, publish the port it actually uses.</li>
 primary_region = &quot;sin&quot;            # pick a region near you
 
 [build]
-  image = &quot;ghcr.io/mqlitehq/mqlite:0.3.1&quot;   # pinned image, no build on Fly
+  image = &quot;ghcr.io/mqlitehq/mqlite:0.3.2&quot;   # pinned image, no build on Fly
 
 [env]
   MQLITE_DB = &quot;file:/data/mq.db&quot;            # SQLite on the persistent volume
@@ -155,15 +171,33 @@ primary_region = &quot;sin&quot;            # pick a region near you
 </code></pre>
 <pre><code class="language-bash">fly apps create your-mqlite
 fly volume create data --size 1 --region sin     # 1 GB SQLite volume (region-bound)
-fly secrets set MQLITE_TOKENS=mqk_prod_CHANGEME  # broker auth (a Fly secret, not in fly.toml)
+fly secrets set MQLITE_TOKENS=mqk_prod_CHANGEME \
+                MQLITE_MONITOR_TOKENS=mqk_monitor_CHANGEME # broker secrets, not in fly.toml
 fly deploy --ha=false                            # single machine
 curl https://your-mqlite.fly.dev/                # discovery card
 </code></pre>
+<p>The public recipe leaves metrics disabled. Enabling <code>MQLITE_METRICS=on</code> also
+makes <code>/metrics</code> reachable through this public HTTP service; authentication
+protects its contents but does not make the route private.</p>
+<p>For private monitoring without another Fly Machine, remove <code>[http_service]</code> and
+any public <code>[[services]]</code> entries, set <code>MQLITE_ADDR=fly-local-6pn:6754</code> and
+<code>MQLITE_METRICS=on</code>, and connect clients and the collector through Fly&#39;s private
+network. From your workstation, <code>fly proxy 6754:6754 --app your-mqlite</code> opens a
+loopback tunnel; Prometheus can scrape <code>http://127.0.0.1:6754/metrics</code> using the
+monitor token. Start the Machine before connecting: direct private access does
+not provide the public recipe&#39;s autostart behavior.</p>
+<p>If the API must stay public, enable metrics only when your existing ingress
+actually blocks public <code>/metrics</code> while preserving private collector access;
+otherwise leave it disabled. See <a href="observability-cloud.html#flyio">cloud and Kubernetes monitoring</a>
+and Fly&#39;s <a href="https://fly.io/docs/networking/private-networking/">private networking</a>
+and <a href="https://fly.io/docs/flyctl/proxy/">proxy</a> references.</p>
 <p><strong>Cost:</strong> with <code>auto_stop_machines=&quot;stop&quot;</code> + <code>min_machines_running=0</code> the machine
 runs only while serving requests (cold-starts in seconds, stops when idle), so the
-steady-state cost is essentially the 1 GB volume. mqlite uses ~25–34 MB RSS for any
-workload, so 256 MB has ~8× headroom — see <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/benchmark.md">benchmark.md</a>. For sizing
-and a full cost note, <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/benchmark.md">benchmark.md</a>.</p>
+idle storage charges remain while the machine is stopped. The historical workloads
+in <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/benchmark.md">benchmark.md</a> measured roughly 25–34 MB RSS; these are not memory
+limits for other workloads or versions. Size the current broker using your message
+sizes, concurrency, queue count and monitoring load, and measure peak memory under
+that traffic. Continuous requests, including monitoring, can keep the machine active.</p>
 <h2 id="systemd-bare-metal">systemd (bare metal)</h2>
 <p>Build or download the binary, then run it as a service:</p>
 <pre><code class="language-bash">go build -o /usr/local/bin/mqlite ./cmd/mqlite   # or grab a release binary
@@ -195,20 +229,25 @@ curl http://localhost:6754/healthz
 connects to the broker on <code>127.0.0.1:6754</code>, which is the only interface the broker binds
 above — so the proxy (with TLS + whatever access control you add) is the single entry
 point, not a bypassable layer over an all-interfaces socket.</p>
-<p>Runtime-managed keys in v0.3.1 can be created and revoked without a
-restart. Use a configured administrator or managed <code>manage</code> key for the console,
-metrics scraper and key administration; use <code>send</code>/<code>listen</code> for applications.
+<p>Runtime-managed keys in v0.3.1 and later can be created and revoked without a
+restart. Use a configured administrator or managed <code>manage</code> key for console and
+key administration; use <code>send</code>/<code>listen</code> for applications. In v0.3.2 and later, use
+distinct configured <code>MQLITE_MONITOR_TOKENS</code> for a read-only metrics scraper or
+console monitoring views. These credentials are changed through configuration
+and a broker restart.
 See <a href="cli.html#key-createlistrevoke--manage-persistent-access-keys">key commands</a> and
 <a href="operations.html#key-rotation">key rotation</a>.</p>
 <h2 id="backup-restore-and-upgrades">Backup, restore and upgrades</h2>
 <p>Follow the <a href="operations.html#consistent-backups">production runbook</a> for read-only
 online snapshots, offline directory copies, isolated restore validation and rollback.
 Use a fresh restore directory so an old WAL/SHM cannot attach to the snapshot.</p>
-<p><strong>v0.2.0 databases use schema 2; v0.3.0 and v0.3.1 use schema 5.</strong> There is no
+<p><strong>v0.2.0 databases use schema 2; v0.3.0 through v0.3.2 use schema 5.</strong> There is no
 in-place migration from schema 2. Before upgrading from v0.2.0, account for retained
-work in every state, keep the old binary/database pair, and create the v0.3.1
+work in every state, keep the old binary/database pair, and create the v0.3.2
 database separately. Upgrading from v0.3.0 reuses the existing database and adds
-managed-key storage; take a consistent backup first.
+managed-key storage; upgrading from v0.3.1 leaves the schema unchanged. Take a
+consistent backup first. <code>Observe</code> and configured monitor credentials require
+v0.3.2; restore compatible monitoring configuration when rolling back.
 See <a href="operations.html#upgrade-and-rollback">upgrade and rollback</a>.</p>
 <h2 id="turso-remote-libsql">Turso (remote libSQL)</h2>
 <p>Use replicated remote storage instead of a local volume — no disk to manage, and the
@@ -244,7 +283,7 @@ back gradually as the queue drains (<a href="https://github.com/mqlitehq/mqlite/
 <li><input disabled="" type="checkbox"> One active broker per database; no overlapping replacement.</li>
 <li><input disabled="" type="checkbox"> Verified backup and rehearsed restore meet the application&#39;s RPO/RTO.</li>
 <li><input disabled="" type="checkbox"> Free-disk, restart/error and queue-age alerts; an authenticated write/consume canary.</li>
-<li><input disabled="" type="checkbox"> Scrape <code>/metrics</code> (Prometheus) for queue depths — see <a href="observability.html">observability.md</a>.</li>
+<li><input disabled="" type="checkbox"> Enable <code>MQLITE_METRICS=on</code> for authenticated Prometheus scraping on the API port; use private routing or public-ingress path filtering to keep <code>/metrics</code> private — see <a href="observability.html">observability.md</a>.</li>
 </ul>
 
   </main>

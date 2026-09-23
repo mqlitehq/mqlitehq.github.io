@@ -40,15 +40,15 @@ test('the complete generated output and source inventories are explicit', () => 
   assert.deepEqual(PAGES.map(([src, out]) => [src, out]), [
     ['concepts.md', 'concepts.html'], ['internals.md', 'internals.html'], ['api-reference.md', 'api.html'],
     ['cli.md', 'cli.html'], ['access-keys.md', 'access-keys.html'], ['deployment.md', 'deployment.html'], ['observability.md', 'observability.html'],
-    ['operations.md', 'operations.html'],
+    ['observability-cloud.md', 'observability-cloud.html'], ['operations.md', 'operations.html'],
   ]);
-  assert.deepEqual(BUNDLE_FILES, ['concepts.md', 'internals.md', 'api-reference.md', 'cli.md', 'access-keys.md', 'deployment.md', 'observability.md', 'operations.md', 'mcp.md', 'examples.md']);
-  assert.deepEqual(GENERATED_FILES, ['concepts.html', 'internals.html', 'api.html', 'cli.html', 'access-keys.html', 'deployment.html', 'observability.html', 'operations.html', 'llms-full.txt', 'site-metadata.json', 'assets/highlight.min.js']);
+  assert.deepEqual(BUNDLE_FILES, ['concepts.md', 'internals.md', 'api-reference.md', 'cli.md', 'access-keys.md', 'deployment.md', 'observability.md', 'observability-cloud.md', 'operations.md', 'mcp.md', 'examples.md']);
+  assert.deepEqual(GENERATED_FILES, ['concepts.html', 'internals.html', 'api.html', 'cli.html', 'access-keys.html', 'deployment.html', 'observability.html', 'observability-cloud.html', 'operations.html', 'llms-full.txt', 'site-metadata.json', 'assets/highlight.min.js']);
 });
 
 test('source and dated latest release stay distinct across patch preparation and publication', (t) => {
   const root = fixture(t);
-  for (const [source, released] of [['0.3.0', '0.2.0'], ['0.3.1', '0.3.0'], ['0.3.1', '0.3.1']]) {
+  for (const [source, released] of [['0.3.0', '0.2.0'], ['0.3.1', '0.3.0'], ['0.3.1', '0.3.1'], ['0.3.2', '0.3.1'], ['0.3.2', '0.3.2']]) {
     put(root, 'internal/version/version.go', `const Version = "${source}"\n`);
     put(root, 'CHANGELOG.md', `## Unreleased\n\n## v${released} — 2026-09-06\n\n## v0.1.0 — 2026-06-20\n`);
     const { metadata, outputs } = renderSite(root);
@@ -176,7 +176,7 @@ test('the real Pages package contains the complete static inventory with identic
     'access-keys.html', 'agents.html', 'api.html', 'assets/fig-lifecycle.svg', 'assets/fig-overview.svg',
     'assets/highlight.min.js', 'assets/site.css', 'assets/site.js', 'cli.html',
     'concepts.html', 'deployment.html', 'favicon.svg', 'index.html', 'internals.html',
-    'llms-full.txt', 'llms.txt', 'logo.svg', 'observability.html', 'operations.html',
+    'llms-full.txt', 'llms.txt', 'logo.svg', 'observability.html', 'observability-cloud.html', 'operations.html',
     'site-metadata.json',
   ].sort();
   assert.deepEqual(files(output).sort(), expected);
