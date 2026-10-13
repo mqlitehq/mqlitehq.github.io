@@ -1,9 +1,10 @@
 {
-  "sourceVersion": "0.3.2",
-  "latestRelease": "v0.3.2",
+  "sourceVersion": "0.3.3",
+  "latestRelease": "v0.3.3",
   "source": "https://github.com/mqlitehq/mqlite/tree/main/docs",
   "routes": [
     "/mqlite.v1.AdminService/CreateQueue",
+    "/mqlite.v1.AdminService/DeleteQueue",
     "/mqlite.v1.AdminService/ListQueues",
     "/mqlite.v1.AdminService/ListSubscriptions",
     "/mqlite.v1.AdminService/Observe",

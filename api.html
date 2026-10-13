@@ -29,7 +29,7 @@
   </div>
 </div></nav>
 <div class="wrap">
-  <div class="stamp">Generated from <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/api-reference.md">mqlite main · docs/api-reference.md</a> — source v0.3.2; latest release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.3.2">v0.3.2</a>.
+  <div class="stamp">Generated from <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/api-reference.md">mqlite main · docs/api-reference.md</a> — source v0.3.3; latest release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.3.3">v0.3.3</a>.
   These docs track main; check release notes for published artifacts. Edit the canonical Markdown and re-run <code>tools/build.mjs</code>.</div>
   <main class="prose">
 <h1 id="mqlite-http-api-reference">mqlite HTTP API reference</h1>
@@ -551,6 +551,42 @@ from the oldest active or locked message; it is zero when neither state is prese
 </code></pre>
 <h2 id="adminservice">AdminService</h2>
 <p>All paths are <code>/mqlite.v1.AdminService/&lt;Method&gt;</code>.</p>
+<h3 id="deletequeue">DeleteQueue</h3>
+<p>Available in <strong>v0.3.3 and later</strong>.</p>
+<p>Removes an <strong>empty plain queue</strong>. Requires administrator/manage permission.</p>
+<ul>
+<li>POST <code>/mqlite.v1.AdminService/DeleteQueue</code></li>
+<li>Read the queue&#39;s <code>generation</code> from <code>ListQueues</code>, then send
+<code>{&quot;name&quot;:&quot;orders&quot;,&quot;generation&quot;:&quot;&lt;value from ListQueues&gt;&quot;}</code>.
+Response: <code>{&quot;deleted&quot;:true}</code>. Missing generation returns HTTP 400.</li>
+<li>The generation must still match inside the deletion transaction. HTTP 409,
+<code>queue_changed</code>, means the name now identifies a replacement; the request did
+not delete it. Preserve the original generation when retrying/reconciling.</li>
+<li>All message states block deletion, including locked, scheduled, deferred and
+dead-lettered messages: HTTP 409, <code>queue_not_empty</code>. Drain or settle them first.</li>
+<li>Subscription backing queues are rejected with HTTP 400, <code>invalid_argument</code>;
+this operation does not remove topic subscriptions.</li>
+<li>Missing queues return HTTP 404, <code>not_found</code>. Queue configuration and per-queue
+deduplication, settlement receipts and receive-attempt records are removed in
+the same transaction. Recreating the name starts with fresh auxiliary records;
+message sequence numbers are not reset. Process event counters remain historical.</li>
+<li>Stop producers and consumers before retiring a queue. The transactional
+emptiness check prevents deletion of a concurrent acknowledged send. Requests
+still addressing a retired name fail; an existing long poll is woken.</li>
+<li>If the result is <code>outcome_unknown</code> or the response is lost, inspect <code>ListQueues</code>
+before retrying. Queue names are reusable. Keep the original generation; never automatically
+look up a replacement generation and retry a previous deletion against it.</li>
+</ul>
+<p>Go SDK: <code>client.DeleteQueue(ctx, name)</code> / <code>embedded.DeleteQueue(ctx, name)</code>.
+These resolve the current generation once per invocation. For retained requests,
+pass <code>DeleteQueueOpts{Generation: originalGeneration}</code> to fence later retries.
+<code>ListQueues</code> adds the optional <code>generation</code> field; existing response fields and
+all prior RPC contracts remain unchanged. New queue generations are opaque IDs
+stored in the existing <code>meta</code> table. Existing queues use a stable legacy identity
+until deleted; reconfiguration preserves identity. No schema-version change or
+migration is required.
+The console exposes <strong>delete queue</strong> in a plain queue&#39;s detail page and requires
+an exact name confirmation. Older brokers report the operation as unsupported.</p>
 <h3 id="createqueue">CreateQueue</h3>
 <p>Create a queue, or <strong>update</strong> one (idempotent <strong>upsert</strong> on <code>name</code>: calling it again
 with the same name <strong>and the same <code>kind</code></strong> overwrites that queue&#39;s config — existing

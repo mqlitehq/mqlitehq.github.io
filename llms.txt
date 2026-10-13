@@ -7,11 +7,11 @@
 Public documentation: https://mqlitehq.github.io/.
 Relative links below resolve against this website.
 
-NOTE ON VERSIONS: the latest release is v0.3.2 (default port 6754, schema token 5).
-This website tracks main, currently source v0.3.2. Runtime access
+NOTE ON VERSIONS: the latest release is v0.3.3 (default port 6754, schema token 5).
+This website tracks main, currently source v0.3.3. Runtime access
 keys and key-management tools require v0.3.1 or later. Unified Observe, configured
-monitor credentials and the monitoring starter require v0.3.2 or later. Installation commands below pin v0.3.2. Use the
-[v0.3.2 documentation](https://github.com/mqlitehq/mqlite/tree/v0.3.2/docs)
+monitor credentials and the monitoring starter require v0.3.2 or later. Installation commands below pin v0.3.3. Use the
+[v0.3.3 documentation](https://github.com/mqlitehq/mqlite/tree/v0.3.3/docs)
 for the versioned reference. Upgrading from v0.2.0 (port 8080, schema token 2)
 requires a new database; follow [upgrade and rollback](operations.html#upgrade-and-rollback).
 
@@ -20,7 +20,7 @@ requires a new database; follow [upgrade and rollback](operations.html#upgrade-a
   default — a token is auto-generated if none is set).
 - Storage: local SQLite (pure-Go driver) or remote Turso/libSQL. Remote buys
   durability + geo-replication (~45 ms per durable commit), not throughput.
-- Wire protocol: JSON over HTTP, one POST per operation, 26 routes in source v0.3.2 under
+- Wire protocol: JSON over HTTP, one POST per operation, 27 routes in source v0.3.3 under
   /mqlite.v1.QueueService/*, /mqlite.v1.AdminService/* and /mqlite.v1.AuthService/*. Message bodies are
   base64 in JSON. GET / is an open discovery card listing every endpoint.
 - Delivery: Peek-Lock (receive → work → settle with a lock_token) or
@@ -46,13 +46,20 @@ requires a new database; follow [upgrade and rollback](operations.html#upgrade-a
 - Pub/sub: topics are implicit; Subscribe(topic, name, filter) creates a backing
   queue per subscription; filters are one expr boolean predicate, fail-closed.
   Queue, subscription and topic names are one disjoint namespace (conflicts 409).
+- Queue deletion (v0.3.3 and later): AdminService/DeleteQueue requires manage
+  permission, an empty plain queue and its generation from ListQueues. Any retained
+  message blocks deletion. Subscription queues and topics are not deleted by this
+  operation. Preserve the original generation when retrying; see [DeleteQueue](api.html#deletequeue).
+- Maintenance diagnostics (v0.3.3 and later): Observe exposes bounded failure
+  details and recovery status. Optional private diagnostic logs retain redacted
+  details across restarts; cumulative error counts are not current health.
 - Scheduling: deliver at a time (Schedule). Cancel only removes never-delivered
   scheduled messages (delivery_count = 0), not delayed retries. Per-message TTL is
   capped by the queue default. Duplicate detection by message_id within a window.
 - Transactional outbox (embedded-only): business write + enqueue commit in ONE
   SQLite transaction via mq.Tx.
 - Ops: /ui embedded admin console, opt-in authenticated /metrics Prometheus
-  (incl. per-RPC latency histograms), /healthz, CLI (24 commands, including the key subcommand group), MCP server (mqlite-mcp, 18 tools in source v0.3.2). The local production
+  (incl. per-RPC latency histograms), /healthz, CLI (24 commands, including the key subcommand group), MCP server (mqlite-mcp, 18 tools in source v0.3.3). The local production
   boundary is one broker per persistent SQLite file; backups and recovery must be
   rehearsed. Use TLS and Bearer authentication for network access.
 - Unified observation (v0.3.2 and later): AdminService/Observe, SDK, CLI observe,
@@ -63,7 +70,7 @@ requires a new database; follow [upgrade and rollback](operations.html#upgrade-a
   not payload access, consumption, administration or key issuance. Grafana queries
   Prometheus and does not need the MQLite token. Reuse the supplied dashboard and
   alert rules with an existing collector or the local monitoring starter.
-- Prometheus access (v0.3.2): disabled by default (/metrics returns 404 and
+- Prometheus access (v0.3.2 and later): disabled by default (/metrics returns 404 and
   discovery omits metrics). Enable --metrics or MQLITE_METRICS=on to serve on the
   API port; discovery then includes "metrics":"/metrics". Administrator auth must
   stay enabled. Only configured monitor or administrator credentials and managed
@@ -127,8 +134,8 @@ requires a new database; follow [upgrade and rollback](operations.html#upgrade-a
 - [MCP source](https://github.com/mqlitehq/mqlite/blob/main/docs/mcp.md).
 - [Releases](https://github.com/mqlitehq/mqlite/releases): binaries for
   linux/macos/windows (amd64+arm64), each archive contains mqlite + mqlite-mcp.
-- Container image: `ghcr.io/mqlitehq/mqlite:0.3.2` (default port 6754).
+- Container image: `ghcr.io/mqlitehq/mqlite:0.3.3` (default port 6754).
   See [Deployment](deployment.html) for persistent storage, authentication and TLS.
-- Broker: `go install github.com/mqlitehq/mqlite/cmd/mqlite@v0.3.2`.
-- MCP server: `go install github.com/mqlitehq/mqlite/cmd/mqlite-mcp@v0.3.2`.
-- SDK: `go get github.com/mqlitehq/mqlite@v0.3.2` (Go ≥ 1.21).
+- Broker: `go install github.com/mqlitehq/mqlite/cmd/mqlite@v0.3.3`.
+- MCP server: `go install github.com/mqlitehq/mqlite/cmd/mqlite-mcp@v0.3.3`.
+- SDK: `go get github.com/mqlitehq/mqlite@v0.3.3` (Go ≥ 1.21).

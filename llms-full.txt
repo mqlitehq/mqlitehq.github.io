@@ -1,9 +1,9 @@
 mqlite main — full documentation bundle.
-Source version: v0.3.2. Latest recorded release: v0.3.2.
+Source version: v0.3.3. Latest recorded release: v0.3.3.
 These docs track main; consult release notes for published artifacts and upgrade requirements.
 Source of truth: https://github.com/mqlitehq/mqlite/tree/main/docs
 
-<!-- ===== mqlite main · source v0.3.2; latest release v0.3.2 · docs/concepts.md ===== -->
+<!-- ===== mqlite main · source v0.3.3; latest release v0.3.3 · docs/concepts.md ===== -->
 
 # Core concepts & subscription filters
 
@@ -474,7 +474,7 @@ network I/O APIs are exposed; `now()` can read the wall clock:
   for the filter rules MQLite guarantees.
 
 
-<!-- ===== mqlite main · source v0.3.2; latest release v0.3.2 · docs/internals.md ===== -->
+<!-- ===== mqlite main · source v0.3.3; latest release v0.3.3 · docs/internals.md ===== -->
 
 # How mqlite works — building a reliable queue on one SQLite file
 
@@ -904,7 +904,7 @@ with the conformance suite as the judge.
 [benchmark.md](https://github.com/mqlitehq/mqlite/blob/main/docs/benchmark.md).*
 
 
-<!-- ===== mqlite main · source v0.3.2; latest release v0.3.2 · docs/api-reference.md ===== -->
+<!-- ===== mqlite main · source v0.3.3; latest release v0.3.3 · docs/api-reference.md ===== -->
 
 # mqlite HTTP API reference
 
@@ -1332,6 +1332,45 @@ curl -H "Authorization: Bearer $T" -H 'Content-Type: application/json' \
 
 All paths are `/mqlite.v1.AdminService/<Method>`.
 
+### DeleteQueue
+
+Available in **v0.3.3 and later**.
+
+Removes an **empty plain queue**. Requires administrator/manage permission.
+
+- POST `/mqlite.v1.AdminService/DeleteQueue`
+- Read the queue's `generation` from `ListQueues`, then send
+  `{"name":"orders","generation":"<value from ListQueues>"}`.
+  Response: `{"deleted":true}`. Missing generation returns HTTP 400.
+- The generation must still match inside the deletion transaction. HTTP 409,
+  `queue_changed`, means the name now identifies a replacement; the request did
+  not delete it. Preserve the original generation when retrying/reconciling.
+- All message states block deletion, including locked, scheduled, deferred and
+  dead-lettered messages: HTTP 409, `queue_not_empty`. Drain or settle them first.
+- Subscription backing queues are rejected with HTTP 400, `invalid_argument`;
+  this operation does not remove topic subscriptions.
+- Missing queues return HTTP 404, `not_found`. Queue configuration and per-queue
+  deduplication, settlement receipts and receive-attempt records are removed in
+  the same transaction. Recreating the name starts with fresh auxiliary records;
+  message sequence numbers are not reset. Process event counters remain historical.
+- Stop producers and consumers before retiring a queue. The transactional
+  emptiness check prevents deletion of a concurrent acknowledged send. Requests
+  still addressing a retired name fail; an existing long poll is woken.
+- If the result is `outcome_unknown` or the response is lost, inspect `ListQueues`
+  before retrying. Queue names are reusable. Keep the original generation; never automatically
+  look up a replacement generation and retry a previous deletion against it.
+
+Go SDK: `client.DeleteQueue(ctx, name)` / `embedded.DeleteQueue(ctx, name)`.
+These resolve the current generation once per invocation. For retained requests,
+pass `DeleteQueueOpts{Generation: originalGeneration}` to fence later retries.
+`ListQueues` adds the optional `generation` field; existing response fields and
+all prior RPC contracts remain unchanged. New queue generations are opaque IDs
+stored in the existing `meta` table. Existing queues use a stable legacy identity
+until deleted; reconfiguration preserves identity. No schema-version change or
+migration is required.
+The console exposes **delete queue** in a plain queue's detail page and requires
+an exact name confirmation. Older brokers report the operation as unsupported.
+
 ### CreateQueue
 
 Create a queue, or **update** one (idempotent **upsert** on `name`: calling it again
@@ -1499,7 +1538,7 @@ The Go SDK re-exports the sentinel errors (`mqlite.ErrLockLost`, `ErrDedupConfli
 client mode.
 
 
-<!-- ===== mqlite main · source v0.3.2; latest release v0.3.2 · docs/cli.md ===== -->
+<!-- ===== mqlite main · source v0.3.3; latest release v0.3.3 · docs/cli.md ===== -->
 
 # CLI reference (`mqlite`)
 
@@ -1525,6 +1564,7 @@ mqlite <command> [flags] [args]
 | `MQLITE_MONITOR_TOKENS` | optional comma-separated read-only credentials for `observe` and `/metrics`; requires administrator auth and credentials distinct from administrators |
 | `MQLITE_TOKENS` | broker (`serve`) administrator Bearer tokens; **unset → a `mqk_…` token is generated + printed**, `=off` disables auth; additional managed keys live in the database |
 | `MQLITE_METRICS` | authenticated Prometheus `/metrics` on the API port; `on`/`true`/`1` enables, `off`/`false`/`0` disables (default); requires administrator auth |
+| `MQLITE_DIAGNOSTIC_LOG` | optional private rotating JSONL failure/recovery log path for `serve`; parent must exist; use persistent storage |
 | `MQLITE_SYNC` | `NORMAL` (default) / `FULL` / `OFF` / `EXTRA` durability (embedded/serve). An unrecognized value is **rejected at startup** — a typo never silently downgrades to `NORMAL`. |
 | `MQLITE_DLQ_MAX_AGE` · `MQLITE_DLQ_MAX_COUNT` · `MQLITE_DLQ_MAX_BYTES` | broker DLQ retention (`serve`); on by default, disable with `MQLITE_DLQ_RETENTION=off` |
 
@@ -1582,6 +1622,7 @@ MQLITE_DB=file:/data/mq.db MQLITE_TOKENS=mqk_dev mqlite serve --addr :6754
 | Flag | Default | |
 |---|---|---|
 | `--addr` | `:6754` | listen address |
+| `--diagnostic-log <path>` | `MQLITE_DIAGNOSTIC_LOG` (otherwise disabled) | private failure/recovery log; 4 MiB × 4 files; see [diagnostics](https://github.com/mqlitehq/mqlite/blob/main/docs/observability.md#private-diagnostic-log) |
 | `--metrics` | `false` | enable authenticated `/metrics` on the API port; overrides `MQLITE_METRICS`; `--metrics=false` disables |
 | `--insecure-allow-remote` | `false` | with auth disabled, allow a non-loopback bind (otherwise refused) |
 
@@ -1885,7 +1926,7 @@ See also: [api-reference.md](https://github.com/mqlitehq/mqlite/blob/main/docs/a
 [examples.md](https://github.com/mqlitehq/mqlite/blob/main/docs/examples.md) (Go SDK).
 
 
-<!-- ===== mqlite main · source v0.3.2; latest release v0.3.2 · docs/access-keys.md ===== -->
+<!-- ===== mqlite main · source v0.3.3; latest release v0.3.3 · docs/access-keys.md ===== -->
 
 # Access keys
 
@@ -2046,7 +2087,7 @@ revocation state or discard newer credentials. Review keys using a configured
 administrator before reopening traffic. See [backup and upgrade procedures](https://github.com/mqlitehq/mqlite/blob/main/docs/operations.md).
 
 
-<!-- ===== mqlite main · source v0.3.2; latest release v0.3.2 · docs/deployment.md ===== -->
+<!-- ===== mqlite main · source v0.3.3; latest release v0.3.3 · docs/deployment.md ===== -->
 
 # Deploying mqlite
 
@@ -2097,27 +2138,27 @@ and error reference: [api-reference.md](https://github.com/mqlitehq/mqlite/blob/
 ## Docker / GHCR
 
 > **Version and upgrade compatibility.**
-> These instructions target **v0.3.2**, with default port **6754** and schema token **5**.
-> Existing v0.3.0/v0.3.1 databases remain compatible; back up before upgrading and
+> These instructions target **v0.3.3**, with default port **6754** and schema token **5**.
+> Existing v0.3.0/v0.3.1/v0.3.2 databases remain compatible; back up before upgrading and
 > retain a configured administrator. Existing Prometheus scrapers require
 > `MQLITE_METRICS=on` after upgrading; metrics is now disabled by default.
 > Rolling back to v0.3.1 also requires its
 > previous monitoring configuration; v0.3.0 additionally ignores managed keys.
 > **v0.2.0 uses port 8080 and schema token 2.** Its database cannot be opened by
-> v0.3.2: preserve the old binary/database pair and follow the
+> v0.3.3: preserve the old binary/database pair and follow the
 > [upgrade and rollback procedure](https://github.com/mqlitehq/mqlite/blob/main/docs/operations.md#upgrade-and-rollback) before replacing it.
 
 The published image is multi-arch (amd64 + arm64):
 
 ```bash
-# v0.3.2, default port 6754
+# v0.3.3, default port 6754
 docker run -d --name mqlite -p 6754:6754 \
   -v mqlite-data:/data \
   -e MQLITE_DB=file:/data/mq.db \
   -e MQLITE_TOKENS=mqk_prod_CHANGEME \
   -e MQLITE_MONITOR_TOKENS=mqk_monitor_CHANGEME \
   -e MQLITE_SYNC=FULL \
-  ghcr.io/mqlitehq/mqlite:0.3.2
+  ghcr.io/mqlitehq/mqlite:0.3.3
 ```
 
 - The named volume `mqlite-data` persists the SQLite file across restarts.
@@ -2139,7 +2180,7 @@ app            = "your-mqlite"
 primary_region = "sin"            # pick a region near you
 
 [build]
-  image = "ghcr.io/mqlitehq/mqlite:0.3.2"   # pinned image, no build on Fly
+  image = "ghcr.io/mqlitehq/mqlite:0.3.3"   # pinned image, no build on Fly
 
 [env]
   MQLITE_DB = "file:/data/mq.db"            # SQLite on the persistent volume
@@ -2252,11 +2293,11 @@ Follow the [production runbook](https://github.com/mqlitehq/mqlite/blob/main/doc
 online snapshots, offline directory copies, isolated restore validation and rollback.
 Use a fresh restore directory so an old WAL/SHM cannot attach to the snapshot.
 
-**v0.2.0 databases use schema 2; v0.3.0 through v0.3.2 use schema 5.** There is no
+**v0.2.0 databases use schema 2; v0.3.0 through v0.3.3 use schema 5.** There is no
 in-place migration from schema 2. Before upgrading from v0.2.0, account for retained
-work in every state, keep the old binary/database pair, and create the v0.3.2
+work in every state, keep the old binary/database pair, and create the v0.3.3
 database separately. Upgrading from v0.3.0 reuses the existing database and adds
-managed-key storage; upgrading from v0.3.1 leaves the schema unchanged. Take a
+managed-key storage; upgrading from v0.3.1/v0.3.2 leaves the schema unchanged. Take a
 consistent backup first. `Observe` and configured monitor credentials require
 v0.3.2; restore compatible monitoring configuration when rolling back.
 See [upgrade and rollback](https://github.com/mqlitehq/mqlite/blob/main/docs/operations.md#upgrade-and-rollback).
@@ -2306,7 +2347,7 @@ curl -H "Authorization: Bearer $T" -H 'Content-Type: application/json' \
 - [ ] Enable `MQLITE_METRICS=on` for authenticated Prometheus scraping on the API port; use private routing or public-ingress path filtering to keep `/metrics` private — see [observability.md](https://github.com/mqlitehq/mqlite/blob/main/docs/observability.md).
 
 
-<!-- ===== mqlite main · source v0.3.2; latest release v0.3.2 · docs/observability.md ===== -->
+<!-- ===== mqlite main · source v0.3.3; latest release v0.3.3 · docs/observability.md ===== -->
 
 # Observability
 
@@ -2350,6 +2391,66 @@ credential remains required on private networks.
 For a runnable broker, Prometheus and Grafana stack, see
 [the local observability demo](https://github.com/mqlitehq/mqlite/blob/main/ops/observability/README.md). For an existing
 platform, use the [cloud and Kubernetes guide](https://github.com/mqlitehq/mqlite/blob/main/docs/observability-cloud.md).
+
+## Maintenance failure diagnosis
+
+Brokers running v0.3.3 or later add optional `maintenance[].diagnostics` and
+`storage.operations[].last_error` fields to Observe. Older snapshots remain valid;
+missing diagnostics mean **not reported**, not healthy. Existing Prometheus labels
+and cumulative error buckets are unchanged.
+
+Each maintenance task reports its latest outcome (`never`, `ok`, `failed`, or
+`interrupted`), last run time, consecutive failed passes, recovery time, and the
+latest eight failed steps. One pass can fail at several steps but increments the
+failure counter only once. Canceled/closed operations remain interruptions. A
+successful pass clears the consecutive streak and records recovery; it does not
+clear cumulative failures or history. All snapshot counters/history reset when the
+broker process restarts. A failed poll makes the console's previous data stale.
+
+Error details include a timestamp, generated explanation, category, HTTP status or
+SQLite code where available, and an opaque fingerprint. Categories distinguish
+provider authentication, rate limits, provider availability, DNS, TLS, timeouts,
+protocol, constraints, schema, and storage failures. These descriptions summarize
+the observed error; an HTTP 503 alone cannot establish the provider's root cause.
+Unknown commit outcomes remain explicitly ambiguous and must be reconciled before
+retrying. Diagnostic changes do not broaden write retries.
+
+A storage bucket's count covers **all** occurrences in that legacy bucket;
+`last_error` describes only its latest failure. Neither a historical count nor a
+successful maintenance pass proves message integrity or high availability. Empty
+queues still run background database maintenance, so failures can occur while no
+clients are sending or receiving.
+
+### Private diagnostic log
+
+Structured stderr events `maintenance.failure`, `maintenance.interrupted`,
+`maintenance.recovered`, `storage.interrupted`, and `storage.failure` record the task/step or operation.
+Failure events include the same fingerprint as Observe and a bounded provider
+explanation with common credentials and URLs redacted. Public monitor responses
+contain generated explanations only, never the raw provider/SQL error. Private
+logs may still contain sensitive database error context; keep them operator-only.
+
+To retain evidence beyond the platform's stderr retention, enable a separate file:
+
+```sh
+MQLITE_DIAGNOSTIC_LOG=/data/mqlite-diagnostics.jsonl mqlite serve
+# Equivalent: mqlite serve --diagnostic-log /data/mqlite-diagnostics.jsonl
+```
+
+The parent directory must exist. The file is disabled by default; an invalid
+configured path fails startup. It appends across restarts, uses mode `0600`, syncs
+each record, and rotates at 4 MiB with three archives (`.1` through `.3`, newest
+first): at most 16 MiB of retained diagnostic records, not a time-based retention
+promise. Routine requests and successful maintenance passes are excluded. A
+successful recovery is logged once per failure streak. A disk write failure still
+emits the original event to stderr plus one warning per logging failure streak.
+
+Mount the file on persistent storage to survive machine replacement/deployment;
+Fly's ephemeral root filesystem is insufficient. Export archives elsewhere if
+evidence must survive volume loss or sustained errors filling the rotation budget.
+The file is independent of the queue database, and is not replayed into Observe
+history after restart. It is diagnostic evidence, not a message backup or failover
+mechanism. Embedded applications can supply their own logger with `WithLogger`.
 
 ## Read-only monitoring access
 
@@ -2648,8 +2749,13 @@ interrupts only that isolated stack to verify scrape-auth recovery, Grafana
 connection failure/recovery and persistence/counter reset after broker restart.
 Managed-cloud/Kubernetes deployment validation remains environment-specific.
 
+DeleteQueue is an additive RPC observation extension. New brokers include its
+request counters and the `queue_not_empty` and `queue_changed` outcomes. The required decoder baseline
+is unchanged so new clients continue to accept observations from older brokers.
+An occupied-queue rejection is an application outcome, not a storage failure.
 
-<!-- ===== mqlite main · source v0.3.2; latest release v0.3.2 · docs/observability-cloud.md ===== -->
+
+<!-- ===== mqlite main · source v0.3.3; latest release v0.3.3 · docs/observability-cloud.md ===== -->
 
 # Cloud and Kubernetes monitoring
 
@@ -2798,11 +2904,11 @@ validation steps. Local integration evidence must not be presented as a managed-
 deployment test.
 
 
-<!-- ===== mqlite main · source v0.3.2; latest release v0.3.2 · docs/operations.md ===== -->
+<!-- ===== mqlite main · source v0.3.3; latest release v0.3.3 · docs/operations.md ===== -->
 
 # Production operations
 
-This runbook covers v0.3.2 and upgrades from v0.3.0/v0.3.1 (port 6754, schema token 5).
+This runbook covers v0.3.3 and upgrades from v0.3.0/v0.3.1/v0.3.2 (port 6754, schema token 5).
 Runtime-managed access keys require v0.3.1; v0.3.0 supports configured tokens only.
 Unified `Observe` and configured monitor credentials require v0.3.2.
 Upgrading from v0.2.0 changes both its default port (8080) and schema token (2);
@@ -2994,6 +3100,15 @@ establish database compatibility, and MQLite does not run schema migrations.
 | Rollback before candidate accepts business writes | Stop the candidate and restore the matched old binary plus old snapshot/configuration; verify before resuming clients. |
 | Rollback after candidate accepts business writes | First preserve candidate data and reconcile new messages and external effects. Blindly restoring the old snapshot would discard those new writes. |
 
+For **v0.3.2 → v0.3.3**, schema token **5**, port **6754**, message data and
+managed keys remain compatible. Queue generations use additive rows in the existing
+metadata table; no table migration is required. New diagnostics do not change the
+storage retry policy. If enabled, keep the private diagnostic log on persistent storage
+and retain it separately from database backups. Rolling back to v0.3.2 preserves data
+but does not support DeleteQueue or detailed diagnostics; remove `--diagnostic-log`
+from older CLI invocations. Stop clients before retiring a queue name and keep the
+original deletion generation when reconciling uncertain outcomes.
+
 For **v0.3.1 → v0.3.2**, schema token **5**, port **6754**, message data and
 managed-key storage remain unchanged. Follow the same-schema procedure above;
 do not overlap brokers. Validate existing key permissions and a complete canary
@@ -3050,7 +3165,7 @@ in this release, so do not improvise a direct SQL table copy between schemas.
 rules behind these procedures.
 
 
-<!-- ===== mqlite main · source v0.3.2; latest release v0.3.2 · docs/mcp.md ===== -->
+<!-- ===== mqlite main · source v0.3.3; latest release v0.3.3 · docs/mcp.md ===== -->
 
 # MCP server (`mqlite-mcp`)
 
@@ -3184,7 +3299,7 @@ Environment tokens are not listed or revocable through these tools. Key tools ar
 unavailable when broker authentication is explicitly disabled.
 
 
-<!-- ===== mqlite main · source v0.3.2; latest release v0.3.2 · docs/examples.md ===== -->
+<!-- ===== mqlite main · source v0.3.3; latest release v0.3.3 · docs/examples.md ===== -->
 
 # Examples
 

@@ -29,7 +29,7 @@
   </div>
 </div></nav>
 <div class="wrap">
-  <div class="stamp">Generated from <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/observability.md">mqlite main · docs/observability.md</a> — source v0.3.2; latest release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.3.2">v0.3.2</a>.
+  <div class="stamp">Generated from <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/observability.md">mqlite main · docs/observability.md</a> — source v0.3.3; latest release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.3.3">v0.3.3</a>.
   These docs track main; check release notes for published artifacts. Edit the canonical Markdown and re-run <code>tools/build.mjs</code>.</div>
   <main class="prose">
 <h1 id="observability">Observability</h1>
@@ -65,6 +65,54 @@ credential remains required on private networks.</p>
 <p>For a runnable broker, Prometheus and Grafana stack, see
 <a href="https://github.com/mqlitehq/mqlite/blob/main/ops/observability/README.md">the local observability demo</a>. For an existing
 platform, use the <a href="observability-cloud.html">cloud and Kubernetes guide</a>.</p>
+<h2 id="maintenance-failure-diagnosis">Maintenance failure diagnosis</h2>
+<p>Brokers running v0.3.3 or later add optional <code>maintenance[].diagnostics</code> and
+<code>storage.operations[].last_error</code> fields to Observe. Older snapshots remain valid;
+missing diagnostics mean <strong>not reported</strong>, not healthy. Existing Prometheus labels
+and cumulative error buckets are unchanged.</p>
+<p>Each maintenance task reports its latest outcome (<code>never</code>, <code>ok</code>, <code>failed</code>, or
+<code>interrupted</code>), last run time, consecutive failed passes, recovery time, and the
+latest eight failed steps. One pass can fail at several steps but increments the
+failure counter only once. Canceled/closed operations remain interruptions. A
+successful pass clears the consecutive streak and records recovery; it does not
+clear cumulative failures or history. All snapshot counters/history reset when the
+broker process restarts. A failed poll makes the console&#39;s previous data stale.</p>
+<p>Error details include a timestamp, generated explanation, category, HTTP status or
+SQLite code where available, and an opaque fingerprint. Categories distinguish
+provider authentication, rate limits, provider availability, DNS, TLS, timeouts,
+protocol, constraints, schema, and storage failures. These descriptions summarize
+the observed error; an HTTP 503 alone cannot establish the provider&#39;s root cause.
+Unknown commit outcomes remain explicitly ambiguous and must be reconciled before
+retrying. Diagnostic changes do not broaden write retries.</p>
+<p>A storage bucket&#39;s count covers <strong>all</strong> occurrences in that legacy bucket;
+<code>last_error</code> describes only its latest failure. Neither a historical count nor a
+successful maintenance pass proves message integrity or high availability. Empty
+queues still run background database maintenance, so failures can occur while no
+clients are sending or receiving.</p>
+<h3 id="private-diagnostic-log">Private diagnostic log</h3>
+<p>Structured stderr events <code>maintenance.failure</code>, <code>maintenance.interrupted</code>,
+<code>maintenance.recovered</code>, <code>storage.interrupted</code>, and <code>storage.failure</code> record the task/step or operation.
+Failure events include the same fingerprint as Observe and a bounded provider
+explanation with common credentials and URLs redacted. Public monitor responses
+contain generated explanations only, never the raw provider/SQL error. Private
+logs may still contain sensitive database error context; keep them operator-only.</p>
+<p>To retain evidence beyond the platform&#39;s stderr retention, enable a separate file:</p>
+<pre><code class="language-sh">MQLITE_DIAGNOSTIC_LOG=/data/mqlite-diagnostics.jsonl mqlite serve
+# Equivalent: mqlite serve --diagnostic-log /data/mqlite-diagnostics.jsonl
+</code></pre>
+<p>The parent directory must exist. The file is disabled by default; an invalid
+configured path fails startup. It appends across restarts, uses mode <code>0600</code>, syncs
+each record, and rotates at 4 MiB with three archives (<code>.1</code> through <code>.3</code>, newest
+first): at most 16 MiB of retained diagnostic records, not a time-based retention
+promise. Routine requests and successful maintenance passes are excluded. A
+successful recovery is logged once per failure streak. A disk write failure still
+emits the original event to stderr plus one warning per logging failure streak.</p>
+<p>Mount the file on persistent storage to survive machine replacement/deployment;
+Fly&#39;s ephemeral root filesystem is insufficient. Export archives elsewhere if
+evidence must survive volume loss or sustained errors filling the rotation budget.
+The file is independent of the queue database, and is not replayed into Observe
+history after restart. It is diagnostic evidence, not a message backup or failover
+mechanism. Embedded applications can supply their own logger with <code>WithLogger</code>.</p>
 <h2 id="read-only-monitoring-access">Read-only monitoring access</h2>
 <p>Configure a separate scraper credential in <code>MQLITE_MONITOR_TOKENS</code>, alongside
 configured administrator credentials in <code>MQLITE_TOKENS</code>. Monitoring credentials
@@ -508,6 +556,10 @@ invalid queries and missing datasources verify that the checker rejects failures
 interrupts only that isolated stack to verify scrape-auth recovery, Grafana
 connection failure/recovery and persistence/counter reset after broker restart.
 Managed-cloud/Kubernetes deployment validation remains environment-specific.</p>
+<p>DeleteQueue is an additive RPC observation extension. New brokers include its
+request counters and the <code>queue_not_empty</code> and <code>queue_changed</code> outcomes. The required decoder baseline
+is unchanged so new clients continue to accept observations from older brokers.
+An occupied-queue rejection is an application outcome, not a storage failure.</p>
 
   </main>
 </div>
