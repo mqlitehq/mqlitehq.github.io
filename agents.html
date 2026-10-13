@@ -56,10 +56,10 @@
 
 <div class="wrap">
 
-<div class="stamp">These docs track <a href="https://github.com/mqlitehq/mqlite/tree/main">main · source v0.3.2</a>.
-  The latest release is <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.3.2">v0.3.2</a>
+<div class="stamp">These docs track <a href="https://github.com/mqlitehq/mqlite/tree/main">main · source v0.3.3</a>.
+  The latest release is <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.3.3">v0.3.3</a>
   (default port 6754); installation examples pin that release. Use the
-  <a href="https://github.com/mqlitehq/mqlite/tree/v0.3.2/docs">v0.3.2 docs</a>
+  <a href="https://github.com/mqlitehq/mqlite/tree/v0.3.3/docs">v0.3.3 docs</a>
   for the versioned reference, and follow the <a href="operations.html#upgrade-and-rollback">upgrade procedure</a>
   when moving from v0.2.0 (port 8080, schema token 2) to v0.3.0 or later (schema token 5).</div>
 
@@ -74,9 +74,9 @@
 <section class="blk">
   <h2># 1 · MCP server (recommended)</h2>
   <p class="lede"><code>mqlite-mcp</code> ships in the same repo — a dependency-free stdio MCP server that turns each tool call into one HTTP POST to the broker.</p>
-  <p>Install v0.3.2 with <code>go install github.com/mqlitehq/mqlite/cmd/mqlite-mcp@v0.3.2</code>,
+  <p>Install v0.3.3 with <code>go install github.com/mqlitehq/mqlite/cmd/mqlite-mcp@v0.3.3</code>,
   or use <code>mqlite-mcp</code> from a
-  <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.3.2">v0.3.2 release archive</a>,
+  <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.3.3">v0.3.3 release archive</a>,
   then register the installed binary with your MCP host:</p>
 <pre><code class="language-json">{
   "mcpServers": {
@@ -89,7 +89,7 @@
     }
   }
 }</code></pre>
-  <p>v0.3.2 provides <strong>18 tools</strong>. The <code>observe</code> tool requires both the broker and MCP server at v0.3.2 or later. Key-management tools require v0.3.1 or later:</p>
+  <p>v0.3.3 provides <strong>18 tools</strong>. The <code>observe</code> tool requires both the broker and MCP server at v0.3.2 or later. Key-management tools require v0.3.1 or later:</p>
   <div class="tbl"><table>
     <tr><th>Tool</th><th>Does</th></tr>
     <tr><td><code>list_queues</code></td><td>list queues / subscriptions</td></tr>
@@ -101,14 +101,14 @@
     <tr><td><code>defer</code> / <code>receive_deferred</code></td><td>set a locked message aside by <code>seq_number</code>, then fetch deferred messages back by seq</td></tr>
     <tr><td><code>peek</code></td><td>browse without locking (optionally by state)</td></tr>
     <tr><td><code>stats</code></td><td>queue depth by state</td></tr>
-    <tr><td><code>observe</code></td><td>broker health, queue snapshots, message effects, storage and request measurements (v0.3.2)</td></tr>
+    <tr><td><code>observe</code></td><td>broker health, queue snapshots, message effects, storage and request measurements (since v0.3.2)</td></tr>
     <tr><td><code>redrive</code> / <code>purge</code></td><td>move dead letters back / delete them</td></tr>
     <tr><td><code>create_key</code></td><td>issue a key with <code>id</code>, <code>name</code>, <code>permissions</code> and optional <code>expires_at_ms</code>; token returned once</td></tr>
     <tr><td><code>list_keys</code></td><td>list public metadata with <code>after_id</code> / <code>limit</code> / <code>sort</code>, including revoked and expired keys</td></tr>
     <tr><td><code>revoke_key</code></td><td>revoke by public <code>id</code>; repeated revocation is safe</td></tr>
   </table></div>
   <p>Key tools require <code>manage</code>; both configured administrators and managed <code>manage</code> keys may issue new administrator keys. Give message producers <code>send</code> and consumers <code>listen</code>. A consumer may settle or delete messages; <code>listen</code> is not an audit-only role.</p>
-  <p>For a monitoring-only MCP connection in v0.3.2, put a configured <code>MQLITE_MONITOR_TOKENS</code> credential into the client's <code>MQLITE_TOKEN</code>. It can call <code>observe</code>, but cannot read message bodies, consume messages, change queues or issue keys. Use the returned collection status and availability fields; unavailable measurements are not healthy zeroes. See <a href="observability.html">Observability</a>. The <code>observe</code> tool works independently of the optional Prometheus switch; <code>--metrics</code> only enables authenticated <code>/metrics</code> on the API port.</p>
+  <p>For a monitoring-only MCP connection in v0.3.3, put a configured <code>MQLITE_MONITOR_TOKENS</code> credential into the client's <code>MQLITE_TOKEN</code>. It can call <code>observe</code>, but cannot read message bodies, consume messages, change queues or issue keys. Use the returned collection status and availability fields; unavailable measurements are not healthy zeroes. See <a href="observability.html">Observability</a>. The <code>observe</code> tool works independently of the optional Prometheus switch; <code>--metrics</code> only enables authenticated <code>/metrics</code> on the API port.</p>
   <h3 class="sub">Create a producer key</h3>
   <p>Choose and retain a unique 32-character lowercase hex public ID before calling the tool:</p>
 <pre><code class="language-json">{

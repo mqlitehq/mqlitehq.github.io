@@ -29,7 +29,7 @@
   </div>
 </div></nav>
 <div class="wrap">
-  <div class="stamp">Generated from <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/cli.md">mqlite main · docs/cli.md</a> — source v0.3.2; latest release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.3.2">v0.3.2</a>.
+  <div class="stamp">Generated from <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/cli.md">mqlite main · docs/cli.md</a> — source v0.3.3; latest release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.3.3">v0.3.3</a>.
   These docs track main; check release notes for published artifacts. Edit the canonical Markdown and re-run <code>tools/build.mjs</code>.</div>
   <main class="prose">
 <h1 id="cli-reference-mqlite">CLI reference (<code>mqlite</code>)</h1>
@@ -74,6 +74,10 @@ broker over HTTP. <strong>Client mode wins if <code>MQLITE_ENDPOINT</code> is se
 <tr>
 <td><code>MQLITE_METRICS</code></td>
 <td>authenticated Prometheus <code>/metrics</code> on the API port; <code>on</code>/<code>true</code>/<code>1</code> enables, <code>off</code>/<code>false</code>/<code>0</code> disables (default); requires administrator auth</td>
+</tr>
+<tr>
+<td><code>MQLITE_DIAGNOSTIC_LOG</code></td>
+<td>optional private rotating JSONL failure/recovery log path for <code>serve</code>; parent must exist; use persistent storage</td>
 </tr>
 <tr>
 <td><code>MQLITE_SYNC</code></td>
@@ -152,6 +156,11 @@ a broker (<code>mqlite serve</code> + <code>--endpoint</code>) when you need man
 <td><code>--addr</code></td>
 <td><code>:6754</code></td>
 <td>listen address</td>
+</tr>
+<tr>
+<td><code>--diagnostic-log &lt;path&gt;</code></td>
+<td><code>MQLITE_DIAGNOSTIC_LOG</code> (otherwise disabled)</td>
+<td>private failure/recovery log; 4 MiB × 4 files; see <a href="observability.html#private-diagnostic-log">diagnostics</a></td>
 </tr>
 <tr>
 <td><code>--metrics</code></td>
