@@ -29,11 +29,13 @@
   </div>
 </div></nav>
 <div class="wrap">
-  <div class="stamp">Generated from <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/operations.md">mqlite main · docs/operations.md</a> — source v0.3.3; latest release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.3.3">v0.3.3</a>.
+  <div class="stamp">Generated from <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/operations.md">mqlite main · docs/operations.md</a> — source v0.4.0; latest release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.0">v0.4.0</a>.
   These docs track main; check release notes for published artifacts. Edit the canonical Markdown and re-run <code>tools/build.mjs</code>.</div>
   <main class="prose">
 <h1 id="production-operations">Production operations</h1>
-<p>This runbook covers v0.3.3 and upgrades from v0.3.0/v0.3.1/v0.3.2 (port 6754, schema token 5).
+<p>This runbook covers v0.4.0 (port 6754, schema token 7) and
+v0.3.0/v0.3.1/v0.3.2 (port 6754, schema token 5). v0.3.3 is retracted; use
+v0.3.2 or v0.4.0 and later.
 Runtime-managed access keys require v0.3.1; v0.3.0 supports configured tokens only.
 Unified <code>Observe</code> and configured monitor credentials require v0.3.2.
 Upgrading from v0.2.0 changes both its default port (8080) and schema token (2);
@@ -62,6 +64,31 @@ snapshot can repeat work whose external side effects already happened. Reuse
 stable <code>MessageID</code>/body, receive <code>AttemptID</code>, and the exact settlement request
 when retrying within their documented retention windows; do not treat an HTTP
 timeout as proof that a write failed.</li>
+<li>Give one controller exclusive ownership of queue or subscription deletion and
+same-name recreation. Quiesce producers and consumers. Use the empty-only
+default unless permanent loss is intended; force also discards locked work whose
+external effects may already have happened. An accepted resource enters durable
+<code>deleting</code>, stops serving data and reserves its name; an accepted subscription
+also leaves topic fan-out immediately. Confirm the name is absent before
+recreating it. Keep the name reserved while reconciling an uncertain result,
+and never replay an old delete after a replacement exists.</li>
+<li>Treat the default 10,000 active-plus-deleting subscription limit as a metadata
+safety ceiling. Choose a lower limit when the application needs a stricter
+bound. Measure fan-out latency, database growth and observation cost at the
+expected active count; each matching subscription creates another message copy.
+Stable reply subscriptions plus <code>correlation_id</code> scale better than one
+subscription per request. If temporary subscriptions are required, use globally
+unique one-use names and rate-limit creation/deletion so bounded cleanup can keep
+up.</li>
+<li>Treat a fixed subscription TTL as forgotten-cleanup insurance. The deadline is
+absolute and expiry authorizes discarding every retained state; traffic and
+filter edits do not renew it. Delete explicitly on normal completion, stagger
+large expiry waves, and include unconsumed body bytes plus post-expiry cleanup
+time in capacity planning.</li>
+<li>Keep the broker host&#39;s UTC clock synchronized and alert on large time steps.
+Subscription deadlines, scheduled delivery, message TTL and lock expiry all use
+that clock. A forward step can make deadlines arrive early; a backward step can
+delay a subscription expiry that has not yet been durably marked <code>deleting</code>.</li>
 </ul>
 <p>Choose and record the application&#39;s recovery objectives before launch: acceptable
 snapshot age (RPO), recovery time (RTO), backlog age, and capacity limits. Measure
@@ -134,6 +161,8 @@ MQ_SNAPSHOT=&quot;$MQ_BACKUP_DIR/mq-$(date -u +%Y%m%dT%H%M%SZ).db&quot;
 sqlite3 -readonly &quot;$MQ_DB&quot; &#39;.timeout 10000&#39; &quot;VACUUM INTO &#39;$MQ_SNAPSHOT&#39;&quot;
 test &quot;$(sqlite3 -readonly &quot;$MQ_SNAPSHOT&quot; &#39;PRAGMA integrity_check&#39;)&quot; = ok
 test -z &quot;$(sqlite3 -readonly &quot;$MQ_SNAPSHOT&quot; &#39;PRAGMA foreign_key_check&#39;)&quot;
+test &quot;$(sqlite3 -readonly &quot;$MQ_SNAPSHOT&quot; \
+  &#39;SELECT COUNT(*) FROM messages m LEFT JOIN queues q ON q.name=m.queue WHERE q.name IS NULL&#39;)&quot; = 0
 sqlite3 -readonly &quot;$MQ_SNAPSHOT&quot; &quot;SELECT value FROM meta WHERE key=&#39;schema_version&#39;&quot;
 sha256sum &quot;$MQ_SNAPSHOT&quot; &gt; &quot;$MQ_SNAPSHOT.sha256&quot;
 </code></pre>
@@ -161,8 +190,11 @@ is still writing needs its own documented consistency guarantees.</p>
 <h2 id="restore-into-a-fresh-directory">Restore into a fresh directory</h2>
 <ol>
 <li>Keep the original data and backup unchanged. Verify the backup checksum and
-run <code>integrity_check</code> and <code>foreign_key_check</code> on the saved snapshot or a working
-copy. Record its schema token and the binary version that created it.</li>
+run <code>integrity_check</code>, <code>foreign_key_check</code>, and the documented message-parent
+orphan query on the saved snapshot or a working copy. Engine writes enforce
+the message relation transactionally and indexed triggers guard parent
+retirement, so it is outside SQLite&#39;s <code>foreign_key_check</code> report. Record the
+schema token and the binary version that created it.</li>
 <li>Create an empty restore directory or volume. An online <code>VACUUM INTO</code> snapshot is
 a standalone DB; copy that file into the empty directory. For an offline copy,
 restore the complete matching directory. Never place a snapshot beside WAL/SHM
@@ -174,8 +206,10 @@ business clients remain stopped. Do not attach the original database as well.</l
 recorded expectations. On startup every orphaned lock is reclaimed: below the
 queue&#39;s delivery limit it becomes active; at the limit it goes to DLQ with
 <code>MaxDeliveryCountExceeded</code>. Delivery count and payload survive, and the old lock
-token is invalid. Old receive-attempt snapshots may replay old handles; that
-does not give those handles ownership of a recovered message.</li>
+token is invalid. A queue already marked <code>deleting</code> never participates in lock
+recovery; startup first continues one bounded cleanup pass, then the background
+loop resumes it. Old receive-attempt snapshots may replay old handles for active
+queues; that does not give those handles ownership of a recovered message.</li>
 <li>Check deferred/scheduled/DLQ work and topic filters, then run the authenticated
 canary. A restore replays the snapshot&#39;s state: later completions, sends, dedup
 records and external business effects require reconciliation against the
@@ -215,14 +249,29 @@ establish database compatibility, and MQLite does not run schema migrations.</p>
 <td>First preserve candidate data and reconcile new messages and external effects. Blindly restoring the old snapshot would discard those new writes.</td>
 </tr>
 </tbody></table>
-<p>For <strong>v0.3.2 → v0.3.3</strong>, schema token <strong>5</strong>, port <strong>6754</strong>, message data and
-managed keys remain compatible. Queue generations use additive rows in the existing
-metadata table; no table migration is required. New diagnostics do not change the
-storage retry policy. If enabled, keep the private diagnostic log on persistent storage
-and retain it separately from database backups. Rolling back to v0.3.2 preserves data
-but does not support DeleteQueue or detailed diagnostics; remove <code>--diagnostic-log</code>
-from older CLI invocations. Stop clients before retiring a queue name and keep the
-original deletion generation when reconciling uncertain outcomes.</p>
+<p>For <strong>v0.3.0, v0.3.1, v0.3.2 or retracted v0.3.3 → v0.4.0</strong>, schema changes
+from <strong>5 → 7</strong> while port <strong>6754</strong> stays unchanged. Durable queue lifecycle and
+fixed subscription-expiry columns and indexes make the database incompatible;
+there is no in-place migration. Schema 6 belonged only to an intermediate
+unreleased lifecycle build, was never tagged, and is refused too.
+Follow the different-token procedure above: stop producers and consumers, take a
+consistent schema-5 backup, account for every retained message state and managed
+key, preserve the matching old binary/database pair, and start v0.4.0 with
+a fresh database. Do not edit the schema token or point schema-7 code at the old
+file. Move work through an application-level drain/replay process with stable
+business identities if it must survive the cutover.</p>
+<p>v0.4.0 clients also change the deletion contract to <code>{name,force?}</code> with a typed
+<code>{deleted,state}</code> result; update broker, SDK, CLI, MCP and console together. A
+rollback after schema-7 accepts writes requires preserving and reconciling those
+writes before restoring the schema-5 snapshot. If enabled, retain the private
+diagnostic log separately from database backups.</p>
+<p>Before the cutover, replace Prometheus <code>mqlite_queue_total</code> queries with
+<code>mqlite_queue_retained_messages</code>. Replace
+<code>mqlite_queue_oldest_message_age_ms</code> with
+<code>mqlite_queue_oldest_message_age_seconds</code> and divide thresholds by 1,000. v0.4.0
+removes both deprecated aliases; native <code>Observe</code> JSON keeps
+<code>queues[].oldest_message_age_ms</code>. Validate recording rules, alerts and dashboards
+against the candidate before resuming traffic.</p>
 <p>For <strong>v0.3.1 → v0.3.2</strong>, schema token <strong>5</strong>, port <strong>6754</strong>, message data and
 managed-key storage remain unchanged. Follow the same-schema procedure above;
 do not overlap brokers. Validate existing key permissions and a complete canary
@@ -239,7 +288,8 @@ restore the previous authorized scraper/rule configuration; the old <code>/metri
 endpoint requires an administrator. Keep administrator authentication enabled.
 Preserve writes accepted by the candidate rather than blindly restoring the
 pre-upgrade snapshot. The two deprecated metric aliases remain available in
-v0.3.2; see <a href="observability.html#compatibility-from-v031">metric compatibility</a>.</p>
+v0.3.2 but are removed in v0.4.0; see
+<a href="observability.html#compatibility-and-v040-migration">metric compatibility</a>.</p>
 <p>For <strong>v0.3.0 → v0.3.1 or v0.3.2</strong>, schema token <strong>5</strong> and the port remain unchanged.
 The candidate adds the independent <code>access_keys</code> table without rewriting existing
 queue or message tables. Rehearse opening a restored copy first. Rolling back to
@@ -282,6 +332,26 @@ in this release, so do not improvise a direct SQL table copy between schemas.</p
 <td>Old backlog / growing DLQ</td>
 <td>Check consumers, lock expiry/renewal and handler failures. Inspect reasons and payloads; fix the cause before bounded redrive.</td>
 <td>Backlog age falls and verified redriven identities complete.</td>
+</tr>
+<tr>
+<td>Queue or subscription remains <code>deleting</code></td>
+<td>Keep producers stopped and the name reserved. Check storage availability, free disk and <code>resource_cleanup</code>, <code>subscription_expiry</code>, and <code>lifecycle</code> maintenance failures; do not remove lifecycle rows or subscription mappings with SQL. Cleanup is deliberately bounded and resumes after restart.</td>
+<td><code>list</code> or <code>list-subscriptions --include-deleting</code> no longer contains the name; only then may the owner recreate it. Logical free pages can be reused before the DB/WAL files shrink.</td>
+</tr>
+<tr>
+<td>Many subscriptions expire together</td>
+<td>Stop additional temporary-subscription churn. Inspect active plus deleting inventory, retained message bytes, storage latency, capacity and both expiry/lifecycle maintenance diagnostics. Do not recreate names while rows remain.</td>
+<td>Expired rows were unavailable at their exact deadline, deleting inventory and capacity usage converge, and foreground latency remains within the workload&#39;s measured bound.</td>
+</tr>
+<tr>
+<td>Subscription creation returns <code>resource_exhausted</code></td>
+<td>Stop creation churn and inspect active plus deleting subscriptions with paged listing. Drain or explicitly force-retire abandoned entries, then let bounded cleanup finish. Raising the limit also raises metadata, fan-out and observation costs.</td>
+<td>Deleting entries disappear, capacity becomes available and publish/observe latency remains within the workload&#39;s measured bound.</td>
+</tr>
+<tr>
+<td>An older database exposes a <code>kind=subscription</code> queue with no subscription mapping</td>
+<td>Wait for a capacity slot, call <code>Subscribe</code> with the intended topic and existing backing-queue name to restore the mapping, then keep it or retire it through <code>DeleteSubscription</code>. Never repair MQLite-owned tables with direct SQL.</td>
+<td>The exact topic/name appears in <code>list-subscriptions</code>; if retired, it disappears after bounded cleanup.</td>
 </tr>
 <tr>
 <td>Storage/remote timeouts</td>

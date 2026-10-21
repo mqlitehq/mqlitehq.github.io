@@ -29,7 +29,7 @@
   </div>
 </div></nav>
 <div class="wrap">
-  <div class="stamp">Generated from <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/api-reference.md">mqlite main · docs/api-reference.md</a> — source v0.3.3; latest release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.3.3">v0.3.3</a>.
+  <div class="stamp">Generated from <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/api-reference.md">mqlite main · docs/api-reference.md</a> — source v0.4.0; latest release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.0">v0.4.0</a>.
   These docs track main; check release notes for published artifacts. Edit the canonical Markdown and re-run <code>tools/build.mjs</code>.</div>
   <main class="prose">
 <h1 id="mqlite-http-api-reference">mqlite HTTP API reference</h1>
@@ -93,6 +93,11 @@ reasonable (they count toward the JSON request you send, not toward the body cap
 <td><code>Peek</code> <code>max</code></td>
 <td>32 default, 1000 max</td>
 <td>request field</td>
+</tr>
+<tr>
+<td>retained subscriptions</td>
+<td>10,000 active + deleting</td>
+<td><code>MQLITE_MAX_SUBSCRIPTIONS</code> (serve) / <code>Options.MaxSubscriptions</code> or <code>WithMaxSubscriptions</code> (embedded)</td>
 </tr>
 <tr>
 <td>filter <code>expr</code> source</td>
@@ -552,41 +557,116 @@ from the oldest active or locked message; it is zero when neither state is prese
 <h2 id="adminservice">AdminService</h2>
 <p>All paths are <code>/mqlite.v1.AdminService/&lt;Method&gt;</code>.</p>
 <h3 id="deletequeue">DeleteQueue</h3>
-<p>Available in <strong>v0.3.3 and later</strong>.</p>
-<p>Removes an <strong>empty plain queue</strong>. Requires administrator/manage permission.</p>
+<p>The corrected name-only contract below is available in <strong>v0.4.0 and later</strong>. The
+incompatible request shape from v0.3.3 was withdrawn and that module version is
+retracted.</p>
+<p>Deletes a <strong>plain queue</strong>. Requires administrator/manage permission. The default
+is empty-only; force is a separate, explicit authorization to discard retained
+work.</p>
 <ul>
 <li>POST <code>/mqlite.v1.AdminService/DeleteQueue</code></li>
-<li>Read the queue&#39;s <code>generation</code> from <code>ListQueues</code>, then send
-<code>{&quot;name&quot;:&quot;orders&quot;,&quot;generation&quot;:&quot;&lt;value from ListQueues&gt;&quot;}</code>.
-Response: <code>{&quot;deleted&quot;:true}</code>. Missing generation returns HTTP 400.</li>
-<li>The generation must still match inside the deletion transaction. HTTP 409,
-<code>queue_changed</code>, means the name now identifies a replacement; the request did
-not delete it. Preserve the original generation when retrying/reconciling.</li>
-<li>All message states block deletion, including locked, scheduled, deferred and
-dead-lettered messages: HTTP 409, <code>queue_not_empty</code>. Drain or settle them first.</li>
+<li>Request: <code>{&quot;name&quot;:&quot;orders&quot;}</code> or <code>{&quot;name&quot;:&quot;orders&quot;,&quot;force&quot;:true}</code>.</li>
+<li>A completed deletion returns <code>{&quot;deleted&quot;:true,&quot;state&quot;:&quot;deleted&quot;}</code>. If bounded
+cleanup remains, acceptance returns
+<code>{&quot;deleted&quot;:false,&quot;state&quot;:&quot;deleting&quot;}</code>. Both are successful, authoritative
+outcomes; any other acknowledgement shape is <code>outcome_unknown</code> to a client.</li>
+<li>Without force, any retained message row blocks deletion, including active,
+locked, scheduled, deferred, completed and dead-lettered states: HTTP 409,
+<code>queue_not_empty</code>. Drain or settle them first. With force, all of those rows are
+permanently discarded. A locked delivery may already have caused an external
+side effect; deleting its broker record cannot undo that effect.</li>
 <li>Subscription backing queues are rejected with HTTP 400, <code>invalid_argument</code>;
 this operation does not remove topic subscriptions.</li>
-<li>Missing queues return HTTP 404, <code>not_found</code>. Queue configuration and per-queue
-deduplication, settlement receipts and receive-attempt records are removed in
-the same transaction. Recreating the name starts with fresh auxiliary records;
-message sequence numbers are not reset. Process event counters remain historical.</li>
+<li>Acceptance durably changes the queue to <code>deleting</code> before cleanup. From that
+point, queue operations are rejected without taking effect. Name-addressed
+operations such as Send, Receive, Peek and Stats return <code>not_found</code>; a stale
+lock settlement may instead report <code>lock_lost</code>. An existing long poll is woken,
+<code>CreateQueue</code> with that name returns
+<code>name_conflict</code>, and <code>ListQueues</code> continues to expose the reserved name with
+<code>state:&quot;deleting&quot;</code>. The discard authorization is durable, and background
+cleanup needs no follow-up delete.</li>
+<li>One foreground call removes at most 1,000 physical queue-owned rows and targets
+about 8 MiB. A single larger row is still removed so cleanup can progress. A
+pending delete wakes a background pass that globally caps cleanup at 4,096 rows,
+about 8 MiB and 32 queues on a local store. Further passes are paced one second
+apart; an idle broker does not poll for lifecycle work. A remote Turso/libSQL pass handles one queue,
+which bounds network round trips inside the write transaction. The persisted
+cursor rotates through pending names fairly on both backends, so a large or
+bursty deletion cannot monopolize the single writer.
+Startup resumes one bounded pass before crash recovery. The row and name vanish
+only after messages, deduplication, settlement receipts and receive-attempt
+records are gone. Message sequence numbers are not reset, and process event
+counters remain historical.</li>
+<li>Missing queues return HTTP 404, <code>not_found</code>. Once a deleting name disappears,
+this is also the completed state observed by a later reconciliation request.</li>
 <li>Stop producers and consumers before retiring a queue. The transactional
-emptiness check prevents deletion of a concurrent acknowledged send. Requests
-still addressing a retired name fail; an existing long poll is woken.</li>
-<li>If the result is <code>outcome_unknown</code> or the response is lost, inspect <code>ListQueues</code>
-before retrying. Queue names are reusable. Keep the original generation; never automatically
-look up a replacement generation and retry a previous deletion against it.</li>
+empty-only check prevents deletion of a concurrent acknowledged send. Force
+deliberately replaces that protection with discard permission.</li>
+<li>Queue names are reusable, and the public API deliberately has no lifetime token.
+One owner must serialize deletion and same-name recreation. Wait for a successful
+<code>state:&quot;deleted&quot;</code> response, or confirm that <code>ListQueues</code> no longer contains a
+previously deleting name, before creating its replacement. Never replay an old
+deletion after recreation.</li>
+<li>The SDK and MCP client each call their configured HTTP transport once and do not
+follow HTTP redirects. Transport failures, redirects, every HTTP 5xx response
+(including a gateway-generated response), and invalid successful
+acknowledgements are <code>outcome_unknown</code>. Configure custom transports and proxies
+not to retry these destructive routes. Keep the name reserved and inspect
+<code>ListQueues</code>. Under the single-owner rule, an absent row confirms the deletion;
+a <code>deleting</code> row means cleanup is still running. Never use another delete as a
+status check or automatically retry it. The engine performs up to 30 one-second
+discovery passes after an uncertain remote database commit so a late-visible
+retirement can enter normal cleanup; startup recovery is the durable fallback.
+Concurrent delete/recreate controllers are unsupported.</li>
 </ul>
-<p>Go SDK: <code>client.DeleteQueue(ctx, name)</code> / <code>embedded.DeleteQueue(ctx, name)</code>.
-These resolve the current generation once per invocation. For retained requests,
-pass <code>DeleteQueueOpts{Generation: originalGeneration}</code> to fence later retries.
-<code>ListQueues</code> adds the optional <code>generation</code> field; existing response fields and
-all prior RPC contracts remain unchanged. New queue generations are opaque IDs
-stored in the existing <code>meta</code> table. Existing queues use a stable legacy identity
-until deleted; reconfiguration preserves identity. No schema-version change or
-migration is required.
+<p>Go SDK: <code>client.DeleteQueue(ctx, name) error</code> and the equivalent embedded method
+retain their empty-only signature. They return <code>nil</code> once deletion is accepted,
+including when bounded cleanup continues in the background. Use
+<code>DeleteQueueWithOptions(ctx, name, mqlite.DeleteQueueOpts{Force: true})</code> to
+authorize discard and receive the <code>Deleted</code> / <code>State</code> outcome. Reconcile a
+<code>deleting</code> or unknown outcome read-only via <code>ListQueues</code>; background cleanup
+progresses without another delete.</p>
+<p>The public identity remains the queue name; force does not introduce a lifetime
+token. Durable deletion and fixed-lifetime metadata make v0.4.0 schema token 7,
+which refuses schema-5 and schema-6 files rather than migrating them. Schema 6
+belonged only to intermediate unreleased builds and was never tagged.
 The console exposes <strong>delete queue</strong> in a plain queue&#39;s detail page and requires
-an exact name confirmation. Older brokers report the operation as unsupported.</p>
+an exact name confirmation. A nonempty queue additionally requires a force
+checkbox and shows the locked-delivery side-effect warning. If an accepted deletion
+is still cleaning up, the console reconciles with <code>ListQueues</code>; it does not issue a
+second delete that could target a same-name replacement. Older brokers report the
+operation as unsupported.</p>
+<h3 id="deletesubscription">DeleteSubscription</h3>
+<p>Available in <strong>v0.4.0 and later</strong>.</p>
+<p>Deletes one exact topic/subscription pair. It uses the same durable, bounded
+lifecycle as <code>DeleteQueue</code>, but owns both the topic roster mapping and the
+subscription&#39;s backing queue.</p>
+<ul>
+<li>POST <code>/mqlite.v1.AdminService/DeleteSubscription</code></li>
+<li>Request: <code>{&quot;topic&quot;:&quot;events&quot;,&quot;name&quot;:&quot;worker&quot;}</code> or the same object with
+<code>&quot;force&quot;:true</code>. A wrong topic for a globally unique subscription name is
+<code>404 not_found</code>; it never selects the subscription by name alone.</li>
+<li>Response: <code>{&quot;deleted&quot;:true,&quot;state&quot;:&quot;deleted&quot;}</code> or
+<code>{&quot;deleted&quot;:false,&quot;state&quot;:&quot;deleting&quot;}</code>. Without force, any retained
+message state returns <code>409 subscription_not_empty</code>. Force is the caller&#39;s
+durable authorization to discard all states, including locked deliveries.</li>
+<li>The accepted transaction first marks the backing queue <code>deleting</code>. It is then
+excluded from topic fan-out and direct queue operations immediately, while its
+mapping and name remain available for reconciliation. Final physical removal
+removes the mapping in the same transaction. Retiring the last active
+subscription therefore makes the implicit topic unavailable for fan-out
+immediately. A deleting mapping keeps the topic address reserved until physical
+cleanup completes.</li>
+<li>The SDK methods are <code>DeleteSubscription</code> (empty-only) and
+<code>DeleteSubscriptionWithOptions(..., DeleteSubscriptionOpts{Force:true})</code>.
+The built-in destructive clients call their HTTP transport once and classify
+redirects, transport failures, every HTTP 5xx, and invalid success bodies as an
+uncertain outcome. Reconcile that outcome with <code>ListSubscriptionsPage</code> using
+the same topic and <code>include_deleting:true</code>; do not replay the deletion.</li>
+<li>Subscription identity is still name-only. One owner must serialize deletion
+and recreation, and temporary subscription names should be globally unique and
+used for only one lifetime.</li>
+</ul>
 <h3 id="createqueue">CreateQueue</h3>
 <p>Create a queue, or <strong>update</strong> one (idempotent <strong>upsert</strong> on <code>name</code>: calling it again
 with the same name <strong>and the same <code>kind</code></strong> overwrites that queue&#39;s config — existing
@@ -596,8 +676,8 @@ topics: a <code>name</code> that is live as a <strong>topic</strong>, or that be
 rejected with <code>409 name_conflict</code> instead of silently taking over
 (<a href="concepts.html#provisioning--what-you-create-vs-what-is-created-for-you">concepts → provisioning</a>).
 <strong>Response</strong> <code>{}</code> (Empty).</p>
-<p><strong>Request</strong> <code>CreateQueueRequest</code>: <code>name</code> (string) + <code>config</code> (<code>QueueConfigJSON</code>, all
-fields optional — omit one to take its default). Every duration is <strong>epoch milliseconds</strong>.
+<p><strong>Request</strong> <code>CreateQueueRequest</code>: <code>name</code> (valid UTF-8, 1–128 bytes) + <code>config</code>
+(<code>QueueConfigJSON</code>, all fields optional — omit one to take its default). Every duration is <strong>epoch milliseconds</strong>.
 Config is <strong>queue-level</strong>: it&#39;s set here, not per <code>Send</code>/<code>Receive</code>.</p>
 <table>
 <thead>
@@ -612,7 +692,7 @@ Config is <strong>queue-level</strong>: it&#39;s set here, not per <code>Send</c
 <td><code>kind</code></td>
 <td>string</td>
 <td><code>queue</code></td>
-<td><code>queue</code> (normal) or <code>subscription</code> (a topic&#39;s backing queue — normally created via <code>Subscribe</code>, not by hand).</td>
+<td><code>queue</code> (normal). <code>subscription</code> can reconfigure an existing legitimate backing queue through the advanced engine/wire surface, but cannot create a backing queue without a topic mapping; use <code>Subscribe</code> to create one.</td>
 </tr>
 <tr>
 <td><code>lock_duration_ms</code></td>
@@ -684,22 +764,105 @@ Config is <strong>queue-level</strong>: it&#39;s set here, not per <code>Send</c
 <ul>
 <li><strong>Request</strong> <code>SubscribeRequest</code>: <code>topic</code>, <code>name</code>, <code>filter</code> (optional —
 <code>{&quot;expr&quot;: &quot;&lt;predicate&gt;&quot;}</code>, an <a href="concepts.html#subscription-filters-expr">expr boolean over the message</a>; empty/omitted
-matches all). A malformed expr is rejected with <code>400 invalid_argument</code>. <strong>Response</strong> <code>{}</code>.</li>
+matches all). Topic and subscription names are valid UTF-8 strings of 1–128
+bytes. A malformed expr or name is rejected with <code>400 invalid_argument</code>.
+<strong>Response</strong> <code>{}</code>.</li>
+<li>The same route accepts <code>SubscribeWithOptionsRequest</code>, which adds optional
+<code>ttl_ms</code> in <strong>v0.4.0 and later</strong>. A positive integer stores a fixed lifetime
+from the first successful creation; omitted or zero creates a permanent
+subscription when the name is new, and preserves an existing subscription&#39;s
+lifetime. JSON <code>null</code>, fractions,
+strings, negative values and integer overflow, plus Go SDK durations between
+zero and one millisecond, return <code>400 invalid_argument</code>. The Go methods are <code>Subscribe</code> and
+<code>SubscribeWithOptions(..., SubscribeOptions{TTL: 15*time.Minute})</code>; the legacy
+request struct and method are unchanged.</li>
+<li>Re-subscribing the same <code>(topic,name)</code> with TTL omitted or zero preserves the original
+deadline while allowing a filter update. Repeating its original positive TTL is
+idempotent and also does not extend the deadline. A different positive TTL,
+including an attempt to turn a permanent subscription into a temporary one,
+returns <code>409 name_conflict</code> before the filter changes. A temporary subscription
+cannot be made permanent in place; delete it and create a new lifetime.</li>
+<li>At <code>now &gt;= expires_at_ms</code> the subscription immediately leaves topic fan-out and
+every backing-queue operation. Expiry is preauthorization for forced bounded
+cleanup, including retained messages. The name remains reserved until physical
+cleanup completes. This guarantee does not undo external effects already caused
+by a locked delivery. Creation and enforcement use the broker host&#39;s UTC clock;
+keep that clock synchronized because a forward step can expire a subscription
+early and a backward step can delay a deadline that has not yet been durably
+transitioned to <code>deleting</code>.</li>
+<li>The bundled console limits entered TTLs to 3,650 fixed 24-hour days so their
+millisecond value remains exact in browser JavaScript. Direct HTTP and Go SDK
+clients retain the API&#39;s wider checked-integer range.</li>
 <li>Name conflicts are rejected with <code>409 name_conflict</code>: a <code>topic</code> that names an
 existing queue or subscription, a <code>name</code> that belongs to a plain queue / another
 topic&#39;s subscription / a live topic, and <code>topic == name</code>. Re-subscribing the same
 <code>(topic, name)</code> is the idempotent filter-update path and succeeds.</li>
+<li>Active and deleting subscriptions share a configurable global capacity. The
+default is 10,000. Creating a new mapping at capacity returns
+<code>429 resource_exhausted</code>; updating the filter of an existing active mapping is
+still allowed. A deleting mapping releases its slot only after bounded physical
+cleanup completes.</li>
+<li>A database created by an older build may contain a <code>kind=subscription</code> backing
+queue with no topic mapping. When capacity is available, repair it by calling
+<code>Subscribe</code> for the intended topic/name, then use <code>DeleteSubscription</code> if the
+orphan should be retired. Do not edit MQLite-owned tables directly.</li>
 </ul>
+<pre><code class="language-bash">curl -H &quot;Authorization: Bearer $T&quot; -H &#39;Content-Type: application/json&#39; \
+  --data &#39;{&quot;topic&quot;:&quot;replies&quot;,&quot;name&quot;:&quot;request-01J...&quot;,&quot;ttl_ms&quot;:900000}&#39; \
+  &quot;$BASE_URL/mqlite.v1.AdminService/Subscribe&quot;
+# → {}
+</code></pre>
 <h3 id="listqueues">ListQueues</h3>
+<p>The <code>state</code> field and deleting-resource visibility below are available in
+<strong>v0.4.0 and later</strong>.</p>
 <ul>
 <li><strong>Request</strong> <code>{}</code>. <strong>Response</strong> <code>ListQueuesResponse</code>: <code>queues</code> ([{<code>name</code>, <code>kind</code>,
-<code>lock_duration_ms</code>, <code>max_delivery_count</code>, <code>default_ttl_ms</code>, <code>dedup_window_ms</code>}]).</li>
+<code>state</code>, <code>lock_duration_ms</code>, <code>max_delivery_count</code>, <code>default_ttl_ms</code>,
+<code>dedup_window_ms</code>}]). <code>state</code> is <code>active</code> or <code>deleting</code>. Deleting queues remain
+listed while their name is reserved, but their data plane is unavailable. A
+fixed-lifetime subscription is reported as <code>deleting</code> at its deadline even if
+the periodic transition has not yet persisted the state; the legacy fields do
+not expose its deadline.</li>
 </ul>
 <h3 id="listsubscriptions">ListSubscriptions</h3>
 <ul>
 <li><strong>Request</strong> <code>{}</code>. <strong>Response</strong> <code>{subscriptions: [{topic, name, expr}]}</code> — every
-subscription with its topic and <a href="concepts.html#subscription-filters-expr">filter expression</a> (<code>expr</code> empty = match
-all). <code>ListQueues</code> shows the backing queues; this exposes the topic + filter it omits.</li>
+active subscription with its topic and <a href="concepts.html#subscription-filters-expr">filter expression</a> (<code>expr</code> empty = match
+all). This compatibility route is intentionally not paged. The configured
+subscription ceiling bounds its maximum size; new integrations should use the
+paged route below. The Go SDK retains the original three-field
+<code>SubscriptionInfo</code> type for this method.</li>
+</ul>
+<h3 id="listsubscriptionspage">ListSubscriptionsPage</h3>
+<p>Available in <strong>v0.4.0 and later</strong>.</p>
+<ul>
+<li>POST <code>/mqlite.v1.AdminService/ListSubscriptionsPage</code>.</li>
+<li>Request fields: <code>topic</code> (optional exact topic), <code>after</code> (an opaque cursor from
+the previous response), <code>limit</code> (<code>0</code> or omitted = 100, maximum 1,000), and
+<code>include_deleting</code> (default false).</li>
+<li>Response:
+<code>{&quot;subscriptions&quot;:[{&quot;topic&quot;,&quot;name&quot;,&quot;expr&quot;,&quot;state&quot;,&quot;created_at_ms&quot;,&quot;expires_at_ms&quot;}],&quot;total&quot;:N,&quot;next_after&quot;:&quot;...&quot;}</code>.
+<code>state</code> is <code>active</code> or <code>deleting</code>; <code>next_after</code> is omitted on the final page.
+Both timestamps are required epoch-millisecond integers. <code>expires_at_ms=0</code>
+means permanent; otherwise it is greater than <code>created_at_ms</code> and never moves.
+An expired row is reported as <code>deleting</code> immediately, even before the periodic
+transition has persisted that state. The default view excludes such rows;
+<code>include_deleting=true</code> includes them for reconciliation.
+<code>total</code> counts the complete selected scope at the snapshot used for that
+request and is independent of <code>after</code>/<code>limit</code>. Go page entries use
+<code>SubscriptionPageItem</code>, whose required <code>State</code> field is separate from the
+legacy <code>SubscriptionInfo</code> type.</li>
+<li>Ordering is <code>(topic,name)</code> and pagination is keyset-based. Cursors are opaque
+and bound to <code>topic</code> plus <code>include_deleting</code>; reusing one with a different
+scope returns <code>400 invalid_argument</code>. <code>limit</code> may change between pages.</li>
+<li>Each request is internally consistent. A sequence of requests is not a frozen
+database snapshot, so concurrent creates and deletes can change later pages and
+their <code>total</code>. Consumers that need a stable administrative export should quiesce
+subscription changes for the traversal.</li>
+<li>The Go SDK and MCP tool reject a successful page that is null, incomplete,
+oversized, out of order, outside the requested topic/state scope, or inconsistent
+with its <code>total</code>, page size, or cursor progress. Such a response is not valid
+evidence for destructive-operation reconciliation.</li>
 </ul>
 <h3 id="testfilter">TestFilter</h3>
 <ul>
@@ -886,7 +1049,7 @@ conflict signal. With dedup off (default), or with identical bodies, there is no
 <tr>
 <td>404</td>
 <td><code>not_found</code></td>
-<td>the queue or message doesn&#39;t exist; or an unknown path</td>
+<td>the queue, exact topic/subscription pair, or message doesn&#39;t exist; or an unknown path</td>
 </tr>
 <tr>
 <td>409</td>
@@ -896,7 +1059,7 @@ conflict signal. With dedup off (default), or with identical bodies, there is no
 <tr>
 <td>409</td>
 <td><code>name_conflict</code></td>
-<td>a queue/subscription/topic name collision at creation time — the namespace is one and disjoint (<code>Subscribe</code>/<code>CreateQueue</code>)</td>
+<td>a queue/subscription/topic name collision at creation time, including a name reserved by a deleting queue — the namespace is one and disjoint (<code>Subscribe</code>/<code>CreateQueue</code>)</td>
 </tr>
 <tr>
 <td>409</td>
@@ -907,6 +1070,21 @@ conflict signal. With dedup off (default), or with identical bodies, there is no
 <td>409</td>
 <td><code>lock_lost</code></td>
 <td>settle with an expired or wrong <code>lock_token</code></td>
+</tr>
+<tr>
+<td>409</td>
+<td><code>queue_not_empty</code></td>
+<td>deletion found retained messages in at least one state</td>
+</tr>
+<tr>
+<td>409</td>
+<td><code>subscription_not_empty</code></td>
+<td>subscription deletion found retained messages in at least one state</td>
+</tr>
+<tr>
+<td>429</td>
+<td><code>resource_exhausted</code></td>
+<td>the active plus deleting subscription capacity is full (<code>mqlite.ErrSubscriptionLimit</code>)</td>
 </tr>
 <tr>
 <td>413</td>
@@ -929,9 +1107,15 @@ conflict signal. With dedup off (default), or with identical bodies, there is no
 <td>unexpected server error</td>
 </tr>
 </tbody></table>
-<p>The Go SDK re-exports the sentinel errors (<code>mqlite.ErrLockLost</code>, <code>ErrDedupConflict</code>,
-<code>ErrInvalidArgument</code>, <code>ErrOutcomeUnknown</code>, …) so <code>errors.Is</code> works in both embedded and
-client mode.</p>
+<p>The <code>503 outcome_unknown</code> row describes a response generated by the broker. The
+Go SDK treats every HTTP 5xx received for a lifecycle delete as
+<code>ErrOutcomeUnknown</code>, even when its envelope says <code>internal</code>, because an
+intermediary may have generated that response after the broker committed.</p>
+<p>The Go SDK re-exports sentinel errors such as <code>mqlite.ErrLockLost</code>,
+<code>ErrDedupConflict</code>, <code>ErrInvalidArgument</code> and <code>ErrOutcomeUnknown</code>, so <code>errors.Is</code>
+works in both embedded and client mode. An accepted queue or subscription
+deletion is a successful operation even when its typed HTTP result is
+<code>state:&quot;deleting&quot;</code>.</p>
 
   </main>
 </div>

@@ -56,12 +56,13 @@
 
 <div class="wrap">
 
-<div class="stamp">These docs track <a href="https://github.com/mqlitehq/mqlite/tree/main">main · source v0.3.3</a>.
-  The latest release is <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.3.3">v0.3.3</a>
+<div class="stamp">These docs track <a href="https://github.com/mqlitehq/mqlite/tree/main">main · source v0.4.0</a>.
+  The latest release is <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.0">v0.4.0</a>
   (default port 6754); installation examples pin that release. Use the
-  <a href="https://github.com/mqlitehq/mqlite/tree/v0.3.3/docs">v0.3.3 docs</a>
+  <a href="https://github.com/mqlitehq/mqlite/tree/v0.4.0/docs">v0.4.0 docs</a>
   for the versioned reference, and follow the <a href="operations.html#upgrade-and-rollback">upgrade procedure</a>
-  when moving from v0.2.0 (port 8080, schema token 2) to v0.3.0 or later (schema token 5).</div>
+  to start v0.4.0 on a fresh schema-7 database. Schema-5 databases from v0.3.0–v0.3.2
+  and retracted v0.3.3 are refused rather than migrated.</div>
 
 <div class="head">
   <h1># mqlite for AI agents</h1>
@@ -74,9 +75,9 @@
 <section class="blk">
   <h2># 1 · MCP server (recommended)</h2>
   <p class="lede"><code>mqlite-mcp</code> ships in the same repo — a dependency-free stdio MCP server that turns each tool call into one HTTP POST to the broker.</p>
-  <p>Install v0.3.3 with <code>go install github.com/mqlitehq/mqlite/cmd/mqlite-mcp@v0.3.3</code>,
+  <p>Install v0.4.0 with <code>go install github.com/mqlitehq/mqlite/cmd/mqlite-mcp@v0.4.0</code>,
   or use <code>mqlite-mcp</code> from a
-  <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.3.3">v0.3.3 release archive</a>,
+  <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.0">v0.4.0 release archive</a>,
   then register the installed binary with your MCP host:</p>
 <pre><code class="language-json">{
   "mcpServers": {
@@ -89,11 +90,15 @@
     }
   }
 }</code></pre>
-  <p>v0.3.3 provides <strong>18 tools</strong>. The <code>observe</code> tool requires both the broker and MCP server at v0.3.2 or later. Key-management tools require v0.3.1 or later:</p>
+  <p>v0.4.0 provides <strong>22 tools</strong>; the broker exposes <strong>29 routes</strong> and the CLI exposes <strong>26 commands</strong>. The <code>observe</code> tool requires both the broker and MCP server at v0.3.2 or later. Key-management tools require v0.3.1 or later:</p>
   <div class="tbl"><table>
     <tr><th>Tool</th><th>Does</th></tr>
-    <tr><td><code>list_queues</code></td><td>list queues / subscriptions</td></tr>
+    <tr><td><code>list_queues</code></td><td>list plain and subscription backing queues, including deleting names</td></tr>
     <tr><td><code>create_queue</code></td><td>create or update a queue by name</td></tr>
+    <tr><td><code>delete_queue</code></td><td>delete an empty plain queue, or use explicit <code>force</code> to discard retained work</td></tr>
+    <tr><td><code>subscribe</code></td><td>create a subscription or update its filter; optional <code>ttl_ms</code> sets one fixed lifetime</td></tr>
+    <tr><td><code>list_subscriptions</code></td><td>page subscriptions by topic with count, lifecycle state and optional deleting entries</td></tr>
+    <tr><td><code>delete_subscription</code></td><td>delete one exact topic/name pair; optional <code>force</code> discards retained work</td></tr>
     <tr><td><code>send</code></td><td>send a message (<code>queue</code>, <code>body</code>, optional <code>message_id</code> / <code>group_id</code>)</td></tr>
     <tr><td><code>receive</code></td><td>peek-lock messages → returns <code>seq_number</code> + <code>lock_token</code></td></tr>
     <tr><td><code>complete</code> / <code>abandon</code> / <code>reject</code></td><td>settle: done / retry / dead-letter</td></tr>
@@ -108,7 +113,7 @@
     <tr><td><code>revoke_key</code></td><td>revoke by public <code>id</code>; repeated revocation is safe</td></tr>
   </table></div>
   <p>Key tools require <code>manage</code>; both configured administrators and managed <code>manage</code> keys may issue new administrator keys. Give message producers <code>send</code> and consumers <code>listen</code>. A consumer may settle or delete messages; <code>listen</code> is not an audit-only role.</p>
-  <p>For a monitoring-only MCP connection in v0.3.3, put a configured <code>MQLITE_MONITOR_TOKENS</code> credential into the client's <code>MQLITE_TOKEN</code>. It can call <code>observe</code>, but cannot read message bodies, consume messages, change queues or issue keys. Use the returned collection status and availability fields; unavailable measurements are not healthy zeroes. See <a href="observability.html">Observability</a>. The <code>observe</code> tool works independently of the optional Prometheus switch; <code>--metrics</code> only enables authenticated <code>/metrics</code> on the API port.</p>
+  <p>For a monitoring-only MCP connection in v0.4.0, put a configured <code>MQLITE_MONITOR_TOKENS</code> credential into the client's <code>MQLITE_TOKEN</code>. It can call <code>observe</code>, but cannot read message bodies, consume messages, change queues or issue keys. Use the returned collection status and availability fields; unavailable measurements are not healthy zeroes. See <a href="observability.html">Observability</a>. The <code>observe</code> tool works independently of the optional Prometheus switch; <code>--metrics</code> only enables authenticated <code>/metrics</code> on the API port. For Prometheus, replace the removed <code>mqlite_queue_total</code> and <code>mqlite_queue_oldest_message_age_ms</code> aliases with <code>mqlite_queue_retained_messages</code> and <code>mqlite_queue_oldest_message_age_seconds</code>.</p>
   <h3 class="sub">Create a producer key</h3>
   <p>Choose and retain a unique 32-character lowercase hex public ID before calling the tool:</p>
 <pre><code class="language-json">{
@@ -154,6 +159,10 @@ Rules:
   decode after receiving.
 - Queues never auto-create. Create first:
     AdminService/CreateQueue  {"name":"jobs","config":{}}
+  Queue and subscription deletions are empty-only by default. force=true is explicit
+  authorization to discard every retained state, including locked work. Deletion
+  reserves the name while bounded cleanup runs. The API has no Generation field:
+  one owner must reconcile inventory and serialize deletion with same-name creation.
 - Consume with Peek-Lock:
     QueueService/Receive  {"queue":"jobs","max_messages":1,"wait_time_ms":5000}
   Each returned message has seq_number + lock_token. You MUST settle every
@@ -174,8 +183,13 @@ Rules:
 - Long-running work: call QueueService/Renew with the lock_token to extend the
   lock before it expires.
 - Pub/sub: AdminService/Subscribe {"topic":"events","name":"my-sub",
-  "filter":{"expr":"subject == \"order\""}} — then Send to "events" fans out;
-  Receive from "my-sub". Filter may be omitted (match all).
+  "filter":{"expr":"subject == \"order\""},"ttl_ms":900000} — then Send to
+  "events" fans out; Receive from "my-sub". Filter may be omitted; omitted or zero
+  ttl_ms creates a permanent subscription or preserves an existing lifetime.
+  A positive TTL is a fixed lifetime from first creation: retries, filter updates
+  and traffic never extend it. At expiry it preauthorizes forced cleanup. Delete
+  explicitly after normal use; for high-rate request/reply, use one stable reply
+  subscription and dispatch by correlation_id instead of one subscription per request.
 - Ordered work: send with "group_id" — messages sharing a group_id are
   delivered strictly in order, one in flight per group. Abandon with delay_ms &gt; 0
   parks the message in scheduled and keeps blocking its ordered group until due
@@ -189,8 +203,11 @@ Rules:
 
 Cheat sheet (request bodies abbreviated):
   AdminService/CreateQueue   {"name","config":{}}
+  AdminService/DeleteQueue   {"name","force?"}
   AdminService/ListQueues    {}
-  AdminService/Subscribe     {"topic","name","filter?"}
+  AdminService/Subscribe     {"topic","name","filter?","ttl_ms?"}
+  AdminService/ListSubscriptionsPage {"topic?","after?","limit?","include_deleting?"}
+  AdminService/DeleteSubscription {"topic","name","force?"}
   QueueService/Send          {"queue","messages":[{"body":"&lt;base64&gt;",
                               "message_id?","group_id?"}]}
   QueueService/Receive       {"queue","max_messages","wait_time_ms"}
