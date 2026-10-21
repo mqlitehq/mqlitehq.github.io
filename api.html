@@ -38,6 +38,10 @@
 construction. This document is generated from the wire contract in
 <a href="https://github.com/mqlitehq/mqlite/blob/main/wire/wire.go"><code>wire/wire.go</code></a> (the single source of truth shared by the broker
 and the Go SDK, so the two can&#39;t drift) and the server&#39;s error mapping.</p>
+<p>Every RPC body must be exactly one non-null JSON object, including operations
+whose request is otherwise empty (<code>{}</code>). Unknown fields and data after that object
+are rejected. Repeated fields retain Go&#39;s <code>encoding/json</code> behavior: later scalar
+values replace earlier ones, while repeated object and map values may merge.</p>
 <h2 id="conventions">Conventions</h2>
 <ul>
 <li><strong>Transport:</strong> HTTP <code>POST</code>, <code>Content-Type: application/json</code>. Discovery and
@@ -212,7 +216,7 @@ and console. Requires <code>manage</code> or a configured monitor credential.</p
 </tr>
 <tr>
 <td><code>collection</code></td>
-<td>Queue collection <code>state</code>, <code>last_success_at_ms</code>, <code>duration_seconds</code>, bounded <code>error_code</code></td>
+<td>Queue collection <code>state</code>, <code>last_success_at_ms</code>, latest queue-gauge refresh <code>duration_seconds</code>, bounded <code>error_code</code></td>
 </tr>
 <tr>
 <td><code>queue_count</code>, <code>subscription_count</code>, <code>queues</code></td>
@@ -618,6 +622,9 @@ status check or automatically retry it. The engine performs up to 30 one-second
 discovery passes after an uncertain remote database commit so a late-visible
 retirement can enter normal cleanup; startup recovery is the durable fallback.
 Concurrent delete/recreate controllers are unsupported.</li>
+<li>When access logging is retained, the operation record includes its server request
+ID, safe actor classification, queue, force decision, acceptance, and returned
+lifecycle state. See <a href="observability.html#access-logs-and-destructive-operation-evidence">destructive-operation evidence</a>.</li>
 </ul>
 <p>Go SDK: <code>client.DeleteQueue(ctx, name) error</code> and the equivalent embedded method
 retain their empty-only signature. They return <code>nil</code> once deletion is accepted,
@@ -666,6 +673,9 @@ the same topic and <code>include_deleting:true</code>; do not replay the deletio
 <li>Subscription identity is still name-only. One owner must serialize deletion
 and recreation, and temporary subscription names should be globally unique and
 used for only one lifetime.</li>
+<li>Retained access logs record the topic/subscription target, force decision,
+acceptance and returned lifecycle state without storing a Bearer token. See
+<a href="observability.html#access-logs-and-destructive-operation-evidence">destructive-operation evidence</a>.</li>
 </ul>
 <h3 id="createqueue">CreateQueue</h3>
 <p>Create a queue, or <strong>update</strong> one (idempotent <strong>upsert</strong> on <code>name</code>: calling it again
@@ -828,10 +838,11 @@ not expose its deadline.</li>
 <ul>
 <li><strong>Request</strong> <code>{}</code>. <strong>Response</strong> <code>{subscriptions: [{topic, name, expr}]}</code> — every
 active subscription with its topic and <a href="concepts.html#subscription-filters-expr">filter expression</a> (<code>expr</code> empty = match
-all). This compatibility route is intentionally not paged. The configured
-subscription ceiling bounds its maximum size; new integrations should use the
-paged route below. The Go SDK retains the original three-field
-<code>SubscriptionInfo</code> type for this method.</li>
+all). This compatibility-only route is active/unexpired-only and intentionally
+not paged. It is deprecated for management and reconciliation because it cannot
+expose deleting name reservations. The configured subscription ceiling bounds
+its maximum size; new integrations should use the paged route below. The Go SDK
+retains the original three-field <code>SubscriptionInfo</code> type for this method.</li>
 </ul>
 <h3 id="listsubscriptionspage">ListSubscriptionsPage</h3>
 <p>Available in <strong>v0.4.0 and later</strong>.</p>
@@ -884,7 +895,9 @@ precise compile error or a runtime/eval error; <code>ran</code> = a sample was e
 <p>Permanently delete dead-lettered messages.</p>
 <ul>
 <li><strong>Request</strong> <code>PurgeRequest</code>: <code>queue</code>, <code>max</code> (int), <code>older_than_ms</code> (int; both zero
-purges the whole DLQ). <strong>Response</strong> <code>PurgeResponse</code>: <code>purged</code> (int).</li>
+purges the whole DLQ). <strong>Response</strong> <code>PurgeResponse</code>: <code>purged</code> (int). Retained
+access logs include both requested bounds and the confirmed purge count; see
+<a href="observability.html#access-logs-and-destructive-operation-evidence">destructive-operation evidence</a>.</li>
 </ul>
 <h3 id="status">Status</h3>
 <p>A desensitized runtime snapshot for an ops view — never includes a connection string
@@ -1029,7 +1042,7 @@ conflict signal. With dedup off (default), or with identical bodies, there is no
 <tbody><tr>
 <td>400</td>
 <td><code>invalid_argument</code></td>
-<td>malformed JSON, an <strong>unknown field</strong>, trailing data after the object, a bad filter expression, an empty queue name, or an unknown enum (<code>kind</code> / <code>ordering_mode</code>). The decoder is strict — a typo&#39;d field is a 400, not a silently-dropped no-op (<code>mqlite.ErrInvalidArgument</code>).</td>
+<td>malformed JSON, a non-object or <code>null</code> request body, an <strong>unknown field</strong>, trailing data after the object, a bad filter expression, an empty queue name, or an unknown enum (<code>kind</code> / <code>ordering_mode</code>). The decoder is strict — a typo&#39;d field is a 400, not a silently-dropped no-op (<code>mqlite.ErrInvalidArgument</code>).</td>
 </tr>
 <tr>
 <td>400</td>
@@ -1089,7 +1102,7 @@ conflict signal. With dedup off (default), or with identical bodies, there is no
 <tr>
 <td>413</td>
 <td><code>message_too_large</code></td>
-<td>body over <code>MaxMessageBytes</code> (default 1 MiB)</td>
+<td>a message body over <code>MaxMessageBytes</code> (default 1 MiB), or request decoding that exceeds <code>server.MaxBodyBytes</code> (default 32 MiB)</td>
 </tr>
 <tr>
 <td>499</td>

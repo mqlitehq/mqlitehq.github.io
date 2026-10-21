@@ -274,6 +274,11 @@ MQLITE_TOKENS=mqk_prod_CHANGEME \
 (<code>fly secrets set MQLITE_DB_AUTH_TOKEN=...</code>); drop the <code>[[mounts]]</code> volume since data
 lives in Turso. Durability is the Turso server&#39;s responsibility — <code>MQLITE_SYNC</code> is
 ignored for remote DSNs. See <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/turso.md">turso.md</a>.</p>
+<p>Run exactly one active MQLite broker or embedded <code>Engine</code> per Turso database. To
+replace it, stop the old owner, confirm its process has exited, and only then start
+the replacement. Rolling overlap against the same database is unsupported. The
+remote connection pool is safe only within one MQLite process; it does not provide
+cross-process ownership.</p>
 <h2 id="verify-any-deploy">Verify any deploy</h2>
 <pre><code class="language-bash">curl https://&lt;host&gt;/                       # discovery: {name, version, status, ...} (open)
 curl https://&lt;host&gt;/healthz                # ok (open)

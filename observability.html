@@ -65,6 +65,61 @@ credential remains required on private networks.</p>
 <p>For a runnable broker, Prometheus and Grafana stack, see
 <a href="https://github.com/mqlitehq/mqlite/blob/main/ops/observability/README.md">the local observability demo</a>. For an existing
 platform, use the <a href="observability-cloud.html">cloud and Kubernetes guide</a>.</p>
+<h2 id="access-logs-and-destructive-operation-evidence">Access logs and destructive-operation evidence</h2>
+<p><code>mqlite serve</code> enables request logging to stderr. Each emitted record has a
+broker-generated 32-character <code>request_id</code>; the same value is returned in the
+<code>X-Request-ID</code> response header and exposed to configured CORS clients. The broker
+does not trust or copy a caller-supplied request ID. An enabled-CORS preflight is
+deliberately not logged, and a successful empty <code>Receive</code> is emitted at Debug so
+an Info-level handler may filter it. The ID correlates one HTTP attempt with one
+log record; it is not an idempotency key and does not authorize retrying a destructive request.</p>
+<p><code>actor_kind</code> distinguishes <code>anonymous</code>, <code>unverified</code>, <code>static_admin</code>,
+<code>static_monitor</code>, and <code>managed_key</code>. A successfully authenticated managed key also
+records its public <code>actor_key_id</code>, unless that ID equals a configured static
+credential. Static administrator and monitor credentials have no public ID, and
+invalid, expired, or revoked credentials cannot be safely attributed, so those
+records never invent one. Authentication headers, token
+digests, message bodies, and generated key secrets are not copied into access-log
+fields. Resource names and public IDs are logged by design; never put a secret in
+either.</p>
+<p>The following management records include operation-specific evidence in addition
+to status, error code, actor, request ID, and duration:</p>
+<table>
+<thead>
+<tr>
+<th>RPC</th>
+<th>Fields</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>DeleteQueue</code></td>
+<td><code>queue</code>, <code>force</code>, <code>acceptance</code> (<code>accepted</code>, <code>rejected</code>, or <code>unknown</code>), then <code>result_state</code> and <code>deleted</code> for an accepted result</td>
+</tr>
+<tr>
+<td><code>DeleteSubscription</code></td>
+<td><code>topic</code>, <code>sub</code>, <code>force</code>, the same acceptance and result fields</td>
+</tr>
+<tr>
+<td><code>Purge</code></td>
+<td><code>queue</code>, requested <code>max</code> and <code>older_than_ms</code> bounds, and confirmed <code>purged</code> count</td>
+</tr>
+<tr>
+<td><code>CreateKey</code>, <code>RevokeKey</code></td>
+<td>safe syntactically valid public <code>key_id</code>; a value equal to a configured static credential is omitted; successful operations add <code>result_state=created</code> or <code>revoked</code></td>
+</tr>
+</tbody></table>
+<p>These records are operational evidence, not a persistent audit table. A success
+record describes the broker result; an <code>acceptance=unknown</code> deletion still needs
+read-only reconciliation. Logs do not remove the rule that one owner must
+serialize deletion with same-name recreation. Resource names and public key IDs
+may themselves be sensitive operational metadata, so restrict log access.</p>
+<p>The default access log exists only on stderr. Container and service platforms may
+discard it quickly, and <code>MQLITE_DIAGNOSTIC_LOG</code> deliberately excludes routine
+requests. Forward stderr to an external log store and set its retention to cover
+your incident-response and destructive-request reconciliation window. Embedded
+brokers must pass a retained logger with <code>WithRequestLog</code>; a JSON <code>slog</code> handler is
+recommended when machines consume the evidence. Log delivery and storage
+durability remain the operator&#39;s responsibility.</p>
 <h2 id="maintenance-failure-diagnosis">Maintenance failure diagnosis</h2>
 <p>v0.4.0 adds optional <code>maintenance[].diagnostics</code> and
 <code>storage.operations[].last_error</code> fields to Observe. v0.3.2 and older snapshots
@@ -150,27 +205,55 @@ not an empty list of healthy queues. Prometheus responds with available in-proce
 measurements and <code>mqlite_collection_success 0</code>, omitting queue gauges that could not
 be collected. Failure before the endpoint, including invalid scrape credentials,
 causes Prometheus <code>up</code> to become zero instead.</p>
-<p>Queue counts are actual retained rows from a grouped database query. They describe
-stored states, not guaranteed immediate delivery eligibility: visibility, TTL,
-lease expiry awaiting maintenance and ordering rules can affect claims. Different
-measurement domains are sampled at different instants. The observation is not an
-atomic transaction encompassing every database, HTTP and in-process counter.</p>
+<p>Queue gauges come from an exact grouped database query at the reported
+<code>sampled_at_ms</code>. One process-local gauge snapshot is shared across native
+<code>Observe</code>, <code>/metrics</code> and console requests for about 10 seconds. A cache hit
+preserves the original timestamp instead of presenting cached rows as new.
+Message writes and polling do not extend the fixed cache deadline; a queue create
+or delete invalidates the snapshot. The deadline begins when a refresh finishes,
+so after an unusually slow scan the gauges can trail current messages by the scan
+duration plus roughly one cache window. Per-queue <code>Stats</code> remains a fresh indexed
+read.</p>
+<p>Counts describe stored states at the sample time, not guaranteed immediate
+delivery eligibility: visibility, TTL, lease expiry awaiting maintenance and
+ordering rules can affect claims. Runtime probes, process counters and queue
+gauges are sampled at different instants. The observation is not an atomic
+transaction encompassing every database, HTTP and in-process counter. Collection
+duration is the elapsed time of the gauge refresh that produced <code>sampled_at_ms</code>;
+it remains unchanged on a cache hit.</p>
 <p><code>/healthz</code> is open process liveness. <code>mqlite_storage_read_available</code> reports a real
 storage read probe; success does not prove writes, end-to-end delivery or data
 integrity. Failed read latency is absent, not zero. Local storage size is unavailable
 for memory/remote backends, not a fabricated zero-byte database.</p>
 <h3 id="collection-cost-and-interval">Collection cost and interval</h3>
-<p>Each observation collects the full queue inventory with one grouped message scan
-and a storage read probe. The scan includes retained rows, so its cost grows with
-backlog as well as queue count. A local SQLite database uses the same single-writer
-connection for application work and collection; monitoring is not free or isolated
-from message-operation latency.</p>
+<p>Each observation runs a storage read probe. A cache refresh also collects the full
+queue inventory with one grouped message scan. Concurrent refreshes share that
+scan, and successful rows are reused for about 10 seconds; failed scans are not
+cached, so later requests can retry. The scan includes retained rows, so refresh
+cost grows with backlog as well as queue count. Exact per-queue <code>Stats</code> uses one
+literal branch per message state and the existing queue-prefixed partial indexes,
+so it does not scan unrelated queues.</p>
+<p>The cache retains one queue-gauge slice whose size grows with queue inventory,
+not backlog depth. Each request receives its own slice and still allocates and
+serializes the full response.</p>
+<p>A local file database runs <code>Stats</code>, the <code>SELECT 1</code> storage probe and global refresh
+on one dedicated <code>mode=ro</code> plus <code>query_only</code> connection. It cannot write or
+checkpoint, and WAL reads do not occupy the sole writer connection, so a deep
+refresh does not sit in front of Send, Receive or
+settlement. Reader work serializes on that one connection. A refresh still
+consumes CPU and storage bandwidth and holds a WAL snapshot until it finishes;
+long scans can delay checkpoint progress and grow the WAL. <code>:memory:</code> cannot use a
+second connection without becoming a different database, so its refresh and
+probe still share the sole writer connection. Remote Turso/libSQL observations
+use the existing small provider pool and consume provider query resources.</p>
 <p>Start production scraping at 15 seconds, measure collection duration and actual
 send/receive latency under the expected retained backlog, then adjust the scrape
-and native/console polling intervals. Each native observation or Prometheus scrape
-collects its own snapshot. Grafana dashboard refreshes query Prometheus instead
-of adding direct broker scans. The local demonstration uses a faster interval to
-make transitions visible; choose production cadence from measured workload needs.</p>
+and native/console polling intervals. Requests inside the roughly 10-second gauge
+window share one snapshot, but each request still runs a storage probe and builds
+its response; aggressive polling is not free. Grafana dashboard refreshes query
+Prometheus instead of adding direct broker requests. The local demonstration uses
+a faster interval to make transitions visible; choose production cadence from
+measured workload needs.</p>
 <p>RPC/result and storage/error dimensions have fixed vocabularies, but their
 zero-initialized counters and histogram buckets still produce many series. Queue
 dimensions grow with the configured inventory, including active subscription
@@ -225,7 +308,7 @@ use Unix seconds in Prometheus and epoch milliseconds in native JSON.</p>
 <tr>
 <td><code>mqlite_collection_duration_seconds</code></td>
 <td>gauge</td>
-<td>Queue collection elapsed time</td>
+<td>Latest queue-gauge refresh elapsed time; unchanged on cache hits</td>
 </tr>
 <tr>
 <td><code>mqlite_entities</code></td>

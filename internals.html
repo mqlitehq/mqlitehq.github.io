@@ -144,8 +144,8 @@ deterministically instead of with <code>sleep()</code>.</li>
 <p>Here is the design decision everything else leans on. SQLite allows one writer at
 a time — most systems fight that; mqlite <strong>builds on it</strong>:</p>
 <ul>
-<li><strong>In-process, the connection pool has size one</strong> (<code>SetMaxOpenConns(1)</code>).
-<code>database/sql</code> queues every caller onto that connection, so <em>all writes are
+<li><strong>In-process, the writer pool has size one</strong> (<code>SetMaxOpenConns(1)</code>).
+<code>database/sql</code> queues every mutation onto that connection, so <em>all writes are
 serialized before SQLite ever sees them</em>. There is no lock contention, no
 <code>SQLITE_BUSY</code> retry loop, no interleaving to reason about. Two goroutines
 cannot half-claim the same message because their statements cannot overlap.</li>
@@ -155,8 +155,13 @@ takes an OS lock on a <code>&lt;db&gt;.lock</code> sidecar (keyed on the <em>can
 file fails fast with <code>ErrDBLocked</code> instead of corrupting claims. Want multiple
 processes? Run the broker — one broker <em>is</em> the one writer.</li>
 <li><strong>The file is in WAL mode</strong>, so at the file level readers never block the
-writer and never see torn state. (In embedded mode reads still funnel through
-the same single connection; WAL is what makes that safe and cheap.) <code>synchronous=NORMAL</code> is the default
+writer and never see torn state. Monitoring probes, fresh per-queue <code>Stats</code> and
+global observation refreshes use one separate <code>mode=ro</code> plus <code>query_only</code>
+connection; global queue gauges are shared for about 10 seconds and concurrent
+refreshes coalesce.
+Ordinary engine reads and every mutation retain their existing
+writer-connection ordering. An in-memory engine cannot share that reader and
+stays on its single connection. <code>synchronous=NORMAL</code> is the default
 durability point; <code>FULL</code> is a knob (<code>MQLITE_SYNC</code>) when an fsync per commit is
 worth ~4–11× of your local throughput (on remote Turso it&#39;s a no-op — the
 server owns durability).</li>

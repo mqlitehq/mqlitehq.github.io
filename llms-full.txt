@@ -637,8 +637,8 @@ Four deliberate choices hide in this table:
 Here is the design decision everything else leans on. SQLite allows one writer at
 a time — most systems fight that; mqlite **builds on it**:
 
-- **In-process, the connection pool has size one** (`SetMaxOpenConns(1)`).
-  `database/sql` queues every caller onto that connection, so *all writes are
+- **In-process, the writer pool has size one** (`SetMaxOpenConns(1)`).
+  `database/sql` queues every mutation onto that connection, so *all writes are
   serialized before SQLite ever sees them*. There is no lock contention, no
   `SQLITE_BUSY` retry loop, no interleaving to reason about. Two goroutines
   cannot half-claim the same message because their statements cannot overlap.
@@ -648,8 +648,13 @@ a time — most systems fight that; mqlite **builds on it**:
   file fails fast with `ErrDBLocked` instead of corrupting claims. Want multiple
   processes? Run the broker — one broker *is* the one writer.
 - **The file is in WAL mode**, so at the file level readers never block the
-  writer and never see torn state. (In embedded mode reads still funnel through
-  the same single connection; WAL is what makes that safe and cheap.) `synchronous=NORMAL` is the default
+  writer and never see torn state. Monitoring probes, fresh per-queue `Stats` and
+  global observation refreshes use one separate `mode=ro` plus `query_only`
+  connection; global queue gauges are shared for about 10 seconds and concurrent
+  refreshes coalesce.
+  Ordinary engine reads and every mutation retain their existing
+  writer-connection ordering. An in-memory engine cannot share that reader and
+  stays on its single connection. `synchronous=NORMAL` is the default
   durability point; `FULL` is a knob (`MQLITE_SYNC`) when an fsync per commit is
   worth ~4–11× of your local throughput (on remote Turso it's a no-op — the
   server owns durability).
@@ -1035,6 +1040,11 @@ construction. This document is generated from the wire contract in
 [`wire/wire.go`](https://github.com/mqlitehq/mqlite/blob/main/wire/wire.go) (the single source of truth shared by the broker
 and the Go SDK, so the two can't drift) and the server's error mapping.
 
+Every RPC body must be exactly one non-null JSON object, including operations
+whose request is otherwise empty (`{}`). Unknown fields and data after that object
+are rejected. Repeated fields retain Go's `encoding/json` behavior: later scalar
+values replace earlier ones, while repeated object and map values may merge.
+
 ## Conventions
 
 - **Transport:** HTTP `POST`, `Content-Type: application/json`. Discovery and
@@ -1165,7 +1175,7 @@ and console. Requires `manage` or a configured monitor credential.
 |---|---|
 | `sampled_at_ms`, `started_at_ms`, `backend`, `version` | Queue sampling instant, engine lifetime and non-sensitive identity |
 | `access` | Request capability: `manage`, `monitor` or `anonymous`; SDK embedded mode uses `embedded` |
-| `collection` | Queue collection `state`, `last_success_at_ms`, `duration_seconds`, bounded `error_code` |
+| `collection` | Queue collection `state`, `last_success_at_ms`, latest queue-gauge refresh `duration_seconds`, bounded `error_code` |
 | `queue_count`, `subscription_count`, `queues` | Actual retained state counts and age; counts are usable only when collection is `available` |
 | `runtime` | Schema version, read-probe availability/latency and local footprint availability/bytes; no DSN or path |
 | `messages` | Engine-lifetime `{queue,event,count}` effects, recorded after confirmed commits |
@@ -1518,6 +1528,9 @@ work.
   discovery passes after an uncertain remote database commit so a late-visible
   retirement can enter normal cleanup; startup recovery is the durable fallback.
   Concurrent delete/recreate controllers are unsupported.
+- When access logging is retained, the operation record includes its server request
+  ID, safe actor classification, queue, force decision, acceptance, and returned
+  lifecycle state. See [destructive-operation evidence](https://github.com/mqlitehq/mqlite/blob/main/docs/observability.md#access-logs-and-destructive-operation-evidence).
 
 Go SDK: `client.DeleteQueue(ctx, name) error` and the equivalent embedded method
 retain their empty-only signature. They return `nil` once deletion is accepted,
@@ -1570,6 +1583,9 @@ subscription's backing queue.
 - Subscription identity is still name-only. One owner must serialize deletion
   and recreation, and temporary subscription names should be globally unique and
   used for only one lifetime.
+- Retained access logs record the topic/subscription target, force decision,
+  acceptance and returned lifecycle state without storing a Bearer token. See
+  [destructive-operation evidence](https://github.com/mqlitehq/mqlite/blob/main/docs/observability.md#access-logs-and-destructive-operation-evidence).
 
 ### CreateQueue
 
@@ -1684,10 +1700,11 @@ The `state` field and deleting-resource visibility below are available in
 
 - **Request** `{}`. **Response** `{subscriptions: [{topic, name, expr}]}` — every
   active subscription with its topic and [filter expression](https://github.com/mqlitehq/mqlite/blob/main/docs/concepts.md#subscription-filters-expr) (`expr` empty = match
-  all). This compatibility route is intentionally not paged. The configured
-  subscription ceiling bounds its maximum size; new integrations should use the
-  paged route below. The Go SDK retains the original three-field
-  `SubscriptionInfo` type for this method.
+  all). This compatibility-only route is active/unexpired-only and intentionally
+  not paged. It is deprecated for management and reconciliation because it cannot
+  expose deleting name reservations. The configured subscription ceiling bounds
+  its maximum size; new integrations should use the paged route below. The Go SDK
+  retains the original three-field `SubscriptionInfo` type for this method.
 
 ### ListSubscriptionsPage
 
@@ -1743,7 +1760,9 @@ Move dead-lettered messages back to active (or to another queue).
 Permanently delete dead-lettered messages.
 
 - **Request** `PurgeRequest`: `queue`, `max` (int), `older_than_ms` (int; both zero
-  purges the whole DLQ). **Response** `PurgeResponse`: `purged` (int).
+  purges the whole DLQ). **Response** `PurgeResponse`: `purged` (int). Retained
+  access logs include both requested bounds and the confirmed purge count; see
+  [destructive-operation evidence](https://github.com/mqlitehq/mqlite/blob/main/docs/observability.md#access-logs-and-destructive-operation-evidence).
 
 ### Status
 
@@ -1806,7 +1825,7 @@ Errors are a JSON envelope `{"code": "...", "message": "..."}` with an HTTP stat
 
 | HTTP | `code` | When |
 |---|---|---|
-| 400 | `invalid_argument` | malformed JSON, an **unknown field**, trailing data after the object, a bad filter expression, an empty queue name, or an unknown enum (`kind` / `ordering_mode`). The decoder is strict — a typo'd field is a 400, not a silently-dropped no-op (`mqlite.ErrInvalidArgument`). |
+| 400 | `invalid_argument` | malformed JSON, a non-object or `null` request body, an **unknown field**, trailing data after the object, a bad filter expression, an empty queue name, or an unknown enum (`kind` / `ordering_mode`). The decoder is strict — a typo'd field is a 400, not a silently-dropped no-op (`mqlite.ErrInvalidArgument`). |
 | 400 | `group_required` | a `group_fifo` send with no `group_id` |
 | 401 | `unauthenticated` | missing/invalid Bearer token (auth is on by default; only `MQLITE_TOKENS=off` disables it) |
 | 403 | `permission_denied` | a valid key lacks permission, or key management was attempted with auth disabled (`mqlite.ErrPermissionDenied`) |
@@ -1818,7 +1837,7 @@ Errors are a JSON envelope `{"code": "...", "message": "..."}` with an HTTP stat
 | 409 | `queue_not_empty` | deletion found retained messages in at least one state |
 | 409 | `subscription_not_empty` | subscription deletion found retained messages in at least one state |
 | 429 | `resource_exhausted` | the active plus deleting subscription capacity is full (`mqlite.ErrSubscriptionLimit`) |
-| 413 | `message_too_large` | body over `MaxMessageBytes` (default 1 MiB) |
+| 413 | `message_too_large` | a message body over `MaxMessageBytes` (default 1 MiB), or request decoding that exceeds `server.MaxBodyBytes` (default 32 MiB) |
 | 499 | `canceled` | the client canceled the request |
 | 503 | `outcome_unknown` | a remote (Turso/libSQL) write lost its commit acknowledgement — it **may or may not** have applied. **Do not blindly retry**; reconcile messages by `message_id`/dedup, or key operations by their retained public key ID (`mqlite.ErrOutcomeUnknown`). Only occurs against a remote store, never a local file/`:memory:`. |
 | 500 | `internal` | unexpected server error |
@@ -2437,6 +2456,14 @@ authenticate again. Keys issued by another key are independent: revoking their
 issuer does not revoke them. An administrator can revoke itself; retain another
 administrator before doing so.
 
+When broker access logs are retained, successful creation and revocation records
+include the target's public key ID and the caller's safe actor classification. A
+value equal to a configured static credential is omitted even when it has valid
+public-ID syntax, including when it would otherwise be an actor ID. A managed
+caller is identified by its own public key ID; configured administrator tokens
+have no public ID. Secrets and token digests are never log fields. See
+[access-log retention and limits](https://github.com/mqlitehq/mqlite/blob/main/docs/observability.md#access-logs-and-destructive-operation-evidence).
+
 If a creation response is lost, keep the original public ID and list keys as an
 administrator to find it. If it exists without a saved secret, revoke it and
 create a replacement with a new ID. A repeated ID returns `409 key_conflict` and
@@ -2696,6 +2723,12 @@ The same env works in Docker (`-e MQLITE_DB=... -e MQLITE_DB_AUTH_TOKEN=...`) or
 lives in Turso. Durability is the Turso server's responsibility — `MQLITE_SYNC` is
 ignored for remote DSNs. See [turso.md](https://github.com/mqlitehq/mqlite/blob/main/docs/turso.md).
 
+Run exactly one active MQLite broker or embedded `Engine` per Turso database. To
+replace it, stop the old owner, confirm its process has exited, and only then start
+the replacement. Rolling overlap against the same database is unsupported. The
+remote connection pool is safe only within one MQLite process; it does not provide
+cross-process ownership.
+
 ## Verify any deploy
 
 ```bash
@@ -2769,6 +2802,50 @@ credential remains required on private networks.
 For a runnable broker, Prometheus and Grafana stack, see
 [the local observability demo](https://github.com/mqlitehq/mqlite/blob/main/ops/observability/README.md). For an existing
 platform, use the [cloud and Kubernetes guide](https://github.com/mqlitehq/mqlite/blob/main/docs/observability-cloud.md).
+
+## Access logs and destructive-operation evidence
+
+`mqlite serve` enables request logging to stderr. Each emitted record has a
+broker-generated 32-character `request_id`; the same value is returned in the
+`X-Request-ID` response header and exposed to configured CORS clients. The broker
+does not trust or copy a caller-supplied request ID. An enabled-CORS preflight is
+deliberately not logged, and a successful empty `Receive` is emitted at Debug so
+an Info-level handler may filter it. The ID correlates one HTTP attempt with one
+log record; it is not an idempotency key and does not authorize retrying a destructive request.
+
+`actor_kind` distinguishes `anonymous`, `unverified`, `static_admin`,
+`static_monitor`, and `managed_key`. A successfully authenticated managed key also
+records its public `actor_key_id`, unless that ID equals a configured static
+credential. Static administrator and monitor credentials have no public ID, and
+invalid, expired, or revoked credentials cannot be safely attributed, so those
+records never invent one. Authentication headers, token
+digests, message bodies, and generated key secrets are not copied into access-log
+fields. Resource names and public IDs are logged by design; never put a secret in
+either.
+
+The following management records include operation-specific evidence in addition
+to status, error code, actor, request ID, and duration:
+
+| RPC | Fields |
+|---|---|
+| `DeleteQueue` | `queue`, `force`, `acceptance` (`accepted`, `rejected`, or `unknown`), then `result_state` and `deleted` for an accepted result |
+| `DeleteSubscription` | `topic`, `sub`, `force`, the same acceptance and result fields |
+| `Purge` | `queue`, requested `max` and `older_than_ms` bounds, and confirmed `purged` count |
+| `CreateKey`, `RevokeKey` | safe syntactically valid public `key_id`; a value equal to a configured static credential is omitted; successful operations add `result_state=created` or `revoked` |
+
+These records are operational evidence, not a persistent audit table. A success
+record describes the broker result; an `acceptance=unknown` deletion still needs
+read-only reconciliation. Logs do not remove the rule that one owner must
+serialize deletion with same-name recreation. Resource names and public key IDs
+may themselves be sensitive operational metadata, so restrict log access.
+
+The default access log exists only on stderr. Container and service platforms may
+discard it quickly, and `MQLITE_DIAGNOSTIC_LOG` deliberately excludes routine
+requests. Forward stderr to an external log store and set its retention to cover
+your incident-response and destructive-request reconciliation window. Embedded
+brokers must pass a retained logger with `WithRequestLog`; a JSON `slog` handler is
+recommended when machines consume the evidence. Log delivery and storage
+durability remain the operator's responsibility.
 
 ## Maintenance failure diagnosis
 
@@ -2876,11 +2953,23 @@ measurements and `mqlite_collection_success 0`, omitting queue gauges that could
 be collected. Failure before the endpoint, including invalid scrape credentials,
 causes Prometheus `up` to become zero instead.
 
-Queue counts are actual retained rows from a grouped database query. They describe
-stored states, not guaranteed immediate delivery eligibility: visibility, TTL,
-lease expiry awaiting maintenance and ordering rules can affect claims. Different
-measurement domains are sampled at different instants. The observation is not an
-atomic transaction encompassing every database, HTTP and in-process counter.
+Queue gauges come from an exact grouped database query at the reported
+`sampled_at_ms`. One process-local gauge snapshot is shared across native
+`Observe`, `/metrics` and console requests for about 10 seconds. A cache hit
+preserves the original timestamp instead of presenting cached rows as new.
+Message writes and polling do not extend the fixed cache deadline; a queue create
+or delete invalidates the snapshot. The deadline begins when a refresh finishes,
+so after an unusually slow scan the gauges can trail current messages by the scan
+duration plus roughly one cache window. Per-queue `Stats` remains a fresh indexed
+read.
+
+Counts describe stored states at the sample time, not guaranteed immediate
+delivery eligibility: visibility, TTL, lease expiry awaiting maintenance and
+ordering rules can affect claims. Runtime probes, process counters and queue
+gauges are sampled at different instants. The observation is not an atomic
+transaction encompassing every database, HTTP and in-process counter. Collection
+duration is the elapsed time of the gauge refresh that produced `sampled_at_ms`;
+it remains unchanged on a cache hit.
 
 `/healthz` is open process liveness. `mqlite_storage_read_available` reports a real
 storage read probe; success does not prove writes, end-to-end delivery or data
@@ -2889,18 +2978,37 @@ for memory/remote backends, not a fabricated zero-byte database.
 
 ### Collection cost and interval
 
-Each observation collects the full queue inventory with one grouped message scan
-and a storage read probe. The scan includes retained rows, so its cost grows with
-backlog as well as queue count. A local SQLite database uses the same single-writer
-connection for application work and collection; monitoring is not free or isolated
-from message-operation latency.
+Each observation runs a storage read probe. A cache refresh also collects the full
+queue inventory with one grouped message scan. Concurrent refreshes share that
+scan, and successful rows are reused for about 10 seconds; failed scans are not
+cached, so later requests can retry. The scan includes retained rows, so refresh
+cost grows with backlog as well as queue count. Exact per-queue `Stats` uses one
+literal branch per message state and the existing queue-prefixed partial indexes,
+so it does not scan unrelated queues.
+
+The cache retains one queue-gauge slice whose size grows with queue inventory,
+not backlog depth. Each request receives its own slice and still allocates and
+serializes the full response.
+
+A local file database runs `Stats`, the `SELECT 1` storage probe and global refresh
+on one dedicated `mode=ro` plus `query_only` connection. It cannot write or
+checkpoint, and WAL reads do not occupy the sole writer connection, so a deep
+refresh does not sit in front of Send, Receive or
+settlement. Reader work serializes on that one connection. A refresh still
+consumes CPU and storage bandwidth and holds a WAL snapshot until it finishes;
+long scans can delay checkpoint progress and grow the WAL. `:memory:` cannot use a
+second connection without becoming a different database, so its refresh and
+probe still share the sole writer connection. Remote Turso/libSQL observations
+use the existing small provider pool and consume provider query resources.
 
 Start production scraping at 15 seconds, measure collection duration and actual
 send/receive latency under the expected retained backlog, then adjust the scrape
-and native/console polling intervals. Each native observation or Prometheus scrape
-collects its own snapshot. Grafana dashboard refreshes query Prometheus instead
-of adding direct broker scans. The local demonstration uses a faster interval to
-make transitions visible; choose production cadence from measured workload needs.
+and native/console polling intervals. Requests inside the roughly 10-second gauge
+window share one snapshot, but each request still runs a storage probe and builds
+its response; aggressive polling is not free. Grafana dashboard refreshes query
+Prometheus instead of adding direct broker requests. The local demonstration uses
+a faster interval to make transitions visible; choose production cadence from
+measured workload needs.
 
 RPC/result and storage/error dimensions have fixed vocabularies, but their
 zero-initialized counters and histogram buckets still produce many series. Queue
@@ -2926,7 +3034,7 @@ use Unix seconds in Prometheus and epoch milliseconds in native JSON.
 | `mqlite_collection_success` | gauge | 1 when queue collection succeeds, otherwise 0 |
 | `mqlite_collection_status` | gauge, value 1 | `state`, bounded `error_code` |
 | `mqlite_collection_last_success_timestamp_seconds` | gauge | Last successful collection, 0 before one succeeds |
-| `mqlite_collection_duration_seconds` | gauge | Queue collection elapsed time |
+| `mqlite_collection_duration_seconds` | gauge | Latest queue-gauge refresh elapsed time; unchanged on cache hits |
 | `mqlite_entities` | gauge | `kind=queue|subscription`; queue count excludes subscriptions and topic routing names |
 | `mqlite_queue_messages` | gauge | `queue`, `state=active|locked|deferred|scheduled|dead_lettered` |
 | `mqlite_queue_retained_messages` | gauge | `queue`; all retained rows including unexpected states |
@@ -2940,7 +3048,7 @@ use Unix seconds in Prometheus and epoch milliseconds in native JSON.
 | `mqlite_storage_operations_total` | counter | `operation`, `outcome`, `error_code` |
 | `mqlite_storage_operation_duration_seconds` | histogram | Same labels; storage-operation elapsed time |
 | `mqlite_storage_retries_total` | counter | Same labels; safe retry attempts within the observed operation |
-| `mqlite_storage_pool_connections` | gauge | `state=max_open|open|in_use|idle` |
+| `mqlite_storage_pool_connections` | gauge | `state=max_open|open|in_use|idle`; local files aggregate the one writer and one observation reader |
 | `mqlite_storage_pool_waits_total` | counter | Connection-pool waits |
 | `mqlite_storage_pool_wait_duration_seconds_total` | counter | Cumulative pool waiting time, distinct from SQL execution |
 | `mqlite_storage_read_available` | gauge | Storage read probe succeeded, 0 or 1 |
@@ -3381,6 +3489,14 @@ for metric definitions and alerts.
   Subscription deadlines, scheduled delivery, message TTL and lock expiry all use
   that clock. A forward step can make deadlines arrive early; a backward step can
   delay a subscription expiry that has not yet been durably marked `deleting`.
+- Treat global queue gauges as sampled monitoring data. Within one broker process,
+  `Observe`, `/metrics` and the console share them for about 10 seconds and expose
+  the original `sampled_at_ms`; use fresh per-queue `Stats` when an operation needs
+  a current drain decision. A very slow refresh adds its own duration to the
+  possible message-gauge age. Keep normal scrape intervals at 15 seconds or
+  longer unless a measured workload justifies more frequent probes. One cache
+  refresh still scans retained messages and can consume CPU, storage bandwidth
+  and WAL checkpoint headroom on a deep backlog.
 
 Choose and record the application's recovery objectives before launch: acceptable
 snapshot age (RPO), recovery time (RTO), backlog age, and capacity limits. Measure
@@ -3485,8 +3601,11 @@ auxiliary tables. Do not copy only the main file while the broker is running, an
 do not write or run an external checkpoint against the live source. Keep the
 backup connection read-only and short-lived. SQLite's documented
 [WAL-reset issue](https://www.sqlite.org/wal.html#the_wal_reset_bug) requires multiple
-connections concurrently writing/checkpointing; MQLite's single connection and
-this backup restriction avoid that topology. See [dependency policy](https://github.com/mqlitehq/mqlite/blob/main/docs/dependencies.md).
+connections concurrently writing/checkpointing. A local MQLite database has one
+connection that may write or checkpoint plus one observation reader opened with
+SQLite `mode=ro` and `query_only`; the reader cannot write or checkpoint. That
+division and this backup restriction avoid the affected topology. See
+[dependency policy](https://github.com/mqlitehq/mqlite/blob/main/docs/dependencies.md).
 
 ### Offline directory copy
 
@@ -3565,8 +3684,9 @@ business identities if it must survive the cutover.
 v0.4.0 clients also change the deletion contract to `{name,force?}` with a typed
 `{deleted,state}` result; update broker, SDK, CLI, MCP and console together. A
 rollback after schema-7 accepts writes requires preserving and reconciling those
-writes before restoring the schema-5 snapshot. If enabled, retain the private
-diagnostic log separately from database backups.
+writes before restoring the schema-5 snapshot. Retain broker stderr externally for
+the destructive-operation reconciliation window; the private diagnostic log is
+separate from access logs and database backups.
 
 Before the cutover, replace Prometheus `mqlite_queue_total` queries with
 `mqlite_queue_retained_messages`. Replace

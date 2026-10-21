@@ -89,6 +89,14 @@ time in capacity planning.</li>
 Subscription deadlines, scheduled delivery, message TTL and lock expiry all use
 that clock. A forward step can make deadlines arrive early; a backward step can
 delay a subscription expiry that has not yet been durably marked <code>deleting</code>.</li>
+<li>Treat global queue gauges as sampled monitoring data. Within one broker process,
+<code>Observe</code>, <code>/metrics</code> and the console share them for about 10 seconds and expose
+the original <code>sampled_at_ms</code>; use fresh per-queue <code>Stats</code> when an operation needs
+a current drain decision. A very slow refresh adds its own duration to the
+possible message-gauge age. Keep normal scrape intervals at 15 seconds or
+longer unless a measured workload justifies more frequent probes. One cache
+refresh still scans retained messages and can consume CPU, storage bandwidth
+and WAL checkpoint headroom on a deep backlog.</li>
 </ul>
 <p>Choose and record the application&#39;s recovery objectives before launch: acceptable
 snapshot age (RPO), recovery time (RTO), backlog age, and capacity limits. Measure
@@ -174,8 +182,11 @@ auxiliary tables. Do not copy only the main file while the broker is running, an
 do not write or run an external checkpoint against the live source. Keep the
 backup connection read-only and short-lived. SQLite&#39;s documented
 <a href="https://www.sqlite.org/wal.html#the_wal_reset_bug">WAL-reset issue</a> requires multiple
-connections concurrently writing/checkpointing; MQLite&#39;s single connection and
-this backup restriction avoid that topology. See <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/dependencies.md">dependency policy</a>.</p>
+connections concurrently writing/checkpointing. A local MQLite database has one
+connection that may write or checkpoint plus one observation reader opened with
+SQLite <code>mode=ro</code> and <code>query_only</code>; the reader cannot write or checkpoint. That
+division and this backup restriction avoid the affected topology. See
+<a href="https://github.com/mqlitehq/mqlite/blob/main/docs/dependencies.md">dependency policy</a>.</p>
 <h3 id="offline-directory-copy">Offline directory copy</h3>
 <p>Stop producers and consumers, then stop the broker and confirm it has exited.
 Copy the complete data directory while no process can change it; include the main
@@ -263,8 +274,9 @@ business identities if it must survive the cutover.</p>
 <p>v0.4.0 clients also change the deletion contract to <code>{name,force?}</code> with a typed
 <code>{deleted,state}</code> result; update broker, SDK, CLI, MCP and console together. A
 rollback after schema-7 accepts writes requires preserving and reconciling those
-writes before restoring the schema-5 snapshot. If enabled, retain the private
-diagnostic log separately from database backups.</p>
+writes before restoring the schema-5 snapshot. Retain broker stderr externally for
+the destructive-operation reconciliation window; the private diagnostic log is
+separate from access logs and database backups.</p>
 <p>Before the cutover, replace Prometheus <code>mqlite_queue_total</code> queries with
 <code>mqlite_queue_retained_messages</code>. Replace
 <code>mqlite_queue_oldest_message_age_ms</code> with
