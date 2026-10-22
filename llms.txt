@@ -7,14 +7,15 @@
 Public documentation: https://mqlitehq.github.io/.
 Relative links below resolve against this website.
 
-NOTE ON VERSIONS: the latest release is v0.4.0 (default port 6754, schema token 7).
-This website tracks main, currently source v0.4.0. Runtime access
+NOTE ON VERSIONS: the latest supported release is v0.3.2 (default port 6754,
+schema token 5). v0.3.3 is withdrawn. This website tracks main, currently the
+unreleased v0.4.0 candidate. Runtime access
 keys and key-management tools require v0.3.1 or later. Unified Observe, configured
-monitor credentials and the monitoring starter require v0.3.2 or later. Installation commands below pin v0.4.0. Use the
-[v0.4.0 documentation](https://github.com/mqlitehq/mqlite/tree/v0.4.0/docs)
-for the versioned reference. v0.4.0 refuses schema-5 databases from v0.3.0–v0.3.2
-and retracted v0.3.3; start with a fresh database and follow
-[upgrade and rollback](operations.html#upgrade-and-rollback).
+monitor credentials and the monitoring starter require v0.3.2 or later.
+Installation commands below pin v0.3.2. Use the
+[v0.3.2 documentation](https://github.com/mqlitehq/mqlite/tree/v0.3.2/docs)
+for the supported release's exact API. Candidate-only lifecycle operations described
+below are unavailable in v0.3.2.
 
 - One engine, two front-ends: `mqlite.OpenEmbedded` (in-process, one SQLite file)
   and `mqlite serve` (HTTP broker, default :6754, Bearer-token auth, secure by
@@ -49,7 +50,7 @@ and retracted v0.3.3; start with a fresh database and follow
   Queue, subscription and topic names are one disjoint namespace (conflicts 409).
   Retiring the last active subscription makes its implicit topic unavailable for
   fan-out immediately; a deleting mapping reserves the address until cleanup ends.
-- Resource deletion (v0.4.0 and later): DeleteQueue and DeleteSubscription require
+- Resource deletion (unreleased v0.4.0 candidate): DeleteQueue and DeleteSubscription require
   manage permission and are empty-only by default. `force=true` is explicit,
   durable authorization to discard every retained state, including locked work.
   Accepted deletion removes the resource from the data plane immediately, reserves
@@ -57,7 +58,7 @@ and retracted v0.3.3; start with a fresh database and follow
   of another delete. The API addresses names directly and has no Generation field;
   one owner must serialize deletion with same-name recreation. DeleteQueue rejects
   subscription backing queues. DeleteSubscription requires the exact topic/name pair.
-- Subscription lifecycle (v0.4.0 and later): ListSubscriptionsPage provides bounded
+- Subscription lifecycle (unreleased v0.4.0 candidate): ListSubscriptionsPage provides bounded
   topic filtering, total/count, opaque cursors, lifecycle state and optional deleting
   entries. Subscribe may set a positive `ttl_ms`; omitted or zero creates a permanent
   subscription or preserves an existing lifetime. The broker stores one absolute
@@ -67,7 +68,7 @@ and retracted v0.3.3; start with a fresh database and follow
   cleanup completes. Use explicit deletion for normal completion, globally unique
   one-use names for truly temporary subscriptions, and a stable per-instance reply
   subscription plus `correlation_id` for high-rate request/reply traffic.
-- Maintenance diagnostics (v0.4.0 and later): Observe exposes bounded failure
+- Maintenance diagnostics (unreleased v0.4.0 candidate): Observe exposes bounded failure
   details and recovery status. Optional private diagnostic logs retain redacted
   details across restarts; cumulative error counts are not current health.
 - Scheduling: deliver at a time (Schedule). Cancel only removes never-delivered
@@ -95,7 +96,7 @@ and retracted v0.3.3; start with a fresh database and follow
   collector on a private network; block /metrics at any public API ingress.
   Authentication does not make a public route private. On Fly.io, reuse an
   external collector over the private network instead of adding a monitoring VM.
-  v0.4.0 removes the deprecated `mqlite_queue_total` and
+  The unreleased v0.4.0 candidate removes the deprecated `mqlite_queue_total` and
   `mqlite_queue_oldest_message_age_ms` aliases. Use
   `mqlite_queue_retained_messages` and `mqlite_queue_oldest_message_age_seconds`;
   divide old millisecond alert thresholds by 1,000. Native Observe JSON keeps
@@ -156,8 +157,8 @@ and retracted v0.3.3; start with a fresh database and follow
 - [MCP source](https://github.com/mqlitehq/mqlite/blob/main/docs/mcp.md).
 - [Releases](https://github.com/mqlitehq/mqlite/releases): binaries for
   linux/macos/windows (amd64+arm64), each archive contains mqlite + mqlite-mcp.
-- Container image: `ghcr.io/mqlitehq/mqlite:0.4.0` (default port 6754).
+- Container image: `ghcr.io/mqlitehq/mqlite:0.3.2` (default port 6754).
   See [Deployment](deployment.html) for persistent storage, authentication and TLS.
-- Broker: `go install github.com/mqlitehq/mqlite/cmd/mqlite@v0.4.0`.
-- MCP server: `go install github.com/mqlitehq/mqlite/cmd/mqlite-mcp@v0.4.0`.
-- SDK: `go get github.com/mqlitehq/mqlite@v0.4.0` (Go ≥ 1.21).
+- Broker: `go install github.com/mqlitehq/mqlite/cmd/mqlite@v0.3.2`.
+- MCP server: `go install github.com/mqlitehq/mqlite/cmd/mqlite-mcp@v0.3.2`.
+- SDK: `go get github.com/mqlitehq/mqlite@v0.3.2` (Go ≥ 1.21).

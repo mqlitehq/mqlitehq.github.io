@@ -55,15 +55,37 @@ test('source and dated latest release stay distinct across patch preparation and
     assert.equal(metadata.sourceVersion, source);
     assert.equal(metadata.latestRelease, `v${released}`);
     for (const [, out] of PAGES) {
-      assert.ok(outputs.get(out).includes(`source v${source}; latest release:`));
-      assert.equal(outputs.get(out).includes('The source changes are unreleased.'), source !== released);
+      assert.ok(outputs.get(out).includes(source === released ? `source v${source}` : `unreleased v${source} candidate`));
+      assert.ok(outputs.get(out).includes('Latest supported release:'));
       assert.ok(outputs.get(out).includes(`releases/tag/v${released}`));
       assert.ok(outputs.get(out).includes('mqlite main'));
       assert.ok(!outputs.get(out).includes('upcoming v0.3.0'));
+      assert.ok(!outputs.get(out).includes('re-run <code>tools/build.mjs</code>'));
       assert.ok(outputs.get(out).includes('id="shared-heading"'));
     }
     assert.ok(outputs.get('llms-full.txt').includes(`Source version: v${source}. Latest recorded release: v${released}.`));
   }
+});
+
+test('retracted and withdrawn changelog entries are never advertised as releases', (t) => {
+  const root = fixture(t);
+  put(root, 'internal/version/version.go', 'const Version = "0.4.0"\n');
+  put(root, 'CHANGELOG.md', [
+    '## Unreleased',
+    '',
+    '## v0.4.0 — 2026-10-22 (withdrawn)',
+    '',
+    '## v0.3.3 — 2026-10-13 (RETRACTED)',
+    '',
+    '## v0.3.2 — 2026-09-23',
+    '',
+  ].join('\n'));
+  const { metadata, outputs } = renderSite(root);
+  assert.equal(metadata.latestRelease, 'v0.3.2');
+  assert.ok(outputs.get('concepts.html').includes('unreleased v0.4.0 candidate'));
+  assert.ok(outputs.get('concepts.html').includes('releases/tag/v0.3.2'));
+  assert.ok(!outputs.get('concepts.html').includes('releases/tag/v0.3.3'));
+  assert.ok(!outputs.get('concepts.html').includes('releases/tag/v0.4.0'));
 });
 
 test('missing/ambiguous metadata and source contracts fail closed', (t) => {
@@ -133,7 +155,7 @@ test('all numerical claims are checked, so one correct count cannot hide another
 test('latest-release, legacy-port and source links cannot silently drift', (t) => {
   const { outputs, metadata } = renderSite(fixture(t));
   const root = materialize(t, outputs);
-  for (const content of ['latest release v0.3.0', 'latest published release is v0.3.0', 'latest <b>release</b>\nis v0.3.0', 'latest release: <a href="#">v0.3.0</a>', 'newest RELEASE is v0.3.0',
+  for (const content of ['latest release v0.3.0', 'latest published release is v0.3.0', 'latest supported release is v0.3.0', 'latest <b>release</b>\nis v0.3.0', 'latest release: <a href="#">v0.3.0</a>', 'newest RELEASE is v0.3.0',
     'Use port 8080', 'https://github.com/mqlitehq.github.io/blob/main/api.html']) {
     put(root, 'agents.html', content);
     assert.throws(() => checkClaims(metadata, root), undefined, content);
@@ -173,7 +195,7 @@ test('the real Pages package contains the complete static inventory with identic
     return entry.isDirectory() ? files(resolve(dir, entry.name), `${name}/`) : [name];
   });
   const expected = [
-    'access-keys.html', 'agents.html', 'api.html', 'assets/fig-lifecycle.svg', 'assets/fig-overview.svg',
+    'access-keys.html', 'agents.html', 'api.html', 'assets/fig-overview.svg',
     'assets/highlight.min.js', 'assets/site.css', 'assets/site.js', 'cli.html',
     'concepts.html', 'deployment.html', 'favicon.svg', 'index.html', 'internals.html',
     'llms-full.txt', 'llms.txt', 'logo.svg', 'observability.html', 'observability-cloud.html', 'operations.html',

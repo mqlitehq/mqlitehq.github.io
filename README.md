@@ -28,7 +28,7 @@ choose documentation matching an installed binary.
 | `assets/site.css` | shared chrome (true-black, mono, amber accent) | by hand |
 | `assets/site.js` | copy buttons · line numbers · tabs · highlight init | by hand |
 | `assets/highlight.min.js` | syntax highlighting, vendored (no CDN) | **generated** (copied from `@highlightjs/cdn-assets`) |
-| `assets/fig-*.svg` | optional hand-drawn illustrations | by hand; generated pages retain canonical ASCII diagrams |
+| `assets/fig-overview.svg` | landing-page model illustration | by hand; generated pages retain canonical ASCII diagrams |
 | `tools/build.mjs` | the generator | — |
 | `tools/build.test.mjs` | generation and rejection contracts | Node's built-in test runner; no test dependencies |
 

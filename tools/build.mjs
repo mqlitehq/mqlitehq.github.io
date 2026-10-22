@@ -34,7 +34,8 @@ const requireValue = (condition, message) => {
 export function sourceMetadata(mq) {
   const versions = [...read(mq, 'internal/version/version.go').matchAll(/^const Version = "(\d+\.\d+\.\d+)"$/gm)];
   requireValue(versions.length === 1, 'cannot read the single source version constant');
-  const release = /^## (v\d+\.\d+\.\d+(?:-rc\.\d+)?)\s+—\s+\d{4}-\d{2}-\d{2}\s*$/m.exec(read(mq, 'CHANGELOG.md'));
+  const release = [...read(mq, 'CHANGELOG.md').matchAll(/^## (v\d+\.\d+\.\d+(?:-rc\.\d+)?)\s+—\s+\d{4}-\d{2}-\d{2}(?:\s+\(([^)]+)\))?\s*$/gm)]
+    .find(([, , status = '']) => !/\b(?:retracted|withdrawn)\b/i.test(status));
   requireValue(release, 'CHANGELOG.md has no dated release heading');
   const routes = [...read(mq, 'wire/wire.go').matchAll(/^\s*Path\w+\s*=\s*"(\/mqlite\.v1\.[^"]+)"/gm)].map((m) => m[1]);
   const tools = [...read(mq, 'cmd/mqlite-mcp/main.go').matchAll(/^\s+name:\s+"([^"]+)"/gm)].map((m) => m[1]);
@@ -80,6 +81,9 @@ export function rewriteMdLinks(md) {
 
 function page({ title, description, src, body }, metadata) {
   const unreleased = metadata.latestRelease !== `v${metadata.sourceVersion}`;
+  const sourceStatus = unreleased
+    ? `unreleased v${metadata.sourceVersion} candidate`
+    : `source v${metadata.sourceVersion}`;
   const navigation = PAGES.map(([, out, label]) => `    <a href="${out}">${label.replace('HTTP API reference', 'API').replace('CLI reference', 'CLI')}</a>`).join('\n');
   return `<!doctype html>
 ${GENERATED_MARKER}
@@ -104,8 +108,8 @@ ${navigation}
   </div>
 </div></nav>
 <div class="wrap">
-  <div class="stamp">Generated from <a href="${GH}/blob/main/docs/${src}">mqlite main · docs/${src}</a> — source v${metadata.sourceVersion}; latest release: <a href="${GH}/releases/tag/${metadata.latestRelease}">${metadata.latestRelease}</a>.
-  These docs track main; check release notes for published artifacts.${unreleased ? ' The source changes are unreleased.' : ''} Edit the canonical Markdown and re-run <code>tools/build.mjs</code>.</div>
+  <div class="stamp">Source: <a href="${GH}/blob/main/docs/${src}">mqlite main · docs/${src}</a> — ${sourceStatus}. Latest supported release: <a href="${GH}/releases/tag/${metadata.latestRelease}">${metadata.latestRelease}</a>.
+  These docs track main; use the linked release for published artifacts.</div>
   <main class="prose">
 ${body}
   </main>
@@ -165,7 +169,7 @@ export function checkClaims(metadata, root = site) {
       requireValue(Number(match[1]) === counts[match[2]], `${file}: stale ${match[2]} count ${match[1]} (expected ${counts[match[2]]})`);
       seen.add(match[2]);
     }
-    for (const match of visible.matchAll(/(?:latest(?: (?:recorded|published))? release|newest RELEASE)(?::| is)?\s*(v\d+\.\d+\.\d+(?:-rc\.\d+)?)/gi)) {
+    for (const match of visible.matchAll(/(?:latest(?: (?:recorded|published|supported))? release|newest RELEASE)(?::| is)?\s*(v\d+\.\d+\.\d+(?:-rc\.\d+)?)/gi)) {
       requireValue(match[1] === metadata.latestRelease, `${file}: incorrect latest release ${match[1]}`);
     }
     requireValue(!text.includes('mqlitehq.github.io/blob/'), `${file}: private site source link`);
