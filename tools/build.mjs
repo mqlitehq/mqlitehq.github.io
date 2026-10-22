@@ -136,8 +136,9 @@ export function renderSite(mq) {
     const body = rewriteLinks(marked.parse(read(mq, `docs/${src}`)));
     outputs.set(out, page({ title, description, src, body }, metadata));
   }
-  const parts = BUNDLE_FILES.map((file) => `<!-- ===== mqlite main · source v${metadata.sourceVersion}; latest release ${metadata.latestRelease} · docs/${file} ===== -->\n\n${rewriteMdLinks(read(mq, `docs/${file}`))}`);
-  outputs.set('llms-full.txt', `mqlite main — full documentation bundle.\nSource version: v${metadata.sourceVersion}. Latest recorded release: ${metadata.latestRelease}.\nThese docs track main; consult release notes for published artifacts and upgrade requirements.\nSource of truth: ${metadata.source}\n\n${parts.join('\n\n')}`);
+  const releaseURL = `${GH}/releases/tag/${metadata.latestRelease}`;
+  const parts = BUNDLE_FILES.map((file) => `<!-- ===== mqlite main · source v${metadata.sourceVersion}; latest supported release ${metadata.latestRelease} · docs/${file} ===== -->\n\n${rewriteMdLinks(read(mq, `docs/${file}`))}`);
+  outputs.set('llms-full.txt', `mqlite main — full documentation bundle.\nSource version: v${metadata.sourceVersion}. Latest supported release: [${metadata.latestRelease}](${releaseURL}).\nThese docs track main; consult release notes for published artifacts and upgrade requirements.\nSource of truth: ${metadata.source}\n\n${parts.join('\n\n')}`);
   outputs.set('site-metadata.json', `${JSON.stringify(metadata, null, 2)}\n`);
   outputs.set('assets/highlight.min.js', readFileSync(resolve(here, 'node_modules/@highlightjs/cdn-assets/highlight.min.js')));
   requireValue(JSON.stringify([...outputs.keys()]) === JSON.stringify(GENERATED_FILES), 'generated output inventory drift');

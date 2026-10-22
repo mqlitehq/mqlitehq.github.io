@@ -46,7 +46,7 @@ test('the complete generated output and source inventories are explicit', () => 
   assert.deepEqual(GENERATED_FILES, ['concepts.html', 'internals.html', 'api.html', 'cli.html', 'access-keys.html', 'deployment.html', 'observability.html', 'observability-cloud.html', 'operations.html', 'llms-full.txt', 'site-metadata.json', 'assets/highlight.min.js']);
 });
 
-test('source and dated latest release stay distinct across patch preparation and publication', (t) => {
+test('source and latest supported release stay distinct across patch preparation and publication', (t) => {
   const root = fixture(t);
   for (const [source, released] of [['0.3.0', '0.2.0'], ['0.3.1', '0.3.0'], ['0.3.1', '0.3.1'], ['0.3.2', '0.3.1'], ['0.3.2', '0.3.2']]) {
     put(root, 'internal/version/version.go', `const Version = "${source}"\n`);
@@ -63,7 +63,7 @@ test('source and dated latest release stay distinct across patch preparation and
       assert.ok(!outputs.get(out).includes('re-run <code>tools/build.mjs</code>'));
       assert.ok(outputs.get(out).includes('id="shared-heading"'));
     }
-    assert.ok(outputs.get('llms-full.txt').includes(`Source version: v${source}. Latest recorded release: v${released}.`));
+    assert.ok(outputs.get('llms-full.txt').includes(`Source version: v${source}. Latest supported release: [v${released}](https://github.com/mqlitehq/mqlite/releases/tag/v${released}).`));
   }
 });
 
@@ -86,6 +86,10 @@ test('retracted and withdrawn changelog entries are never advertised as releases
   assert.ok(outputs.get('concepts.html').includes('releases/tag/v0.3.2'));
   assert.ok(!outputs.get('concepts.html').includes('releases/tag/v0.3.3'));
   assert.ok(!outputs.get('concepts.html').includes('releases/tag/v0.4.0'));
+  const bundle = outputs.get('llms-full.txt');
+  assert.ok(bundle.includes('Latest supported release: [v0.3.2](https://github.com/mqlitehq/mqlite/releases/tag/v0.3.2).'));
+  assert.ok(!bundle.includes('releases/tag/v0.3.3'));
+  assert.ok(!bundle.includes('releases/tag/v0.4.0'));
 });
 
 test('missing/ambiguous metadata and source contracts fail closed', (t) => {

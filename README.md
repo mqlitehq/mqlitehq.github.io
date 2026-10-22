@@ -24,7 +24,7 @@ choose documentation matching an installed binary.
 | `operations.html` | backup, restore, upgrades and incident response | **generated** from `mqlite/docs/operations.md` |
 | `llms.txt` | one-page machine-readable summary | by hand |
 | `llms-full.txt` | full docs bundle (markdown) | **generated** (all nine references + MCP + examples) |
-| `site-metadata.json` | source version, latest recorded release, API/MCP/CLI surface, output inventory | **generated** from canonical source |
+| `site-metadata.json` | source version, latest supported release, API/MCP/CLI surface, output inventory | **generated** from canonical source |
 | `assets/site.css` | shared chrome (true-black, mono, amber accent) | by hand |
 | `assets/site.js` | copy buttons · line numbers · tabs · highlight init | by hand |
 | `assets/highlight.min.js` | syntax highlighting, vendored (no CDN) | **generated** (copied from `@highlightjs/cdn-assets`) |
@@ -34,10 +34,11 @@ choose documentation matching an installed binary.
 
 ## Syncing with the code (the anti-rot rule)
 
-Generated pages carry separate **source version** and **latest recorded release**
+Generated pages carry separate **source version** and **latest supported release**
 stamps and must never be edited by hand. The source version comes from
-`internal/version/version.go`; the latest release comes from the first dated
-release heading in `CHANGELOG.md`, never from the source version constant.
+`internal/version/version.go`; the latest supported release comes from the first
+dated non-withdrawn release heading in `CHANGELOG.md`, never from the source
+version constant.
 The website describes `main`, including changes not yet released.
 
 Use Node 24 LTS. Whenever the mqlite docs change (and on every release):
