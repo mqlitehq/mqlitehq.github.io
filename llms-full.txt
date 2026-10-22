@@ -1,9 +1,9 @@
 mqlite main — full documentation bundle.
-Source version: v0.4.0. Latest recorded release: v0.4.0.
+Source version: v0.4.0. Latest supported release: [v0.3.2](https://github.com/mqlitehq/mqlite/releases/tag/v0.3.2).
 These docs track main; consult release notes for published artifacts and upgrade requirements.
 Source of truth: https://github.com/mqlitehq/mqlite/tree/main/docs
 
-<!-- ===== mqlite main · source v0.4.0; latest release v0.4.0 · docs/concepts.md ===== -->
+<!-- ===== mqlite main · source v0.4.0; latest supported release v0.3.2 · docs/concepts.md ===== -->
 
 # Core concepts & subscription filters
 
@@ -104,13 +104,17 @@ Every transition, with its trigger and the condition under which it fires:
 | active / locked / deferred / scheduled | TTL expiry | ✗ removed | queue has `dead_letter_on_expire=0` (discard) |
 | dead_lettered | `Redrive` | active | back to this (or a target) queue; `count` reset to 0 |
 | dead_lettered | `Purge` | ✗ removed | manual deletion |
-| dead_lettered | DLQ retention | ✗ removed | background janitor bounds (age / count / bytes); touches **only** dead-letter rows |
+| dead_lettered | DLQ retention | ✗ removed | asynchronous background cleanup targets age / count / bytes and can temporarily lag; touches **only** dead-letter rows |
 
 - **The DLQ is not a separate queue.** It is messages in the same queue with
   `state='dead_lettered'`. A message lands there when its `delivery_count` reaches
   `max_delivery_count` (i.e. `≥`), on an explicit `reject`, or on TTL expiry (when the
   queue's `dead_letter_on_expire=1`). Inspect with `peek state=dead_lettered`, send back
   with `redrive`, or delete with `purge`.
+- **Redrive atomicity is internal.** Each database batch moves completely or not at
+  all, including source deletion plus target insertion for a cross-queue move.
+  Consumers still receive redriven work at least once, so handlers and external
+  effects must remain idempotent.
 - **Lease deadlines fence every settlement and renewal.** A new effect requires the
   current token and `locked_until_ms > now`; equality is expired, even before the
   reaper runs. Renew before that deadline. A live receipt can replay an already
@@ -215,13 +219,13 @@ boundary.
 
 Subscriptions can be deleted explicitly. The default operation succeeds only
 when the backing queue has no retained message in any state; force is a deliberate
-authorization to discard them. Acceptance durably marks the backing queue
-`deleting`, immediately removes it from topic fan-out and the data plane, and
-keeps its name reserved while bounded cleanup runs. The mapping disappears with
-the final backing-queue row. Consequently, an implicit topic becomes unavailable
-for fan-out as soon as its last active subscription is retired, even if physical
-cleanup is pending. Its address remains reserved by a deleting mapping until that
-cleanup completes.
+authorization to discard them. The accepting transaction immediately removes the
+subscription from topic fan-out and the data plane and starts bounded cleanup. If
+cleanup finishes, the same commit removes its mapping and backing queue; otherwise
+it commits a `deleting` marker that reserves the name for reconciliation. An
+implicit topic becomes unavailable for fan-out as soon as its last active
+subscription is retired. Its address remains reserved only while a deleting
+mapping persists.
 
 Subscription creation may include a **fixed lifetime**. The broker saves one
 absolute `expires_at_ms` from the first successful creation. Ordinary retries,
@@ -541,7 +545,7 @@ network I/O APIs are exposed; `now()` can read the wall clock:
   for the filter rules MQLite guarantees.
 
 
-<!-- ===== mqlite main · source v0.4.0; latest release v0.4.0 · docs/internals.md ===== -->
+<!-- ===== mqlite main · source v0.4.0; latest supported release v0.3.2 · docs/internals.md ===== -->
 
 # How mqlite works — building a reliable queue on one SQLite file
 
@@ -787,10 +791,12 @@ it is small and boring on purpose:
 **Resource deletion is a durable state machine.** An empty-only queue or
 subscription delete verifies every message state in the same transaction that
 changes the backing `queues.lifecycle_state` from `active` to `deleting`; force
-skips the empty check because its caller explicitly authorized discard. The state
-change invalidates cached configuration, wakes long polls, rejects further queue
-work and keeps the namespace occupied. A subscription stops participating in
-fan-out in that same committed state transition. Physical cleanup then removes
+skips the empty check because its caller explicitly authorized discard. That
+transaction also starts bounded physical cleanup. If cleanup finishes, the same
+commit removes the resource and there is no observable intermediate `deleting`
+state. Otherwise it commits the marker, which invalidates cached configuration,
+wakes long polls, rejects further queue work and keeps the namespace occupied. A
+subscription stops participating in fan-out in that commit. Later passes remove
 messages, dedup rows and both receipt tables before deleting the queue row itself;
 the subscription mapping and backing queue are removed explicitly in one transaction.
 
@@ -803,24 +809,26 @@ force authorization and never changes on retry, filter update or message activit
 
 The accepting call removes no more than 1,000 physical rows and targets about
 8 MiB. Each lifecycle pass globally caps cleanup at 4,096 rows and targets about
-8 MiB, across at most 32 backing queues
-locally or one queue on remote Turso/libSQL. The remote cap bounds Hrana round
-trips inside one write transaction; the persisted cursor provides fair rotation.
+8 MiB. Its ordinary per-resource path visits at most 32 backing queues locally,
+or one such queue on remote Turso/libSQL. The remote cap bounds Hrana
+round trips inside one write transaction; the persisted cursor provides fair rotation.
 `Open` runs a pass before lock recovery. The marker is therefore both the restart
 cursor and the force authorization. A crash cannot reactivate the queue or require
 an operator to re-authorize discard. A single oversized row may exceed the byte
 target to guarantee forward progress. Accepted pending deletes wake the worker;
-bursts coalesce into one signal, and unfinished passes schedule another after one
+bursts coalesce into one signal. A full 512-subscription empty fast-path batch
+schedules its next pass after 10 ms; other unfinished passes continue after one
 second. With no deleting resource the worker opens no transaction, which avoids an
 idle polling round trip on remote stores. The one exception is a remote deletion
 or cleanup transaction whose commit acknowledgement is uncertain: after the
 immediate pass, the worker performs 30 delayed probes one second apart so a commit
 that becomes visible after the first inventory snapshot is still discovered.
-Restart recovery remains the durable fallback after that window. Metadata work
-uses the same global budget: finalizing a subscription consumes two rows in the
-pass budget, one queue row and one subscription mapping. The common empty case
-deletes up to 512 mappings and backing rows with two set-based statements in one
-transaction, checking exact affected-row counts even when foreign keys are off.
+Restart recovery remains the durable fallback after that window. A separate
+set-based path handles the common empty case before the ordinary resource scan. It
+can delete up to 512 subscription mappings and their backing queue rows in one
+transaction without consuming the ordinary 32-local/1-remote resource-count
+allowance. Those two rows per subscription still consume the shared 4,096-row
+budget. Exact affected-row checks keep this safe even when foreign keys are off.
 Subscriptions with any retained state remain on the ordinary fair row/byte path.
 
 **Crash recovery is one statement.** On `Open`, every `locked` row is an orphan
@@ -1030,7 +1038,7 @@ with the conformance suite as the judge.
 [benchmark.md](https://github.com/mqlitehq/mqlite/blob/main/docs/benchmark.md).*
 
 
-<!-- ===== mqlite main · source v0.4.0; latest release v0.4.0 · docs/api-reference.md ===== -->
+<!-- ===== mqlite main · source v0.4.0; latest supported release v0.3.2 · docs/api-reference.md ===== -->
 
 # mqlite HTTP API reference
 
@@ -1039,6 +1047,10 @@ The broker speaks **Connect-style JSON over HTTP**. Every operation is a single
 construction. This document is generated from the wire contract in
 [`wire/wire.go`](https://github.com/mqlitehq/mqlite/blob/main/wire/wire.go) (the single source of truth shared by the broker
 and the Go SDK, so the two can't drift) and the server's error mapping.
+
+This reference follows `main`, the unreleased v0.4.0 candidate. The latest
+supported release is v0.3.2; use the documentation in that tag for its smaller
+management surface. Sections for candidate-only methods are labeled below.
 
 Every RPC body must be exactly one non-null JSON object, including operations
 whose request is otherwise empty (`{}`). Unknown fields and data after that object
@@ -1055,9 +1067,13 @@ values replace earlier ones, while repeated object and map values may merge.
 - **Sequence numbers** (`seq_number`) are broker-assigned integers, strictly increasing
   and **never reused** (they may gap) — **the handle you settle with**, valid only while
   the message lives. You never set them.
-- **At-least-once:** consumers must be idempotent. A message is delivered at least
-  once and never silently dropped (see [retention.md](https://github.com/mqlitehq/mqlite/blob/main/docs/retention.md) for what is and
-  isn't auto-deleted).
+- **Delivery mode:** default Peek-Lock delivery is at-least-once and may repeat,
+  so consumers must be idempotent. Receive-and-delete is an explicit at-most-once
+  broker-removal path that removes a message before returning it; an explicit
+  retry with the same receive attempt ID can replay its saved response.
+  Message TTL configured to discard, DLQ retention, forced resource deletion and
+  fixed subscription expiry are explicit removal paths; see
+  [retention.md](https://github.com/mqlitehq/mqlite/blob/main/docs/retention.md).
 - **One settlement verb per outcome** — `Complete` / `Abandon` / `Reject` / `Defer`,
   no aliases. New effects require the `lock_token` from `Receive` and an unexpired
   lease; exact-request receipt replays are described below.
@@ -1432,7 +1448,8 @@ Enqueue for future delivery (same wire shape as `Send`).
 
 ### Cancel
 
-Delete a not-yet-activated scheduled message.
+Delete a scheduled send that has never been delivered (`delivery_count=0`). A
+delayed `Abandon` may also be in `scheduled`, but it cannot be cancelled.
 
 - **Request** `CancelRequest`: `queue`, `seq_number`. **Response** `SettleResponse`.
 
@@ -1466,9 +1483,11 @@ All paths are `/mqlite.v1.AdminService/<Method>`.
 
 ### DeleteQueue
 
-The corrected name-only contract below is available in **v0.4.0 and later**. The
-incompatible request shape from v0.3.3 was withdrawn and that module version is
-retracted.
+The corrected name-only contract below is on **main** and planned for v0.4.0. The
+incompatible request shape shipped in the withdrawn, unsupported v0.3.3 release;
+its public artifacts remain available for forensic or compatibility inspection
+and must not be deployed. `main` declares `retract v0.3.3`, but Go module tools
+will discover that directive only after a later version containing it is tagged.
 
 Deletes a **plain queue**. Requires administrator/manage permission. The default
 is empty-only; force is a separate, explicit authorization to discard retained
@@ -1487,8 +1506,10 @@ work.
   side effect; deleting its broker record cannot undo that effect.
 - Subscription backing queues are rejected with HTTP 400, `invalid_argument`;
   this operation does not remove topic subscriptions.
-- Acceptance durably changes the queue to `deleting` before cleanup. From that
-  point, queue operations are rejected without taking effect. Name-addressed
+- The accepting transaction changes the queue to `deleting` and starts bounded
+  cleanup. If cleanup finishes, the same commit removes the queue and returns
+  `deleted`; otherwise it commits the `deleting` marker. From that point, queue
+  operations are rejected without taking effect. Name-addressed
   operations such as Send, Receive, Peek and Stats return `not_found`; a stale
   lock settlement may instead report `lock_lost`. An existing long poll is woken,
   `CreateQueue` with that name returns
@@ -1497,12 +1518,16 @@ work.
   cleanup needs no follow-up delete.
 - One foreground call removes at most 1,000 physical queue-owned rows and targets
   about 8 MiB. A single larger row is still removed so cleanup can progress. A
-  pending delete wakes a background pass that globally caps cleanup at 4,096 rows,
-  about 8 MiB and 32 queues on a local store. Further passes are paced one second
-  apart; an idle broker does not poll for lifecycle work. A remote Turso/libSQL pass handles one queue,
-  which bounds network round trips inside the write transaction. The persisted
-  cursor rotates through pending names fairly on both backends, so a large or
-  bursty deletion cannot monopolize the single writer.
+  pending delete wakes a background pass that globally caps cleanup at 4,096 rows
+  and targets about 8 MiB. The ordinary path visits at most 32 loaded resources on
+  a local store or one loaded resource on remote Turso/libSQL, bounding remote
+  round trips inside the write transaction. A separate set-based path can finalize
+  up to 512 empty subscriptions without using that resource-count allowance; its
+  mapping and backing rows still use the shared row budget. A full 512-subscription
+  fast-path batch schedules its next pass after 10 ms. Other required continuation
+  passes are paced one second apart; an idle broker does not poll for lifecycle work. The
+  persisted cursor rotates through pending names fairly on both backends, so a
+  large or bursty deletion cannot monopolize the single writer.
   Startup resumes one bounded pass before crash recovery. The row and name vanish
   only after messages, deduplication, settlement receipts and receive-attempt
   records are gone. Message sequence numbers are not reset, and process event
@@ -1541,7 +1566,8 @@ authorize discard and receive the `Deleted` / `State` outcome. Reconcile a
 progresses without another delete.
 
 The public identity remains the queue name; force does not introduce a lifetime
-token. Durable deletion and fixed-lifetime metadata make v0.4.0 schema token 7,
+token. Durable deletion and fixed-lifetime metadata make the unreleased v0.4.0
+candidate schema token 7,
 which refuses schema-5 and schema-6 files rather than migrating them. Schema 6
 belonged only to intermediate unreleased builds and was never tagged.
 The console exposes **delete queue** in a plain queue's detail page and requires
@@ -1553,7 +1579,7 @@ operation as unsupported.
 
 ### DeleteSubscription
 
-Available in **v0.4.0 and later**.
+Available on **main** and planned for v0.4.0.
 
 Deletes one exact topic/subscription pair. It uses the same durable, bounded
 lifecycle as `DeleteQueue`, but owns both the topic roster mapping and the
@@ -1567,10 +1593,11 @@ subscription's backing queue.
   `{"deleted":false,"state":"deleting"}`. Without force, any retained
   message state returns `409 subscription_not_empty`. Force is the caller's
   durable authorization to discard all states, including locked deliveries.
-- The accepted transaction first marks the backing queue `deleting`. It is then
-  excluded from topic fan-out and direct queue operations immediately, while its
-  mapping and name remain available for reconciliation. Final physical removal
-  removes the mapping in the same transaction. Retiring the last active
+- The accepted transaction marks the backing queue `deleting` and begins bounded
+  cleanup. If cleanup finishes, the same commit removes the mapping and backing
+  queue and returns `deleted`; otherwise the committed mapping and name remain
+  available for reconciliation while the subscription is excluded from fan-out
+  and direct queue operations. Retiring the last active
   subscription therefore makes the implicit topic unavailable for fan-out
   immediately. A deleting mapping keeps the topic address reserved until physical
   cleanup completes.
@@ -1615,6 +1642,10 @@ Config is **queue-level**: it's set here, not per `Send`/`Receive`.
 | `dlq_max_count` | int | `0` = inherit | keep at most N dead letters (oldest dropped first). `0` inherits, `-1` = unbounded. |
 | `dlq_max_bytes` | int | `0` = inherit | cap total dead-letter **body** bytes. `0` inherits, `-1` = unbounded. |
 
+The DLQ values configure asynchronous retention targets. They do not reject new
+dead letters or synchronously enforce a hard cap, so a queue may temporarily
+exceed them between worker passes or while bounded cleanup catches up.
+
 ```bash
 curl -H "Authorization: Bearer $T" -H 'Content-Type: application/json' \
   --data '{"name":"orders","config":{
@@ -1637,7 +1668,7 @@ Register subscription `name` under `topic` (creates its backing queue).
   bytes. A malformed expr or name is rejected with `400 invalid_argument`.
   **Response** `{}`.
 - The same route accepts `SubscribeWithOptionsRequest`, which adds optional
-  `ttl_ms` in **v0.4.0 and later**. A positive integer stores a fixed lifetime
+  `ttl_ms` on **main**, planned for v0.4.0. A positive integer stores a fixed lifetime
   from the first successful creation; omitted or zero creates a permanent
   subscription when the name is new, and preserves an existing subscription's
   lifetime. JSON `null`, fractions,
@@ -1686,7 +1717,7 @@ curl -H "Authorization: Bearer $T" -H 'Content-Type: application/json' \
 ### ListQueues
 
 The `state` field and deleting-resource visibility below are available in
-**v0.4.0 and later**.
+**main**, planned for v0.4.0.
 
 - **Request** `{}`. **Response** `ListQueuesResponse`: `queues` ([{`name`, `kind`,
   `state`, `lock_duration_ms`, `max_delivery_count`, `default_ttl_ms`,
@@ -1708,7 +1739,7 @@ The `state` field and deleting-resource visibility below are available in
 
 ### ListSubscriptionsPage
 
-Available in **v0.4.0 and later**.
+Available on **main** and planned for v0.4.0.
 
 - POST `/mqlite.v1.AdminService/ListSubscriptionsPage`.
 - Request fields: `topic` (optional exact topic), `after` (an opaque cursor from
@@ -1749,7 +1780,11 @@ Available in **v0.4.0 and later**.
 
 ### Redrive
 
-Move dead-lettered messages back to active (or to another queue).
+Move dead-lettered messages back to active (or to another queue). Each internal
+batch is atomic: a same-queue state change commits as one unit, and a cross-queue
+source deletion commits with its target insertion. With `rate_per_sec`, each
+throttled chunk is a separate atomic batch. Later delivery to a consumer remains
+at-least-once, so handlers and external effects must remain idempotent.
 
 - **Request** `RedriveRequest`: `queue`, `target` (string, optional — cross-queue),
   `max` (int), `older_than_ms` (int), `rate_per_sec` (int). **Response**
@@ -1854,7 +1889,7 @@ deletion is a successful operation even when its typed HTTP result is
 `state:"deleting"`.
 
 
-<!-- ===== mqlite main · source v0.4.0; latest release v0.4.0 · docs/cli.md ===== -->
+<!-- ===== mqlite main · source v0.4.0; latest supported release v0.3.2 · docs/cli.md ===== -->
 
 # CLI reference (`mqlite`)
 
@@ -1883,7 +1918,7 @@ mqlite <command> [flags] [args]
 | `MQLITE_DIAGNOSTIC_LOG` | optional private rotating JSONL failure/recovery log path for `serve`; parent must exist; use persistent storage |
 | `MQLITE_SYNC` | `NORMAL` (default) / `FULL` / `OFF` / `EXTRA` durability (embedded/serve). An unrecognized value is **rejected at startup** — a typo never silently downgrades to `NORMAL`. |
 | `MQLITE_MAX_SUBSCRIPTIONS` | active plus deleting subscription capacity (default 10,000; embedded/serve and direct embedded CLI commands) |
-| `MQLITE_DLQ_MAX_AGE` · `MQLITE_DLQ_MAX_COUNT` · `MQLITE_DLQ_MAX_BYTES` | broker DLQ retention (`serve`); on by default, disable with `MQLITE_DLQ_RETENTION=off` |
+| `MQLITE_DLQ_MAX_AGE` · `MQLITE_DLQ_MAX_COUNT` · `MQLITE_DLQ_MAX_BYTES` | asynchronous broker DLQ retention targets (`serve`); broker-wide defaults are on, and `MQLITE_DLQ_RETENTION=off` disables those defaults while positive per-queue bounds still apply |
 
 The DB string is **never compiled in** — it comes from the environment. The endpoint comes
 from the environment too, or from `--endpoint` (below), which overrides it.
@@ -2114,8 +2149,8 @@ echo '{"id":2}' | mqlite send orders -
 
 ### `receive <queue>` — consume (Peek-Lock)
 By default it receives and auto-Completes. Use `--no-ack` to leave messages locked and
-print each `lock-token` (settle them later — see settlement commands below), or `--delete`
-for at-most-once.
+print each `lock-token` (settle them later — see settlement commands below), or
+`--delete` for at-most-once broker removal.
 ```bash
 mqlite receive orders --max 10 --wait 5s
 ```
@@ -2124,7 +2159,7 @@ mqlite receive orders --max 10 --wait 5s
 | `--max` | 1 | max messages |
 | `--wait` | 0 | long-poll wait (e.g. `5s`) |
 | `--no-ack` | false | leave messages locked (don't Complete) |
-| `--delete` | false | receive-and-delete (at-most-once, no lock) |
+| `--delete` | false | receive-and-delete (at-most-once broker removal, no lock) |
 
 **Auto-ack never acknowledges output you can't see.** A message is only Completed *after* its
 body is written to stdout successfully. If the write fails (broken pipe) the message is left
@@ -2312,7 +2347,7 @@ See also: [api-reference.md](https://github.com/mqlitehq/mqlite/blob/main/docs/a
 [examples.md](https://github.com/mqlitehq/mqlite/blob/main/docs/examples.md) (Go SDK).
 
 
-<!-- ===== mqlite main · source v0.4.0; latest release v0.4.0 · docs/access-keys.md ===== -->
+<!-- ===== mqlite main · source v0.4.0; latest supported release v0.3.2 · docs/access-keys.md ===== -->
 
 # Access keys
 
@@ -2481,7 +2516,7 @@ revocation state or discard newer credentials. Review keys using a configured
 administrator before reopening traffic. See [backup and upgrade procedures](https://github.com/mqlitehq/mqlite/blob/main/docs/operations.md).
 
 
-<!-- ===== mqlite main · source v0.4.0; latest release v0.4.0 · docs/deployment.md ===== -->
+<!-- ===== mqlite main · source v0.4.0; latest supported release v0.3.2 · docs/deployment.md ===== -->
 
 # Deploying mqlite
 
@@ -2507,8 +2542,8 @@ Everything is read from the environment — the DB string is never compiled in.
 | `MQLITE_MONITOR_TOKENS` | v0.3.2+: optional comma-separated credentials for `Observe` and `/metrics` only; requires auth and distinct administrator credentials |
 | `MQLITE_METRICS` | v0.3.2+: opt-in authenticated `/metrics` on the API port; `on`/`true`/`1` enables, `off`/`false`/`0` disables (default); requires administrator auth |
 | `MQLITE_SYNC` | durability: `NORMAL` (default) / `FULL` / `OFF` / `EXTRA` (local file only); an unrecognized value is rejected at startup |
-| `MQLITE_MAX_SUBSCRIPTIONS` | v0.4.0+: active plus deleting subscription capacity (default 10,000); pending cleanup continues to occupy a slot |
-| `MQLITE_DLQ_MAX_AGE` · `MQLITE_DLQ_MAX_COUNT` · `MQLITE_DLQ_MAX_BYTES` | DLQ retention bounds (defaults 14d / 1,000,000 per queue; byte cap off; `MQLITE_DLQ_RETENTION=off` to disable) — see [retention.md](https://github.com/mqlitehq/mqlite/blob/main/docs/retention.md) |
+| `MQLITE_MAX_SUBSCRIPTIONS` | main / planned v0.4.0: active plus deleting subscription capacity (default 10,000); pending cleanup continues to occupy a slot |
+| `MQLITE_DLQ_MAX_AGE` · `MQLITE_DLQ_MAX_COUNT` · `MQLITE_DLQ_MAX_BYTES` | asynchronous DLQ retention targets (defaults 14d / 1,000,000 per queue; byte target off; `MQLITE_DLQ_RETENTION=off` disables broker-wide defaults) — see [retention.md](https://github.com/mqlitehq/mqlite/blob/main/docs/retention.md) |
 | `MQLITE_MAX_MESSAGE_BYTES` | reject larger bodies (default 1 MiB) |
 | `MQLITE_UI` | serve the embedded admin console at `/ui` (default on; `off` runs headless) |
 
@@ -2533,42 +2568,59 @@ and error reference: [api-reference.md](https://github.com/mqlitehq/mqlite/blob/
 ## Docker / GHCR
 
 > **Version and upgrade compatibility.**
-> These tagged-image instructions target **v0.4.0**, with default port **6754**
-> and schema token **7**. v0.3.3 is retracted because its public queue identity
-> contract was withdrawn. v0.3.0/v0.3.1/v0.3.2 and retracted v0.3.3 use schema
-> token 5 and cannot be opened by v0.4.0; preserve the matching old
-> binary/database pair, take a consistent backup, account for retained work, and
-> start v0.4.0 with a fresh database. Intermediate schema 6 was never released
-> and is refused too. Before replacing a v0.3.x broker, migrate Prometheus rules
-> from `mqlite_queue_total` to `mqlite_queue_retained_messages` and from
-> `mqlite_queue_oldest_message_age_ms` to
-> `mqlite_queue_oldest_message_age_seconds` (divide thresholds by 1,000).
-> **v0.2.0 uses port 8080 and schema token 2.** Its database cannot be opened by
-> v0.4.0: preserve the old binary/database pair and follow the
-> [upgrade and rollback procedure](https://github.com/mqlitehq/mqlite/blob/main/docs/operations.md#upgrade-and-rollback) before replacing it.
+> The latest supported release is **v0.3.2**, with default port **6754** and
+> schema token **5**. v0.3.3 is withdrawn and unsupported; its public assets and
+> exact image remain available for forensic or compatibility inspection and must
+> not be deployed. Pin the exact v0.3.2 binary or image;
+> do not select v0.3.3, and do not rely on a moving image alias to choose a
+> production version.
+>
+> `main` declares `retract v0.3.3`, but Go module tools will discover that
+> directive only after a later version containing it is tagged.
+>
+> The `main` branch is an unreleased v0.4.0 candidate with schema token 7. It
+> cannot open a v0.3.x database and no in-place migration exists. Schema 6 was
+> used only by intermediate untagged lifecycle builds and is also refused. Before
+> testing the candidate, preserve the matching schema-5 binary/database pair, take
+> a consistent backup, account for retained work, and start with a fresh database.
+> The candidate also removes the deprecated Prometheus aliases described in
+> [observability](https://github.com/mqlitehq/mqlite/blob/main/docs/observability.md#compatibility-and-planned-v040-migration).
+> **v0.2.0 uses port 8080 and schema token 2.** Follow the
+> [upgrade and rollback procedure](https://github.com/mqlitehq/mqlite/blob/main/docs/operations.md#upgrade-and-rollback) before
+> replacing it.
 
-The published image is multi-arch (amd64 + arm64):
+The exact supported image is multi-arch (amd64 + arm64):
 
 ```bash
-# v0.4.0, default port 6754
+# v0.3.2, default port 6754
 docker run -d --name mqlite -p 6754:6754 \
   -v mqlite-data:/data \
   -e MQLITE_DB=file:/data/mq.db \
   -e MQLITE_TOKENS=mqk_prod_CHANGEME \
   -e MQLITE_MONITOR_TOKENS=mqk_monitor_CHANGEME \
   -e MQLITE_SYNC=FULL \
-  ghcr.io/mqlitehq/mqlite:0.4.0
+  ghcr.io/mqlitehq/mqlite:0.3.2
 ```
 
 - The named volume `mqlite-data` persists the SQLite file across restarts.
-- Pin exact `0.4.0` in production. Stable releases also publish the `:0.4` and
-  `:latest` aliases, but an exact tag makes upgrades explicit.
-  Images `>= 0.3.0` listen on `6754`; **`0.2.x` and earlier listen on `8080`** — if you pin an
-  older tag, publish the port it actually uses.
+- Pin exact `0.3.2` in production. Images `>= 0.3.0` listen on `6754`;
+  **`0.2.x` and earlier listen on `8080`**.
 - Verify: `curl http://localhost:6754/` (discovery card) and `/healthz`. Metrics is
   disabled by default. For a private broker or an ingress that blocks public
   `/metrics`, add `-e MQLITE_METRICS=on` and give the collector a monitor token.
   Scraping uses the same API port; enabled discovery includes `"metrics":"/metrics"`.
+
+To evaluate the unreleased candidate, build a reviewed `main` commit locally and
+tag that image with its commit rather than a release number:
+
+```bash
+git clone https://github.com/mqlitehq/mqlite.git
+cd mqlite
+git checkout <reviewed-commit-sha>
+docker build --pull -t mqlite:main-<reviewed-commit-sha> .
+```
+
+Do not point this candidate at a schema-5 production database.
 
 ## Fly.io (minimal cost)
 
@@ -2580,7 +2632,7 @@ app            = "your-mqlite"
 primary_region = "sin"            # pick a region near you
 
 [build]
-  image = "ghcr.io/mqlitehq/mqlite:0.4.0"   # pinned image, no build on Fly
+  image = "ghcr.io/mqlitehq/mqlite:0.3.2"   # latest supported exact image
 
 [env]
   MQLITE_DB = "file:/data/mq.db"            # SQLite on the persistent volume
@@ -2693,17 +2745,17 @@ Follow the [production runbook](https://github.com/mqlitehq/mqlite/blob/main/doc
 online snapshots, offline directory copies, isolated restore validation and rollback.
 Use a fresh restore directory so an old WAL/SHM cannot attach to the snapshot.
 
-**v0.2.0 databases use schema 2; v0.3.0/v0.3.1/v0.3.2 and retracted
-v0.3.3 use schema 5; v0.4.0 uses schema 7.** Intermediate unreleased lifecycle
-builds used schema 6, which was never tagged. There is no
-in-place migration between these tokens. Before changing tokens, account for
+**v0.2.0 databases use schema 2; v0.3.0/v0.3.1/v0.3.2 and withdrawn
+v0.3.3 use schema 5; `main`, the unreleased v0.4.0 candidate, uses schema 7.**
+Intermediate untagged lifecycle builds used schema 6. There is no in-place
+migration between these tokens. Before testing a different token, account for
 retained work in every state, keep the old binary/database pair and a consistent
 backup, and create the candidate database separately. Do not restamp an old file.
 Within the tagged schema-5 line, v0.3.0 → v0.3.1 adds compatible managed-key
 storage and v0.3.1 → v0.3.2 leaves the schema unchanged. `Observe` and configured
 monitor credentials require v0.3.2; restore compatible monitoring configuration
-when rolling back. Follow the runbook for the v0.4.0 fresh-database cutover and
-metric-name migration.
+when rolling back. Follow the runbook before a future v0.4.0 fresh-database cutover
+and metric-name migration.
 See [upgrade and rollback](https://github.com/mqlitehq/mqlite/blob/main/docs/operations.md#upgrade-and-rollback).
 
 ## Turso (remote libSQL)
@@ -2758,13 +2810,13 @@ curl -H "Authorization: Bearer $T" -H 'Content-Type: application/json' \
 - [ ] Enable `MQLITE_METRICS=on` for authenticated Prometheus scraping on the API port; use private routing or public-ingress path filtering to keep `/metrics` private — see [observability.md](https://github.com/mqlitehq/mqlite/blob/main/docs/observability.md).
 
 
-<!-- ===== mqlite main · source v0.4.0; latest release v0.4.0 · docs/observability.md ===== -->
+<!-- ===== mqlite main · source v0.4.0; latest supported release v0.3.2 · docs/observability.md ===== -->
 
 # Observability
 
 The canonical `Observe` interface, configured monitor credentials and the
 monitoring starter require **v0.3.2 or later**. Earlier releases expose only the
-original metrics described under [compatibility](#compatibility-and-v040-migration).
+original metrics described under [compatibility](#compatibility-and-planned-v040-migration).
 
 MQLite exposes one canonical observation through `AdminService/Observe`, the Go
 SDK, CLI, MCP, console and Prometheus `/metrics`. Queue snapshots and committed
@@ -2849,7 +2901,7 @@ durability remain the operator's responsibility.
 
 ## Maintenance failure diagnosis
 
-v0.4.0 adds optional `maintenance[].diagnostics` and
+The unreleased v0.4.0 candidate adds optional `maintenance[].diagnostics` and
 `storage.operations[].last_error` fields to Observe. v0.3.2 and older snapshots
 remain valid; missing diagnostics mean **not reported**, not healthy. Existing
 Prometheus labels and cumulative error buckets are unchanged.
@@ -2979,12 +3031,18 @@ for memory/remote backends, not a fabricated zero-byte database.
 ### Collection cost and interval
 
 Each observation runs a storage read probe. A cache refresh also collects the full
-queue inventory with one grouped message scan. Concurrent refreshes share that
-scan, and successful rows are reused for about 10 seconds; failed scans are not
-cached, so later requests can retry. The scan includes retained rows, so refresh
-cost grows with backlog as well as queue count. Exact per-queue `Stats` uses one
-literal branch per message state and the existing queue-prefixed partial indexes,
-so it does not scan unrelated queues.
+queue inventory with one grouped message scan. State-filtered aggregates avoid
+updating every state counter for every row, but the exact refresh still reads all
+retained rows. Concurrent refreshes share that scan, and successful rows are
+reused for about 10 seconds; failed scans are not cached, so later requests can
+retry. Refresh cost therefore grows with current backlog as well as queue count.
+Here retained means rows present in `messages` at the sample time, not lifetime
+throughput. Completed messages are normally deleted immediately; active, locked,
+deferred, scheduled and dead-lettered rows remain until their corresponding
+lifecycle action, while an abnormal retained `completed` row is still counted in
+`total` and `unexpected`. Exact per-queue `Stats` uses one literal branch per
+message state and the existing queue-prefixed partial indexes, so it does not scan
+unrelated queues.
 
 The cache retains one queue-gauge slice whose size grows with queue inventory,
 not backlog depth. Each request receives its own slice and still allocates and
@@ -3139,17 +3197,18 @@ and completion means the consumer reported success, not independently verified
 business-side processing. Broker redelivery, client HTTP retry and storage retry
 are separate concepts.
 
-### Compatibility and v0.4.0 migration
+### Compatibility and planned v0.4.0 migration
 
 Prometheus scraping has been disabled by default since v0.3.2. On upgrade, enable
 `MQLITE_METRICS=on` or `--metrics` to keep scraping the same API port, and configure
 a monitor token for the collector.
 
-v0.4.0 removes the two ambiguous aliases whose removal was announced in v0.3.2.
+The unreleased candidate removes the two ambiguous aliases whose removal was
+announced in v0.3.2.
 Update recording rules, alerts, dashboards and direct PromQL before replacing the
 broker:
 
-| Removed in v0.4.0 | Replacement |
+| Removed on main / planned v0.4.0 | Replacement |
 | --- | --- |
 | `mqlite_queue_total` | `mqlite_queue_retained_messages` (same gauge value) |
 | `mqlite_queue_oldest_message_age_ms` | `mqlite_queue_oldest_message_age_seconds` (divide old thresholds by 1,000) |
@@ -3279,7 +3338,7 @@ An occupied-resource or capacity rejection is an application outcome, not a
 storage failure.
 
 
-<!-- ===== mqlite main · source v0.4.0; latest release v0.4.0 · docs/observability-cloud.md ===== -->
+<!-- ===== mqlite main · source v0.4.0; latest supported release v0.3.2 · docs/observability-cloud.md ===== -->
 
 # Cloud and Kubernetes monitoring
 
@@ -3428,13 +3487,17 @@ validation steps. Local integration evidence must not be presented as a managed-
 deployment test.
 
 
-<!-- ===== mqlite main · source v0.4.0; latest release v0.4.0 · docs/operations.md ===== -->
+<!-- ===== mqlite main · source v0.4.0; latest supported release v0.3.2 · docs/operations.md ===== -->
 
 # Production operations
 
-This runbook covers v0.4.0 (port 6754, schema token 7) and
-v0.3.0/v0.3.1/v0.3.2 (port 6754, schema token 5). v0.3.3 is retracted; use
-v0.3.2 or v0.4.0 and later.
+This runbook covers the latest supported release, v0.3.2 (port 6754, schema
+token 5), and the `main` branch's unreleased v0.4.0 candidate (port 6754, schema
+token 7). v0.3.3 is withdrawn and unsupported; its public assets and exact image
+remain available for forensic or compatibility inspection and must not be
+deployed. Pin production deployments to v0.3.2 until a corrected release is
+tagged. Although `main` declares `retract v0.3.3`, Go module tools will discover
+that directive only after a later version containing it is tagged.
 Runtime-managed access keys require v0.3.1; v0.3.0 supports configured tokens only.
 Unified `Observe` and configured monitor credentials require v0.3.2.
 Upgrading from v0.2.0 changes both its default port (8080) and schema token (2);
@@ -3445,7 +3508,8 @@ for metric definitions and alerts.
 ## Operating boundaries
 
 - Run one active broker per database. A local file has one MQLite owner and one
-  SQL connection; use HTTP clients for other processes. A second broker sharing a
+  writer connection; it may also open one read-only observation connection. Use
+  HTTP clients for other processes. A second broker sharing a
   Turso database is also unsupported: startup recovery assumes the previous owner
   has stopped. Do not perform a rolling overlap against the same database.
 - Keep local storage on a persistent local filesystem or attached block volume,
@@ -3464,14 +3528,21 @@ for metric definitions and alerts.
   stable `MessageID`/body, receive `AttemptID`, and the exact settlement request
   when retrying within their documented retention windows; do not treat an HTTP
   timeout as proof that a write failed.
+
+The next three boundaries apply to the unreleased `main` candidate. v0.3.2 has
+the complete active-only `ListSubscriptions` operation, but it does not provide
+queue/subscription deletion, lifecycle-aware paged subscription inventory, the
+subscription capacity setting, or fixed subscription TTL.
+
 - Give one controller exclusive ownership of queue or subscription deletion and
   same-name recreation. Quiesce producers and consumers. Use the empty-only
   default unless permanent loss is intended; force also discards locked work whose
-  external effects may already have happened. An accepted resource enters durable
-  `deleting`, stops serving data and reserves its name; an accepted subscription
-  also leaves topic fan-out immediately. Confirm the name is absent before
-  recreating it. Keep the name reserved while reconciling an uncertain result,
-  and never replay an old delete after a replacement exists.
+  external effects may already have happened. The accepting transaction moves the
+  resource to `deleting` and starts cleanup. The marker reserves its
+  name when cleanup continues; a small deletion can instead complete in that same
+  commit. An accepted subscription leaves topic fan-out immediately. Confirm the
+  name is absent before recreating it. Keep the name reserved while reconciling an
+  uncertain result, and never replay an old delete after a replacement exists.
 - Treat the default 10,000 active-plus-deleting subscription limit as a metadata
   safety ceiling. Choose a lower limit when the application needs a stricter
   bound. Measure fan-out latency, database growth and observation cost at the
@@ -3669,19 +3740,22 @@ establish database compatibility, and MQLite does not run schema migrations.
 | Rollback before candidate accepts business writes | Stop the candidate and restore the matched old binary plus old snapshot/configuration; verify before resuming clients. |
 | Rollback after candidate accepts business writes | First preserve candidate data and reconcile new messages and external effects. Blindly restoring the old snapshot would discard those new writes. |
 
-For **v0.3.0, v0.3.1, v0.3.2 or retracted v0.3.3 → v0.4.0**, schema changes
+For a future **v0.3.0, v0.3.1, v0.3.2 or withdrawn v0.3.3 → v0.4.0**
+cutover, the schema changes
 from **5 → 7** while port **6754** stays unchanged. Durable queue lifecycle and
 fixed subscription-expiry columns and indexes make the database incompatible;
 there is no in-place migration. Schema 6 belonged only to an intermediate
 unreleased lifecycle build, was never tagged, and is refused too.
 Follow the different-token procedure above: stop producers and consumers, take a
 consistent schema-5 backup, account for every retained message state and managed
-key, preserve the matching old binary/database pair, and start v0.4.0 with
+key, preserve the matching old binary/database pair, and start the candidate or
+eventual v0.4.0 release with
 a fresh database. Do not edit the schema token or point schema-7 code at the old
 file. Move work through an application-level drain/replay process with stable
 business identities if it must survive the cutover.
 
-v0.4.0 clients also change the deletion contract to `{name,force?}` with a typed
+The unreleased candidate clients also change the deletion contract to
+`{name,force?}` with a typed
 `{deleted,state}` result; update broker, SDK, CLI, MCP and console together. A
 rollback after schema-7 accepts writes requires preserving and reconciling those
 writes before restoring the schema-5 snapshot. Retain broker stderr externally for
@@ -3691,7 +3765,8 @@ separate from access logs and database backups.
 Before the cutover, replace Prometheus `mqlite_queue_total` queries with
 `mqlite_queue_retained_messages`. Replace
 `mqlite_queue_oldest_message_age_ms` with
-`mqlite_queue_oldest_message_age_seconds` and divide thresholds by 1,000. v0.4.0
+`mqlite_queue_oldest_message_age_seconds` and divide thresholds by 1,000. The
+planned v0.4.0 release
 removes both deprecated aliases; native `Observe` JSON keeps
 `queues[].oldest_message_age_ms`. Validate recording rules, alerts and dashboards
 against the candidate before resuming traffic.
@@ -3713,8 +3788,8 @@ restore the previous authorized scraper/rule configuration; the old `/metrics`
 endpoint requires an administrator. Keep administrator authentication enabled.
 Preserve writes accepted by the candidate rather than blindly restoring the
 pre-upgrade snapshot. The two deprecated metric aliases remain available in
-v0.3.2 but are removed in v0.4.0; see
-[metric compatibility](https://github.com/mqlitehq/mqlite/blob/main/docs/observability.md#compatibility-and-v040-migration).
+v0.3.2 and are removed on `main` for the planned v0.4.0 release; see
+[metric compatibility](https://github.com/mqlitehq/mqlite/blob/main/docs/observability.md#compatibility-and-planned-v040-migration).
 
 For **v0.3.0 → v0.3.1 or v0.3.2**, schema token **5** and the port remain unchanged.
 The candidate adds the independent `access_keys` table without rewriting existing
@@ -3757,7 +3832,7 @@ in this release, so do not improvise a direct SQL table copy between schemas.
 rules behind these procedures.
 
 
-<!-- ===== mqlite main · source v0.4.0; latest release v0.4.0 · docs/mcp.md ===== -->
+<!-- ===== mqlite main · source v0.4.0; latest supported release v0.3.2 · docs/mcp.md ===== -->
 
 # MCP server (`mqlite-mcp`)
 
@@ -3956,7 +4031,7 @@ Environment tokens are not listed or revocable through these tools. Key tools ar
 unavailable when broker authentication is explicitly disabled.
 
 
-<!-- ===== mqlite main · source v0.4.0; latest release v0.4.0 · docs/examples.md ===== -->
+<!-- ===== mqlite main · source v0.4.0; latest supported release v0.3.2 · docs/examples.md ===== -->
 
 # Examples
 

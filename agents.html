@@ -60,8 +60,9 @@
   The latest supported release is <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.3.2">v0.3.2</a>
   (default port 6754); installation examples pin that release. Use the
   <a href="https://github.com/mqlitehq/mqlite/tree/v0.3.2/docs">v0.3.2 docs</a>
-  for its exact API. v0.3.3 is withdrawn. Candidate-only lifecycle operations on
-  this page are unavailable in v0.3.2.</div>
+  for its exact API. v0.3.3 is withdrawn and unsupported; its public artifacts
+  remain only for forensic or compatibility inspection and must not be deployed.
+  Candidate-only lifecycle operations on this page are unavailable in v0.3.2.</div>
 
 <div class="head">
   <h1># mqlite for AI agents</h1>
@@ -159,9 +160,13 @@ Rules:
 - Queues never auto-create. Create first:
     AdminService/CreateQueue  {"name":"jobs","config":{}}
   Queue and subscription deletions are empty-only by default. force=true is explicit
-  authorization to discard every retained state, including locked work. Deletion
-  reserves the name while bounded cleanup runs. The API has no Generation field:
-  one owner must reconcile inventory and serialize deletion with same-name creation.
+  authorization to discard every retained state, including locked work. A successful
+  state=deleted result means cleanup finished in the accepting commit; state=deleting
+  means bounded cleanup continues and reserves the name. The API has no Generation
+  field: one owner must reconcile inventory and serialize deletion with same-name
+  creation. After a redirect, transport failure, any 5xx or an invalid success body,
+  do not retry the delete. Reconcile with ListQueues or ListSubscriptionsPage using
+  include_deleting=true; an absent name confirms completion under the one-owner rule.
 - Consume with Peek-Lock:
     QueueService/Receive  {"queue":"jobs","max_messages":1,"wait_time_ms":5000}
   Each returned message has seq_number + lock_token. You MUST settle every
@@ -174,8 +179,9 @@ Rules:
   New settlements and Renew require locked_until_ms &gt; now: the exact deadline
   is already expired, even before the reaper runs. An unexpired receipt only lets
   the exact request replay a previously committed settlement after expiry.
-- Receive-and-Delete grants no lease: lock_token is empty and locked_until_ms
-  is zero (omitted in JSON), including receive-attempt replays. Do not settle it.
+- Receive-and-Delete is explicit at-most-once broker removal and grants no lease:
+  lock_token is empty and locked_until_ms is zero (omitted in JSON), including
+  receive-attempt replays. Do not settle it.
 - Default Peek-Lock delivery is AT-LEAST-ONCE: you may see a message twice.
   Make your handling idempotent (set message_id on send; check your own state
   before acting).
@@ -196,9 +202,11 @@ Rules:
   messages, with delivery_count = 0.
 - Errors are JSON {"code","message"}: 400 invalid_argument · 401 unauthenticated ·
   403 permission_denied · 404 not_found ·
-  409 name_conflict / already_exists / lock_lost / key_conflict ·
-  413 message_too_large. On 409 lock_lost, re-Receive instead of retrying
-  the settle.
+  409 name_conflict / already_exists / lock_lost / key_conflict /
+      queue_not_empty / subscription_not_empty ·
+  413 message_too_large · 429 resource_exhausted · 503 outcome_unknown.
+  On 409 lock_lost, re-Receive instead of retrying the settle. A 503
+  outcome_unknown may already have committed; reconcile instead of blindly retrying.
 
 Cheat sheet (request bodies abbreviated):
   AdminService/CreateQueue   {"name","config":{}}
@@ -254,8 +262,9 @@ Full reference: https://github.com/mqlitehq/mqlite/blob/main/docs/api-reference.
 <section class="blk">
   <h2># the one rule that matters</h2>
   <div class="quote">
-    mqlite is <b>honestly at-least-once</b>. No queue that survives crashes can promise your
-    handler runs exactly once — mqlite doesn't pretend to. Design agent workflows so that
+    Default Peek-Lock delivery is <b>honestly at-least-once</b>; explicit
+    receive-and-delete instead chooses at-most-once broker removal. The broker cannot promise your
+    handler's external side effects happen exactly once. Design agent workflows so that
     <b>doing a message twice is harmless</b>: key side effects on <code>message_id</code> or your own
     idempotency keys, and settle promptly. Everything else follows from
     <a href="concepts.html">the concepts page</a>.

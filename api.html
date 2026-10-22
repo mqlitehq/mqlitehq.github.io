@@ -29,8 +29,8 @@
   </div>
 </div></nav>
 <div class="wrap">
-  <div class="stamp">Generated from <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/api-reference.md">mqlite main · docs/api-reference.md</a> — source v0.4.0; latest release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.0">v0.4.0</a>.
-  These docs track main; check release notes for published artifacts. Edit the canonical Markdown and re-run <code>tools/build.mjs</code>.</div>
+  <div class="stamp">Source: <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/api-reference.md">mqlite main · docs/api-reference.md</a> — unreleased v0.4.0 candidate. Latest supported release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.3.2">v0.3.2</a>.
+  These docs track main; use the linked release for published artifacts.</div>
   <main class="prose">
 <h1 id="mqlite-http-api-reference">mqlite HTTP API reference</h1>
 <p>The broker speaks <strong>Connect-style JSON over HTTP</strong>. Every operation is a single
@@ -38,6 +38,9 @@
 construction. This document is generated from the wire contract in
 <a href="https://github.com/mqlitehq/mqlite/blob/main/wire/wire.go"><code>wire/wire.go</code></a> (the single source of truth shared by the broker
 and the Go SDK, so the two can&#39;t drift) and the server&#39;s error mapping.</p>
+<p>This reference follows <code>main</code>, the unreleased v0.4.0 candidate. The latest
+supported release is v0.3.2; use the documentation in that tag for its smaller
+management surface. Sections for candidate-only methods are labeled below.</p>
 <p>Every RPC body must be exactly one non-null JSON object, including operations
 whose request is otherwise empty (<code>{}</code>). Unknown fields and data after that object
 are rejected. Repeated fields retain Go&#39;s <code>encoding/json</code> behavior: later scalar
@@ -52,9 +55,13 @@ health use open <code>GET</code> endpoints; opt-in metrics uses authenticated <c
 <li><strong>Sequence numbers</strong> (<code>seq_number</code>) are broker-assigned integers, strictly increasing
 and <strong>never reused</strong> (they may gap) — <strong>the handle you settle with</strong>, valid only while
 the message lives. You never set them.</li>
-<li><strong>At-least-once:</strong> consumers must be idempotent. A message is delivered at least
-once and never silently dropped (see <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/retention.md">retention.md</a> for what is and
-isn&#39;t auto-deleted).</li>
+<li><strong>Delivery mode:</strong> default Peek-Lock delivery is at-least-once and may repeat,
+so consumers must be idempotent. Receive-and-delete is an explicit at-most-once
+broker-removal path that removes a message before returning it; an explicit
+retry with the same receive attempt ID can replay its saved response.
+Message TTL configured to discard, DLQ retention, forced resource deletion and
+fixed subscription expiry are explicit removal paths; see
+<a href="https://github.com/mqlitehq/mqlite/blob/main/docs/retention.md">retention.md</a>.</li>
 <li><strong>One settlement verb per outcome</strong> — <code>Complete</code> / <code>Abandon</code> / <code>Reject</code> / <code>Defer</code>,
 no aliases. New effects require the <code>lock_token</code> from <code>Receive</code> and an unexpired
 lease; exact-request receipt replays are described below.</li>
@@ -533,7 +540,8 @@ completion is terminal: it reports what already happened.)</p>
 <li><strong>Response</strong> <code>SendResponse</code>: <code>seq_numbers</code>.</li>
 </ul>
 <h3 id="cancel">Cancel</h3>
-<p>Delete a not-yet-activated scheduled message.</p>
+<p>Delete a scheduled send that has never been delivered (<code>delivery_count=0</code>). A
+delayed <code>Abandon</code> may also be in <code>scheduled</code>, but it cannot be cancelled.</p>
 <ul>
 <li><strong>Request</strong> <code>CancelRequest</code>: <code>queue</code>, <code>seq_number</code>. <strong>Response</strong> <code>SettleResponse</code>.</li>
 </ul>
@@ -561,9 +569,11 @@ from the oldest active or locked message; it is zero when neither state is prese
 <h2 id="adminservice">AdminService</h2>
 <p>All paths are <code>/mqlite.v1.AdminService/&lt;Method&gt;</code>.</p>
 <h3 id="deletequeue">DeleteQueue</h3>
-<p>The corrected name-only contract below is available in <strong>v0.4.0 and later</strong>. The
-incompatible request shape from v0.3.3 was withdrawn and that module version is
-retracted.</p>
+<p>The corrected name-only contract below is on <strong>main</strong> and planned for v0.4.0. The
+incompatible request shape shipped in the withdrawn, unsupported v0.3.3 release;
+its public artifacts remain available for forensic or compatibility inspection
+and must not be deployed. <code>main</code> declares <code>retract v0.3.3</code>, but Go module tools
+will discover that directive only after a later version containing it is tagged.</p>
 <p>Deletes a <strong>plain queue</strong>. Requires administrator/manage permission. The default
 is empty-only; force is a separate, explicit authorization to discard retained
 work.</p>
@@ -581,8 +591,10 @@ permanently discarded. A locked delivery may already have caused an external
 side effect; deleting its broker record cannot undo that effect.</li>
 <li>Subscription backing queues are rejected with HTTP 400, <code>invalid_argument</code>;
 this operation does not remove topic subscriptions.</li>
-<li>Acceptance durably changes the queue to <code>deleting</code> before cleanup. From that
-point, queue operations are rejected without taking effect. Name-addressed
+<li>The accepting transaction changes the queue to <code>deleting</code> and starts bounded
+cleanup. If cleanup finishes, the same commit removes the queue and returns
+<code>deleted</code>; otherwise it commits the <code>deleting</code> marker. From that point, queue
+operations are rejected without taking effect. Name-addressed
 operations such as Send, Receive, Peek and Stats return <code>not_found</code>; a stale
 lock settlement may instead report <code>lock_lost</code>. An existing long poll is woken,
 <code>CreateQueue</code> with that name returns
@@ -591,12 +603,16 @@ lock settlement may instead report <code>lock_lost</code>. An existing long poll
 cleanup needs no follow-up delete.</li>
 <li>One foreground call removes at most 1,000 physical queue-owned rows and targets
 about 8 MiB. A single larger row is still removed so cleanup can progress. A
-pending delete wakes a background pass that globally caps cleanup at 4,096 rows,
-about 8 MiB and 32 queues on a local store. Further passes are paced one second
-apart; an idle broker does not poll for lifecycle work. A remote Turso/libSQL pass handles one queue,
-which bounds network round trips inside the write transaction. The persisted
-cursor rotates through pending names fairly on both backends, so a large or
-bursty deletion cannot monopolize the single writer.
+pending delete wakes a background pass that globally caps cleanup at 4,096 rows
+and targets about 8 MiB. The ordinary path visits at most 32 loaded resources on
+a local store or one loaded resource on remote Turso/libSQL, bounding remote
+round trips inside the write transaction. A separate set-based path can finalize
+up to 512 empty subscriptions without using that resource-count allowance; its
+mapping and backing rows still use the shared row budget. A full 512-subscription
+fast-path batch schedules its next pass after 10 ms. Other required continuation
+passes are paced one second apart; an idle broker does not poll for lifecycle work. The
+persisted cursor rotates through pending names fairly on both backends, so a
+large or bursty deletion cannot monopolize the single writer.
 Startup resumes one bounded pass before crash recovery. The row and name vanish
 only after messages, deduplication, settlement receipts and receive-attempt
 records are gone. Message sequence numbers are not reset, and process event
@@ -634,7 +650,8 @@ authorize discard and receive the <code>Deleted</code> / <code>State</code> outc
 <code>deleting</code> or unknown outcome read-only via <code>ListQueues</code>; background cleanup
 progresses without another delete.</p>
 <p>The public identity remains the queue name; force does not introduce a lifetime
-token. Durable deletion and fixed-lifetime metadata make v0.4.0 schema token 7,
+token. Durable deletion and fixed-lifetime metadata make the unreleased v0.4.0
+candidate schema token 7,
 which refuses schema-5 and schema-6 files rather than migrating them. Schema 6
 belonged only to intermediate unreleased builds and was never tagged.
 The console exposes <strong>delete queue</strong> in a plain queue&#39;s detail page and requires
@@ -644,7 +661,7 @@ is still cleaning up, the console reconciles with <code>ListQueues</code>; it do
 second delete that could target a same-name replacement. Older brokers report the
 operation as unsupported.</p>
 <h3 id="deletesubscription">DeleteSubscription</h3>
-<p>Available in <strong>v0.4.0 and later</strong>.</p>
+<p>Available on <strong>main</strong> and planned for v0.4.0.</p>
 <p>Deletes one exact topic/subscription pair. It uses the same durable, bounded
 lifecycle as <code>DeleteQueue</code>, but owns both the topic roster mapping and the
 subscription&#39;s backing queue.</p>
@@ -657,10 +674,11 @@ subscription&#39;s backing queue.</p>
 <code>{&quot;deleted&quot;:false,&quot;state&quot;:&quot;deleting&quot;}</code>. Without force, any retained
 message state returns <code>409 subscription_not_empty</code>. Force is the caller&#39;s
 durable authorization to discard all states, including locked deliveries.</li>
-<li>The accepted transaction first marks the backing queue <code>deleting</code>. It is then
-excluded from topic fan-out and direct queue operations immediately, while its
-mapping and name remain available for reconciliation. Final physical removal
-removes the mapping in the same transaction. Retiring the last active
+<li>The accepted transaction marks the backing queue <code>deleting</code> and begins bounded
+cleanup. If cleanup finishes, the same commit removes the mapping and backing
+queue and returns <code>deleted</code>; otherwise the committed mapping and name remain
+available for reconciliation while the subscription is excluded from fan-out
+and direct queue operations. Retiring the last active
 subscription therefore makes the implicit topic unavailable for fan-out
 immediately. A deleting mapping keeps the topic address reserved until physical
 cleanup completes.</li>
@@ -759,6 +777,9 @@ Config is <strong>queue-level</strong>: it&#39;s set here, not per <code>Send</c
 <td>cap total dead-letter <strong>body</strong> bytes. <code>0</code> inherits, <code>-1</code> = unbounded.</td>
 </tr>
 </tbody></table>
+<p>The DLQ values configure asynchronous retention targets. They do not reject new
+dead letters or synchronously enforce a hard cap, so a queue may temporarily
+exceed them between worker passes or while bounded cleanup catches up.</p>
 <pre><code class="language-bash">curl -H &quot;Authorization: Bearer $T&quot; -H &#39;Content-Type: application/json&#39; \
   --data &#39;{&quot;name&quot;:&quot;orders&quot;,&quot;config&quot;:{
             &quot;lock_duration_ms&quot;:60000,
@@ -778,7 +799,7 @@ matches all). Topic and subscription names are valid UTF-8 strings of 1–128
 bytes. A malformed expr or name is rejected with <code>400 invalid_argument</code>.
 <strong>Response</strong> <code>{}</code>.</li>
 <li>The same route accepts <code>SubscribeWithOptionsRequest</code>, which adds optional
-<code>ttl_ms</code> in <strong>v0.4.0 and later</strong>. A positive integer stores a fixed lifetime
+<code>ttl_ms</code> on <strong>main</strong>, planned for v0.4.0. A positive integer stores a fixed lifetime
 from the first successful creation; omitted or zero creates a permanent
 subscription when the name is new, and preserves an existing subscription&#39;s
 lifetime. JSON <code>null</code>, fractions,
@@ -824,7 +845,7 @@ orphan should be retired. Do not edit MQLite-owned tables directly.</li>
 </code></pre>
 <h3 id="listqueues">ListQueues</h3>
 <p>The <code>state</code> field and deleting-resource visibility below are available in
-<strong>v0.4.0 and later</strong>.</p>
+<strong>main</strong>, planned for v0.4.0.</p>
 <ul>
 <li><strong>Request</strong> <code>{}</code>. <strong>Response</strong> <code>ListQueuesResponse</code>: <code>queues</code> ([{<code>name</code>, <code>kind</code>,
 <code>state</code>, <code>lock_duration_ms</code>, <code>max_delivery_count</code>, <code>default_ttl_ms</code>,
@@ -845,7 +866,7 @@ its maximum size; new integrations should use the paged route below. The Go SDK
 retains the original three-field <code>SubscriptionInfo</code> type for this method.</li>
 </ul>
 <h3 id="listsubscriptionspage">ListSubscriptionsPage</h3>
-<p>Available in <strong>v0.4.0 and later</strong>.</p>
+<p>Available on <strong>main</strong> and planned for v0.4.0.</p>
 <ul>
 <li>POST <code>/mqlite.v1.AdminService/ListSubscriptionsPage</code>.</li>
 <li>Request fields: <code>topic</code> (optional exact topic), <code>after</code> (an opaque cursor from
@@ -885,7 +906,11 @@ precise compile error or a runtime/eval error; <code>ran</code> = a sample was e
 <code>matched</code> = the sample would route to a subscription using this filter.</li>
 </ul>
 <h3 id="redrive">Redrive</h3>
-<p>Move dead-lettered messages back to active (or to another queue).</p>
+<p>Move dead-lettered messages back to active (or to another queue). Each internal
+batch is atomic: a same-queue state change commits as one unit, and a cross-queue
+source deletion commits with its target insertion. With <code>rate_per_sec</code>, each
+throttled chunk is a separate atomic batch. Later delivery to a consumer remains
+at-least-once, so handlers and external effects must remain idempotent.</p>
 <ul>
 <li><strong>Request</strong> <code>RedriveRequest</code>: <code>queue</code>, <code>target</code> (string, optional — cross-queue),
 <code>max</code> (int), <code>older_than_ms</code> (int), <code>rate_per_sec</code> (int). <strong>Response</strong>

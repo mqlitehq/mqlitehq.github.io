@@ -29,8 +29,8 @@
   </div>
 </div></nav>
 <div class="wrap">
-  <div class="stamp">Generated from <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/cli.md">mqlite main · docs/cli.md</a> — source v0.4.0; latest release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.0">v0.4.0</a>.
-  These docs track main; check release notes for published artifacts. Edit the canonical Markdown and re-run <code>tools/build.mjs</code>.</div>
+  <div class="stamp">Source: <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/cli.md">mqlite main · docs/cli.md</a> — unreleased v0.4.0 candidate. Latest supported release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.3.2">v0.3.2</a>.
+  These docs track main; use the linked release for published artifacts.</div>
   <main class="prose">
 <h1 id="cli-reference-mqlite">CLI reference (<code>mqlite</code>)</h1>
 <p>One binary, <strong>two modes</strong> — the same commands work against a local SQLite DB
@@ -89,7 +89,7 @@ broker over HTTP. <strong>Client mode wins if <code>MQLITE_ENDPOINT</code> is se
 </tr>
 <tr>
 <td><code>MQLITE_DLQ_MAX_AGE</code> · <code>MQLITE_DLQ_MAX_COUNT</code> · <code>MQLITE_DLQ_MAX_BYTES</code></td>
-<td>broker DLQ retention (<code>serve</code>); on by default, disable with <code>MQLITE_DLQ_RETENTION=off</code></td>
+<td>asynchronous broker DLQ retention targets (<code>serve</code>); broker-wide defaults are on, and <code>MQLITE_DLQ_RETENTION=off</code> disables those defaults while positive per-queue bounds still apply</td>
 </tr>
 </tbody></table>
 <p>The DB string is <strong>never compiled in</strong> — it comes from the environment. The endpoint comes
@@ -431,8 +431,8 @@ echo &#39;{&quot;id&quot;:2}&#39; | mqlite send orders -
 </tbody></table>
 <h3 id="receive-queue--consume-peek-lock"><code>receive &lt;queue&gt;</code> — consume (Peek-Lock)</h3>
 <p>By default it receives and auto-Completes. Use <code>--no-ack</code> to leave messages locked and
-print each <code>lock-token</code> (settle them later — see settlement commands below), or <code>--delete</code>
-for at-most-once.</p>
+print each <code>lock-token</code> (settle them later — see settlement commands below), or
+<code>--delete</code> for at-most-once broker removal.</p>
 <pre><code class="language-bash">mqlite receive orders --max 10 --wait 5s
 </code></pre>
 <table>
@@ -461,7 +461,7 @@ for at-most-once.</p>
 <tr>
 <td><code>--delete</code></td>
 <td>false</td>
-<td>receive-and-delete (at-most-once, no lock)</td>
+<td>receive-and-delete (at-most-once broker removal, no lock)</td>
 </tr>
 </tbody></table>
 <p><strong>Auto-ack never acknowledges output you can&#39;t see.</strong> A message is only Completed <em>after</em> its

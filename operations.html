@@ -29,13 +29,17 @@
   </div>
 </div></nav>
 <div class="wrap">
-  <div class="stamp">Generated from <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/operations.md">mqlite main · docs/operations.md</a> — source v0.4.0; latest release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.0">v0.4.0</a>.
-  These docs track main; check release notes for published artifacts. Edit the canonical Markdown and re-run <code>tools/build.mjs</code>.</div>
+  <div class="stamp">Source: <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/operations.md">mqlite main · docs/operations.md</a> — unreleased v0.4.0 candidate. Latest supported release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.3.2">v0.3.2</a>.
+  These docs track main; use the linked release for published artifacts.</div>
   <main class="prose">
 <h1 id="production-operations">Production operations</h1>
-<p>This runbook covers v0.4.0 (port 6754, schema token 7) and
-v0.3.0/v0.3.1/v0.3.2 (port 6754, schema token 5). v0.3.3 is retracted; use
-v0.3.2 or v0.4.0 and later.
+<p>This runbook covers the latest supported release, v0.3.2 (port 6754, schema
+token 5), and the <code>main</code> branch&#39;s unreleased v0.4.0 candidate (port 6754, schema
+token 7). v0.3.3 is withdrawn and unsupported; its public assets and exact image
+remain available for forensic or compatibility inspection and must not be
+deployed. Pin production deployments to v0.3.2 until a corrected release is
+tagged. Although <code>main</code> declares <code>retract v0.3.3</code>, Go module tools will discover
+that directive only after a later version containing it is tagged.
 Runtime-managed access keys require v0.3.1; v0.3.0 supports configured tokens only.
 Unified <code>Observe</code> and configured monitor credentials require v0.3.2.
 Upgrading from v0.2.0 changes both its default port (8080) and schema token (2);
@@ -45,7 +49,8 @@ for metric definitions and alerts.</p>
 <h2 id="operating-boundaries">Operating boundaries</h2>
 <ul>
 <li>Run one active broker per database. A local file has one MQLite owner and one
-SQL connection; use HTTP clients for other processes. A second broker sharing a
+writer connection; it may also open one read-only observation connection. Use
+HTTP clients for other processes. A second broker sharing a
 Turso database is also unsupported: startup recovery assumes the previous owner
 has stopped. Do not perform a rolling overlap against the same database.</li>
 <li>Keep local storage on a persistent local filesystem or attached block volume,
@@ -64,14 +69,21 @@ snapshot can repeat work whose external side effects already happened. Reuse
 stable <code>MessageID</code>/body, receive <code>AttemptID</code>, and the exact settlement request
 when retrying within their documented retention windows; do not treat an HTTP
 timeout as proof that a write failed.</li>
+</ul>
+<p>The next three boundaries apply to the unreleased <code>main</code> candidate. v0.3.2 has
+the complete active-only <code>ListSubscriptions</code> operation, but it does not provide
+queue/subscription deletion, lifecycle-aware paged subscription inventory, the
+subscription capacity setting, or fixed subscription TTL.</p>
+<ul>
 <li>Give one controller exclusive ownership of queue or subscription deletion and
 same-name recreation. Quiesce producers and consumers. Use the empty-only
 default unless permanent loss is intended; force also discards locked work whose
-external effects may already have happened. An accepted resource enters durable
-<code>deleting</code>, stops serving data and reserves its name; an accepted subscription
-also leaves topic fan-out immediately. Confirm the name is absent before
-recreating it. Keep the name reserved while reconciling an uncertain result,
-and never replay an old delete after a replacement exists.</li>
+external effects may already have happened. The accepting transaction moves the
+resource to <code>deleting</code> and starts cleanup. The marker reserves its
+name when cleanup continues; a small deletion can instead complete in that same
+commit. An accepted subscription leaves topic fan-out immediately. Confirm the
+name is absent before recreating it. Keep the name reserved while reconciling an
+uncertain result, and never replay an old delete after a replacement exists.</li>
 <li>Treat the default 10,000 active-plus-deleting subscription limit as a metadata
 safety ceiling. Choose a lower limit when the application needs a stricter
 bound. Measure fan-out latency, database growth and observation cost at the
@@ -260,18 +272,21 @@ establish database compatibility, and MQLite does not run schema migrations.</p>
 <td>First preserve candidate data and reconcile new messages and external effects. Blindly restoring the old snapshot would discard those new writes.</td>
 </tr>
 </tbody></table>
-<p>For <strong>v0.3.0, v0.3.1, v0.3.2 or retracted v0.3.3 → v0.4.0</strong>, schema changes
+<p>For a future <strong>v0.3.0, v0.3.1, v0.3.2 or withdrawn v0.3.3 → v0.4.0</strong>
+cutover, the schema changes
 from <strong>5 → 7</strong> while port <strong>6754</strong> stays unchanged. Durable queue lifecycle and
 fixed subscription-expiry columns and indexes make the database incompatible;
 there is no in-place migration. Schema 6 belonged only to an intermediate
 unreleased lifecycle build, was never tagged, and is refused too.
 Follow the different-token procedure above: stop producers and consumers, take a
 consistent schema-5 backup, account for every retained message state and managed
-key, preserve the matching old binary/database pair, and start v0.4.0 with
+key, preserve the matching old binary/database pair, and start the candidate or
+eventual v0.4.0 release with
 a fresh database. Do not edit the schema token or point schema-7 code at the old
 file. Move work through an application-level drain/replay process with stable
 business identities if it must survive the cutover.</p>
-<p>v0.4.0 clients also change the deletion contract to <code>{name,force?}</code> with a typed
+<p>The unreleased candidate clients also change the deletion contract to
+<code>{name,force?}</code> with a typed
 <code>{deleted,state}</code> result; update broker, SDK, CLI, MCP and console together. A
 rollback after schema-7 accepts writes requires preserving and reconciling those
 writes before restoring the schema-5 snapshot. Retain broker stderr externally for
@@ -280,7 +295,8 @@ separate from access logs and database backups.</p>
 <p>Before the cutover, replace Prometheus <code>mqlite_queue_total</code> queries with
 <code>mqlite_queue_retained_messages</code>. Replace
 <code>mqlite_queue_oldest_message_age_ms</code> with
-<code>mqlite_queue_oldest_message_age_seconds</code> and divide thresholds by 1,000. v0.4.0
+<code>mqlite_queue_oldest_message_age_seconds</code> and divide thresholds by 1,000. The
+planned v0.4.0 release
 removes both deprecated aliases; native <code>Observe</code> JSON keeps
 <code>queues[].oldest_message_age_ms</code>. Validate recording rules, alerts and dashboards
 against the candidate before resuming traffic.</p>
@@ -300,8 +316,8 @@ restore the previous authorized scraper/rule configuration; the old <code>/metri
 endpoint requires an administrator. Keep administrator authentication enabled.
 Preserve writes accepted by the candidate rather than blindly restoring the
 pre-upgrade snapshot. The two deprecated metric aliases remain available in
-v0.3.2 but are removed in v0.4.0; see
-<a href="observability.html#compatibility-and-v040-migration">metric compatibility</a>.</p>
+v0.3.2 and are removed on <code>main</code> for the planned v0.4.0 release; see
+<a href="observability.html#compatibility-and-planned-v040-migration">metric compatibility</a>.</p>
 <p>For <strong>v0.3.0 → v0.3.1 or v0.3.2</strong>, schema token <strong>5</strong> and the port remain unchanged.
 The candidate adds the independent <code>access_keys</code> table without rewriting existing
 queue or message tables. Rehearse opening a restored copy first. Rolling back to

@@ -8,8 +8,9 @@ Public documentation: https://mqlitehq.github.io/.
 Relative links below resolve against this website.
 
 NOTE ON VERSIONS: the latest supported release is v0.3.2 (default port 6754,
-schema token 5). v0.3.3 is withdrawn. This website tracks main, currently the
-unreleased v0.4.0 candidate. Runtime access
+schema token 5). v0.3.3 is withdrawn and unsupported; its public artifacts remain
+only for forensic or compatibility inspection and must not be deployed. This
+website tracks main, currently the unreleased v0.4.0 candidate. Runtime access
 keys and key-management tools require v0.3.1 or later. Unified Observe, configured
 monitor credentials and the monitoring starter require v0.3.2 or later.
 Installation commands below pin v0.3.2. Use the
@@ -20,8 +21,9 @@ below are unavailable in v0.3.2.
 - One engine, two front-ends: `mqlite.OpenEmbedded` (in-process, one SQLite file)
   and `mqlite serve` (HTTP broker, default :6754, Bearer-token auth, secure by
   default — a token is auto-generated if none is set).
-- Storage: local SQLite (pure-Go driver) or remote Turso/libSQL. Remote buys
-  durability + geo-replication (~45 ms per durable commit), not throughput.
+- Storage: local SQLite (pure-Go driver) or remote Turso/libSQL. A historical
+  co-located Turso workload measured about 45 ms per durable commit; remeasure
+  the current version, database and region before sizing.
 - Wire protocol: JSON over HTTP, one POST per operation, 29 routes in source v0.4.0 under
   /mqlite.v1.QueueService/*, /mqlite.v1.AdminService/* and /mqlite.v1.AuthService/*. Message bodies are
   base64 in JSON. GET / is an open discovery card listing every endpoint.
@@ -35,12 +37,14 @@ below are unavailable in v0.3.2.
   before expiry. An unexpired exact-request receipt can replay an already committed
   settlement after its original deadline (same queue, sequence, token, verb and
   effect-changing arguments); it cannot authorize a new effect or revive a lease.
-- Receive-and-Delete removes the row before returning it and grants no lease:
+- Receive-and-Delete is explicit at-most-once broker removal: it removes the row
+  before returning it and grants no lease:
   empty lock_token and zero locked_until_ms (omitted in JSON), including receive
   attempt replays. The SDK exposes a zero LockedUntil time.
 - Retries: delivery_count per message; at max_delivery_count on retry → dead-letter
-  queue (state, not a separate queue). Redrive moves dead letters back; DLQ
-  retention bounds age/count/bytes.
+  queue (state, not a separate queue). Redrive moves dead letters back. DLQ
+  age/count/byte settings are asynchronous retention targets, so retained state
+  may temporarily exceed them between bounded cleanup passes.
 - Ordering: standard (per-group_id FIFO, cross-group parallel), group_fifo
   (group_id required), strict_fifo (whole-queue serial). Order holds across
   crashes and lock expiry. Abandon with delay_ms > 0 parks the message in scheduled
@@ -53,9 +57,11 @@ below are unavailable in v0.3.2.
 - Resource deletion (unreleased v0.4.0 candidate): DeleteQueue and DeleteSubscription require
   manage permission and are empty-only by default. `force=true` is explicit,
   durable authorization to discard every retained state, including locked work.
-  Accepted deletion removes the resource from the data plane immediately, reserves
-  its name while bounded cleanup runs, and is reconciled through inventory instead
-  of another delete. The API addresses names directly and has no Generation field;
+  Accepted deletion removes the resource from the data plane immediately. A
+  `state=deleted` result means cleanup finished in the accepting commit;
+  `state=deleting` means bounded cleanup continues and reserves the name. Reconcile
+  deleting or unknown outcomes through inventory instead of another delete. The API
+  addresses names directly and has no Generation field;
   one owner must serialize deletion with same-name recreation. DeleteQueue rejects
   subscription backing queues. DeleteSubscription requires the exact topic/name pair.
 - Subscription lifecycle (unreleased v0.4.0 candidate): ListSubscriptionsPage provides bounded

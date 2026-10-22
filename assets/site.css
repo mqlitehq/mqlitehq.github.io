@@ -132,7 +132,7 @@ footer.site .wrap { padding: 22px 24px; display: flex; flex-wrap: wrap; gap: 8px
 footer.site a { color: var(--muted); }
 footer.site a:hover { color: var(--ink2); }
 
-/* ── figures (hand-drawn SVGs swapped in for the docs' ASCII diagrams) ── */
+/* ── landing-page figure; generated docs preserve their canonical ASCII diagrams ── */
 figure.fig {
   background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
   padding: 18px 18px 10px; margin: 16px 0;

@@ -29,8 +29,8 @@
   </div>
 </div></nav>
 <div class="wrap">
-  <div class="stamp">Generated from <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/deployment.md">mqlite main · docs/deployment.md</a> — source v0.4.0; latest release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.0">v0.4.0</a>.
-  These docs track main; check release notes for published artifacts. Edit the canonical Markdown and re-run <code>tools/build.mjs</code>.</div>
+  <div class="stamp">Source: <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/deployment.md">mqlite main · docs/deployment.md</a> — unreleased v0.4.0 candidate. Latest supported release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.3.2">v0.3.2</a>.
+  These docs track main; use the linked release for published artifacts.</div>
   <main class="prose">
 <h1 id="deploying-mqlite">Deploying mqlite</h1>
 <p>mqlite is <strong>one pure-Go binary</strong> (or one container image) over <strong>one SQLite file</strong>
@@ -78,11 +78,11 @@ this guide covers the broker (<code>mqlite serve</code>). Pick a target:</p>
 </tr>
 <tr>
 <td><code>MQLITE_MAX_SUBSCRIPTIONS</code></td>
-<td>v0.4.0+: active plus deleting subscription capacity (default 10,000); pending cleanup continues to occupy a slot</td>
+<td>main / planned v0.4.0: active plus deleting subscription capacity (default 10,000); pending cleanup continues to occupy a slot</td>
 </tr>
 <tr>
 <td><code>MQLITE_DLQ_MAX_AGE</code> · <code>MQLITE_DLQ_MAX_COUNT</code> · <code>MQLITE_DLQ_MAX_BYTES</code></td>
-<td>DLQ retention bounds (defaults 14d / 1,000,000 per queue; byte cap off; <code>MQLITE_DLQ_RETENTION=off</code> to disable) — see <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/retention.md">retention.md</a></td>
+<td>asynchronous DLQ retention targets (defaults 14d / 1,000,000 per queue; byte target off; <code>MQLITE_DLQ_RETENTION=off</code> disables broker-wide defaults) — see <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/retention.md">retention.md</a></td>
 </tr>
 <tr>
 <td><code>MQLITE_MAX_MESSAGE_BYTES</code></td>
@@ -115,41 +115,52 @@ and error reference: <a href="api.html">api-reference.md</a>.</p>
 <h2 id="docker--ghcr">Docker / GHCR</h2>
 <blockquote>
 <p><strong>Version and upgrade compatibility.</strong>
-These tagged-image instructions target <strong>v0.4.0</strong>, with default port <strong>6754</strong>
-and schema token <strong>7</strong>. v0.3.3 is retracted because its public queue identity
-contract was withdrawn. v0.3.0/v0.3.1/v0.3.2 and retracted v0.3.3 use schema
-token 5 and cannot be opened by v0.4.0; preserve the matching old
-binary/database pair, take a consistent backup, account for retained work, and
-start v0.4.0 with a fresh database. Intermediate schema 6 was never released
-and is refused too. Before replacing a v0.3.x broker, migrate Prometheus rules
-from <code>mqlite_queue_total</code> to <code>mqlite_queue_retained_messages</code> and from
-<code>mqlite_queue_oldest_message_age_ms</code> to
-<code>mqlite_queue_oldest_message_age_seconds</code> (divide thresholds by 1,000).
-<strong>v0.2.0 uses port 8080 and schema token 2.</strong> Its database cannot be opened by
-v0.4.0: preserve the old binary/database pair and follow the
-<a href="operations.html#upgrade-and-rollback">upgrade and rollback procedure</a> before replacing it.</p>
+The latest supported release is <strong>v0.3.2</strong>, with default port <strong>6754</strong> and
+schema token <strong>5</strong>. v0.3.3 is withdrawn and unsupported; its public assets and
+exact image remain available for forensic or compatibility inspection and must
+not be deployed. Pin the exact v0.3.2 binary or image;
+do not select v0.3.3, and do not rely on a moving image alias to choose a
+production version.</p>
+<p><code>main</code> declares <code>retract v0.3.3</code>, but Go module tools will discover that
+directive only after a later version containing it is tagged.</p>
+<p>The <code>main</code> branch is an unreleased v0.4.0 candidate with schema token 7. It
+cannot open a v0.3.x database and no in-place migration exists. Schema 6 was
+used only by intermediate untagged lifecycle builds and is also refused. Before
+testing the candidate, preserve the matching schema-5 binary/database pair, take
+a consistent backup, account for retained work, and start with a fresh database.
+The candidate also removes the deprecated Prometheus aliases described in
+<a href="observability.html#compatibility-and-planned-v040-migration">observability</a>.
+<strong>v0.2.0 uses port 8080 and schema token 2.</strong> Follow the
+<a href="operations.html#upgrade-and-rollback">upgrade and rollback procedure</a> before
+replacing it.</p>
 </blockquote>
-<p>The published image is multi-arch (amd64 + arm64):</p>
-<pre><code class="language-bash"># v0.4.0, default port 6754
+<p>The exact supported image is multi-arch (amd64 + arm64):</p>
+<pre><code class="language-bash"># v0.3.2, default port 6754
 docker run -d --name mqlite -p 6754:6754 \
   -v mqlite-data:/data \
   -e MQLITE_DB=file:/data/mq.db \
   -e MQLITE_TOKENS=mqk_prod_CHANGEME \
   -e MQLITE_MONITOR_TOKENS=mqk_monitor_CHANGEME \
   -e MQLITE_SYNC=FULL \
-  ghcr.io/mqlitehq/mqlite:0.4.0
+  ghcr.io/mqlitehq/mqlite:0.3.2
 </code></pre>
 <ul>
 <li>The named volume <code>mqlite-data</code> persists the SQLite file across restarts.</li>
-<li>Pin exact <code>0.4.0</code> in production. Stable releases also publish the <code>:0.4</code> and
-<code>:latest</code> aliases, but an exact tag makes upgrades explicit.
-Images <code>&gt;= 0.3.0</code> listen on <code>6754</code>; <strong><code>0.2.x</code> and earlier listen on <code>8080</code></strong> — if you pin an
-older tag, publish the port it actually uses.</li>
+<li>Pin exact <code>0.3.2</code> in production. Images <code>&gt;= 0.3.0</code> listen on <code>6754</code>;
+<strong><code>0.2.x</code> and earlier listen on <code>8080</code></strong>.</li>
 <li>Verify: <code>curl http://localhost:6754/</code> (discovery card) and <code>/healthz</code>. Metrics is
 disabled by default. For a private broker or an ingress that blocks public
 <code>/metrics</code>, add <code>-e MQLITE_METRICS=on</code> and give the collector a monitor token.
 Scraping uses the same API port; enabled discovery includes <code>&quot;metrics&quot;:&quot;/metrics&quot;</code>.</li>
 </ul>
+<p>To evaluate the unreleased candidate, build a reviewed <code>main</code> commit locally and
+tag that image with its commit rather than a release number:</p>
+<pre><code class="language-bash">git clone https://github.com/mqlitehq/mqlite.git
+cd mqlite
+git checkout &lt;reviewed-commit-sha&gt;
+docker build --pull -t mqlite:main-&lt;reviewed-commit-sha&gt; .
+</code></pre>
+<p>Do not point this candidate at a schema-5 production database.</p>
 <h2 id="flyio-minimal-cost">Fly.io (minimal cost)</h2>
 <p>A scale-to-zero, single-machine recipe — cheapest way to run it online. Save as
 <code>fly.toml</code>:</p>
@@ -157,7 +168,7 @@ Scraping uses the same API port; enabled discovery includes <code>&quot;metrics&
 primary_region = &quot;sin&quot;            # pick a region near you
 
 [build]
-  image = &quot;ghcr.io/mqlitehq/mqlite:0.4.0&quot;   # pinned image, no build on Fly
+  image = &quot;ghcr.io/mqlitehq/mqlite:0.3.2&quot;   # latest supported exact image
 
 [env]
   MQLITE_DB = &quot;file:/data/mq.db&quot;            # SQLite on the persistent volume
@@ -250,17 +261,17 @@ See <a href="cli.html#key-createlistrevoke--manage-persistent-access-keys">key c
 <p>Follow the <a href="operations.html#consistent-backups">production runbook</a> for read-only
 online snapshots, offline directory copies, isolated restore validation and rollback.
 Use a fresh restore directory so an old WAL/SHM cannot attach to the snapshot.</p>
-<p><strong>v0.2.0 databases use schema 2; v0.3.0/v0.3.1/v0.3.2 and retracted
-v0.3.3 use schema 5; v0.4.0 uses schema 7.</strong> Intermediate unreleased lifecycle
-builds used schema 6, which was never tagged. There is no
-in-place migration between these tokens. Before changing tokens, account for
+<p><strong>v0.2.0 databases use schema 2; v0.3.0/v0.3.1/v0.3.2 and withdrawn
+v0.3.3 use schema 5; <code>main</code>, the unreleased v0.4.0 candidate, uses schema 7.</strong>
+Intermediate untagged lifecycle builds used schema 6. There is no in-place
+migration between these tokens. Before testing a different token, account for
 retained work in every state, keep the old binary/database pair and a consistent
 backup, and create the candidate database separately. Do not restamp an old file.
 Within the tagged schema-5 line, v0.3.0 → v0.3.1 adds compatible managed-key
 storage and v0.3.1 → v0.3.2 leaves the schema unchanged. <code>Observe</code> and configured
 monitor credentials require v0.3.2; restore compatible monitoring configuration
-when rolling back. Follow the runbook for the v0.4.0 fresh-database cutover and
-metric-name migration.
+when rolling back. Follow the runbook before a future v0.4.0 fresh-database cutover
+and metric-name migration.
 See <a href="operations.html#upgrade-and-rollback">upgrade and rollback</a>.</p>
 <h2 id="turso-remote-libsql">Turso (remote libSQL)</h2>
 <p>Use replicated remote storage instead of a local volume — no disk to manage, and the

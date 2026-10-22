@@ -117,7 +117,8 @@
   </div>
   <p class="sub">This site follows the unreleased v0.4.0 candidate on <code>main</code>.
   Use <a href="https://github.com/mqlitehq/mqlite/tree/v0.3.2/docs">the v0.3.2 documentation</a>
-  with supported release artifacts; v0.3.3 is withdrawn.</p>
+  with supported release artifacts. v0.3.3 is withdrawn and unsupported; its
+  public artifacts remain only for forensic or compatibility inspection and must not be deployed.</p>
   <div class="cta">
     <a class="btn primary" href="#quickstart">Quickstart</a>
     <a class="btn ghost" href="concepts.html">Read the concepts</a>
@@ -164,7 +165,8 @@
       Start embedded; move the same code to a broker, or the storage to replicated
       <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/turso.md">Turso</a>, without rewriting your app.</p></div>
     <div class="why"><h3><em>2</em>Reliable under concurrency</h3>
-      <p>Honestly <strong>at-least-once</strong>: new settlements require a current token and
+      <p>Default Peek-Lock delivery is honestly <strong>at-least-once</strong>; explicit
+      receive-and-delete chooses at-most-once broker removal. New settlements require a current token and
       unexpired lease; idempotent
       send/receive/settle, single-broker crash recovery, and O(log n) claims on a deep backlog.
       FIFO groups stay ordered even across consumer crashes and lock expiry.</p></div>
@@ -255,13 +257,13 @@ func main() {
     <tr><th>Setup</th><th>Measured</th><th>Read this as</th></tr>
     <tr><td>Local file DB, 12-core machine</td>
         <td class="num">15,926–17,963 msg/s single · 35,146 batched</td>
-        <td>an embedded queue that keeps up with your app</td></tr>
+        <td>historical local results; rerun the workload before sizing</td></tr>
     <tr><td>1-vCPU / 256 MB cloud box, embedded engine</td>
         <td class="num">6.0–6.7k msg/s batched · 1,507 msg/s drain</td>
-        <td>batch your sends and receives — that's the sweet spot</td></tr>
+        <td>batching amortized commit cost in this measured setup</td></tr>
     <tr><td>Remote Turso (co-located)</td>
         <td class="num">~45 ms per durable commit</td>
-        <td>you're buying durability + geo-replication, <strong>not</strong> throughput</td></tr>
+        <td>commit latency dominated this measured remote path</td></tr>
     <tr><td>Memory / disk</td>
         <td class="num">27–34 MB peak RSS · freed DB pages are reusable</td>
         <td>file reclamation is gradual; size disk for peak backlog and measure your workload</td></tr>
@@ -273,7 +275,7 @@ func main() {
     <tr><td>A clustered, highly-available multi-node broker</td><td>NATS · RabbitMQ</td></tr>
     <tr><td>A queue inside the Postgres you already run</td><td>pgmq · River</td></tr>
     <tr><td>Sustained six-figure msg/s on one node</td><td>not this — the single-writer model is the point, not a bug</td></tr>
-    <tr><td>“Exactly-once delivery”</td><td>nobody sells that honestly; mqlite is at-least-once, so write idempotent handlers</td></tr>
+    <tr><td>Exactly-once external side effects</td><td>default Peek-Lock delivery is at-least-once; make handlers idempotent</td></tr>
   </table></div>
 </section>
 
@@ -334,7 +336,7 @@ func main() {
     </div>
     <div class="tabpane" data-t="broker">
       <p>One tiny process, secure by default: it generates a <code>mqk_…</code> token and prints it if you don't set one. Every operation is one POST.</p>
-      <p>The supported v0.3.2 release uses port 6754 and schema token 5. v0.3.3 is withdrawn; do not deploy its artifacts. Candidate lifecycle APIs described elsewhere on this site are not part of v0.3.2.</p>
+      <p>The supported v0.3.2 release uses port 6754 and schema token 5. v0.3.3 is withdrawn and unsupported; its public artifacts remain only for forensic or compatibility inspection and must not be deployed. Candidate lifecycle APIs described elsewhere on this site are not part of v0.3.2.</p>
       <pre><code class="language-bash">go install github.com/mqlitehq/mqlite/cmd/mqlite@v0.3.2   # default port 6754
 
 # start the broker on :6754 with a known token, in the background
