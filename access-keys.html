@@ -29,8 +29,8 @@
   </div>
 </div></nav>
 <div class="wrap">
-  <div class="stamp">Generated from <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/access-keys.md">mqlite main · docs/access-keys.md</a> — source v0.3.3; latest release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.3.3">v0.3.3</a>.
-  These docs track main; check release notes for published artifacts. Edit the canonical Markdown and re-run <code>tools/build.mjs</code>.</div>
+  <div class="stamp">Source: <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/access-keys.md">mqlite main · docs/access-keys.md</a> — unreleased v0.4.0 candidate. Latest supported release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.3.2">v0.3.2</a>.
+  These docs track main; use the linked release for published artifacts.</div>
   <main class="prose">
 <h1 id="access-keys">Access keys</h1>
 <p>Runtime access keys are available in <strong>v0.3.1 and later</strong>.
@@ -166,6 +166,13 @@ already authorized, including a long poll, may finish. Later settle/renew reques
 authenticate again. Keys issued by another key are independent: revoking their
 issuer does not revoke them. An administrator can revoke itself; retain another
 administrator before doing so.</p>
+<p>When broker access logs are retained, successful creation and revocation records
+include the target&#39;s public key ID and the caller&#39;s safe actor classification. A
+value equal to a configured static credential is omitted even when it has valid
+public-ID syntax, including when it would otherwise be an actor ID. A managed
+caller is identified by its own public key ID; configured administrator tokens
+have no public ID. Secrets and token digests are never log fields. See
+<a href="observability.html#access-logs-and-destructive-operation-evidence">access-log retention and limits</a>.</p>
 <p>If a creation response is lost, keep the original public ID and list keys as an
 administrator to find it. If it exists without a saved secret, revoke it and
 create a replacement with a new ID. A repeated ID returns <code>409 key_conflict</code> and

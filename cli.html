@@ -29,8 +29,8 @@
   </div>
 </div></nav>
 <div class="wrap">
-  <div class="stamp">Generated from <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/cli.md">mqlite main · docs/cli.md</a> — source v0.3.3; latest release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.3.3">v0.3.3</a>.
-  These docs track main; check release notes for published artifacts. Edit the canonical Markdown and re-run <code>tools/build.mjs</code>.</div>
+  <div class="stamp">Source: <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/cli.md">mqlite main · docs/cli.md</a> — unreleased v0.4.0 candidate. Latest supported release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.3.2">v0.3.2</a>.
+  These docs track main; use the linked release for published artifacts.</div>
   <main class="prose">
 <h1 id="cli-reference-mqlite">CLI reference (<code>mqlite</code>)</h1>
 <p>One binary, <strong>two modes</strong> — the same commands work against a local SQLite DB
@@ -84,8 +84,12 @@ broker over HTTP. <strong>Client mode wins if <code>MQLITE_ENDPOINT</code> is se
 <td><code>NORMAL</code> (default) / <code>FULL</code> / <code>OFF</code> / <code>EXTRA</code> durability (embedded/serve). An unrecognized value is <strong>rejected at startup</strong> — a typo never silently downgrades to <code>NORMAL</code>.</td>
 </tr>
 <tr>
+<td><code>MQLITE_MAX_SUBSCRIPTIONS</code></td>
+<td>active plus deleting subscription capacity (default 10,000; embedded/serve and direct embedded CLI commands)</td>
+</tr>
+<tr>
 <td><code>MQLITE_DLQ_MAX_AGE</code> · <code>MQLITE_DLQ_MAX_COUNT</code> · <code>MQLITE_DLQ_MAX_BYTES</code></td>
-<td>broker DLQ retention (<code>serve</code>); on by default, disable with <code>MQLITE_DLQ_RETENTION=off</code></td>
+<td>asynchronous broker DLQ retention targets (<code>serve</code>); broker-wide defaults are on, and <code>MQLITE_DLQ_RETENTION=off</code> disables those defaults while positive per-queue bounds still apply</td>
 </tr>
 </tbody></table>
 <p>The DB string is <strong>never compiled in</strong> — it comes from the environment. The endpoint comes
@@ -308,9 +312,42 @@ token, then revoke the old ID. No broker restart is needed. See
 <td>per-queue: cap dead-letter body bytes (<code>-1</code> = unbounded)</td>
 </tr>
 </tbody></table>
+<h3 id="delete-queue-name--retire-a-queue"><code>delete-queue &lt;name&gt;</code> — retire a queue</h3>
+<pre><code class="language-bash">mqlite delete-queue orders             # succeeds only when every state is empty
+mqlite delete-queue orders --force     # explicitly discard every retained state
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Default</th>
+<th></th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>--force</code></td>
+<td>false</td>
+<td>retire the queue even when it contains active, locked, scheduled, deferred, completed or dead-lettered rows</td>
+</tr>
+</tbody></table>
+<p>The default returns <code>queue_not_empty</code> without changing the queue if any retained
+row exists. Force permanently discards those rows and queue-owned deduplication /
+retry records. A locked delivery may already have caused an external side effect;
+deletion cannot undo it.</p>
+<p>Both output modes report whether bounded cleanup finished. Text prints
+<code>ok: name=orders deleted=true state=deleted</code> or
+<code>ok: name=orders deleted=false state=deleting</code>; JSON prints the same three fields.
+A deleting queue stops accepting data-plane work immediately and keeps its name
+reserved. Use <code>mqlite list</code> to watch its <code>state</code>; do not use another delete as a
+status check. The original force authorization was persisted when deletion was
+accepted. A running broker or embedded engine continues cleanup without another
+delete. A one-shot embedded CLI process exits after the command; each later open
+runs a bounded recovery pass. Recreate the name only after it disappears from the
+list.</p>
 <h3 id="subscribe-topic-name--create-a-subscription"><code>subscribe &lt;topic&gt; &lt;name&gt;</code> — create a subscription</h3>
 <p><em>(alias: <code>create-subscription</code>)</em></p>
 <pre><code class="language-bash">mqlite subscribe orders eu-orders --expr &#39;subject_parts[0]==&quot;orders&quot; &amp;&amp; properties[&quot;region&quot;]==&quot;eu&quot;&#39;
+mqlite subscribe replies instance-7 --ttl 15m
 </code></pre>
 <table>
 <thead>
@@ -325,7 +362,29 @@ token, then revoke the old ID. No broker restart is needed. See
 <td>&quot;&quot;</td>
 <td>subscription filter — an <a href="concepts.html#subscription-filters-expr">expr</a> boolean predicate; empty = match all</td>
 </tr>
+<tr>
+<td><code>--ttl</code></td>
+<td><code>0</code></td>
+<td>fixed lifetime from the first successful creation; zero creates a permanent subscription or preserves an existing lifetime</td>
+</tr>
 </tbody></table>
+<p>On an existing subscription, omitting <code>--ttl</code> or passing zero preserves its lifetime. Repeating
+the original positive value is idempotent; a different positive value returns a
+name conflict before changing the filter. Expiry is advance authorization to
+discard retained messages during bounded cleanup. Explicit deletion remains the
+normal completion path.</p>
+<h3 id="delete-subscription-topic-name--retire-a-subscription"><code>delete-subscription &lt;topic&gt; &lt;name&gt;</code> — retire a subscription</h3>
+<pre><code class="language-bash">mqlite delete-subscription orders eu-orders
+mqlite delete-subscription orders eu-orders --force
+</code></pre>
+<p>The topic and globally unique subscription name must match exactly. Empty-only is
+the default; <code>--force</code> permanently discards every retained state in the backing
+queue. An accepted subscription leaves fan-out immediately and reports
+<code>state=deleted</code> or <code>state=deleting</code>. Pending cleanup keeps the mapping and name
+reserved. Reconcile with
+<code>mqlite list-subscriptions --topic orders --include-deleting</code>; never replay a
+delete after a transport failure, redirect, HTTP 5xx response, or malformed
+acknowledgement. Configure proxies not to retry lifecycle-delete routes.</p>
 <h3 id="send-queue-body--enqueue-a-message"><code>send &lt;queue&gt; &lt;body&gt;</code> — enqueue a message</h3>
 <p><code>body</code> of <code>-</code> reads stdin; or use <code>--file</code>.</p>
 <pre><code class="language-bash">mqlite send orders &#39;{&quot;id&quot;:1}&#39; --group order-1 --message-id m1
@@ -372,8 +431,8 @@ echo &#39;{&quot;id&quot;:2}&#39; | mqlite send orders -
 </tbody></table>
 <h3 id="receive-queue--consume-peek-lock"><code>receive &lt;queue&gt;</code> — consume (Peek-Lock)</h3>
 <p>By default it receives and auto-Completes. Use <code>--no-ack</code> to leave messages locked and
-print each <code>lock-token</code> (settle them later — see settlement commands below), or <code>--delete</code>
-for at-most-once.</p>
+print each <code>lock-token</code> (settle them later — see settlement commands below), or
+<code>--delete</code> for at-most-once broker removal.</p>
 <pre><code class="language-bash">mqlite receive orders --max 10 --wait 5s
 </code></pre>
 <table>
@@ -402,7 +461,7 @@ for at-most-once.</p>
 <tr>
 <td><code>--delete</code></td>
 <td>false</td>
-<td>receive-and-delete (at-most-once, no lock)</td>
+<td>receive-and-delete (at-most-once broker removal, no lock)</td>
 </tr>
 </tbody></table>
 <p><strong>Auto-ack never acknowledges output you can&#39;t see.</strong> A message is only Completed <em>after</em> its
@@ -447,6 +506,9 @@ mqlite metrics orders --output json   # machine-readable
 <h3 id="list--list-queues--subscriptions"><code>list</code> — list queues &amp; subscriptions</h3>
 <pre><code class="language-bash">mqlite list
 </code></pre>
+<p>Each row includes <code>state=active</code> or <code>state=deleting</code>. A deleting plain queue is
+listed because its name remains reserved, but queue operations are rejected and
+cannot take effect.</p>
 <h3 id="redrive-queue--move-dead-letters-back-to-active"><code>redrive &lt;queue&gt;</code> — move dead letters back to active</h3>
 <pre><code class="language-bash">mqlite redrive orders --max 100              # back to source
 mqlite redrive orders --to orders-replay     # to another queue
@@ -508,9 +570,11 @@ mqlite purge-dlq orders --all               # delete the entire DLQ (explicit)
 </tbody></table>
 <h3 id="vacuum--reclaim-free-db-pages-to-the-os"><code>vacuum</code> — reclaim free DB pages to the OS</h3>
 <p>Local maintenance (embedded; <strong>stop the broker first</strong> — the single-writer lock will
-reject it otherwise). New local DBs use <code>auto_vacuum=INCREMENTAL</code>, so the default is a
-no-lock <code>PRAGMA incremental_vacuum</code>; <code>--full</code> runs a full <code>VACUUM</code> (rewrites the file,
-global lock). Not applicable to a remote Turso/libSQL store.</p>
+reject it otherwise). New local DBs use <code>auto_vacuum=INCREMENTAL</code>, so the default
+checkpoints and exhausts the current incremental freelist; <code>--full</code> runs a full
+<code>VACUUM</code> (rewrites the file, global lock). The running broker also performs a
+bounded pass every 60 seconds once at least 256 pages are free. Not applicable to
+a remote Turso/libSQL store.</p>
 <pre><code class="language-bash">MQLITE_DB=file:/data/mq.db mqlite vacuum          # incremental
 MQLITE_DB=file:/data/mq.db mqlite vacuum --full   # full rewrite
 </code></pre>
@@ -576,8 +640,19 @@ credentials are configured at startup and cannot be created through <code>key cr
 <pre><code class="language-bash">mqlite status                 # backend, location, schema, ping, size, queue/subscription counts
 </code></pre>
 <h3 id="list-subscriptions--subscriptions-with-topic--filter"><code>list-subscriptions</code> — subscriptions with topic + filter</h3>
-<pre><code class="language-bash">mqlite list-subscriptions
+<pre><code class="language-bash">mqlite list-subscriptions                                      # all active (legacy-compatible)
+mqlite list-subscriptions --topic orders --limit 100
+mqlite list-subscriptions --topic orders --include-deleting
 </code></pre>
+<p>With no pagination flags, the command preserves the original complete active-only
+output and JSON array. Supplying <code>--topic</code>, <code>--after</code>, <code>--limit</code>, or
+<code>--include-deleting</code> selects the paged API and returns a page object containing
+<code>subscriptions</code>, <code>total</code>, and optional <code>next_after</code>. The default page size is 100
+and the maximum is 1,000. Cursors are opaque and bound to the topic/deleting
+scope. Each page is a current snapshot; concurrent roster changes can affect later
+pages. Every page entry includes required <code>created_at_ms</code> and <code>expires_at_ms</code>
+fields; zero expiry means permanent. With <code>--include-deleting</code>, an expired row is
+visible as <code>deleting</code> even before physical cleanup removes it.</p>
 <h3 id="test-filter-expr--dry-run-a-subscription-filter"><code>test-filter &lt;expr&gt;</code> — dry-run a subscription filter</h3>
 <p>Compiles the expression and, with a sample, reports whether it would match (nothing is
 enqueued).</p>

@@ -29,13 +29,13 @@
   </div>
 </div></nav>
 <div class="wrap">
-  <div class="stamp">Generated from <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/observability.md">mqlite main · docs/observability.md</a> — source v0.3.3; latest release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.3.3">v0.3.3</a>.
-  These docs track main; check release notes for published artifacts. Edit the canonical Markdown and re-run <code>tools/build.mjs</code>.</div>
+  <div class="stamp">Source: <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/observability.md">mqlite main · docs/observability.md</a> — unreleased v0.4.0 candidate. Latest supported release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.3.2">v0.3.2</a>.
+  These docs track main; use the linked release for published artifacts.</div>
   <main class="prose">
 <h1 id="observability">Observability</h1>
 <p>The canonical <code>Observe</code> interface, configured monitor credentials and the
 monitoring starter require <strong>v0.3.2 or later</strong>. Earlier releases expose only the
-legacy metrics described under <a href="#compatibility-from-v031">compatibility</a>.</p>
+original metrics described under <a href="#compatibility-and-planned-v040-migration">compatibility</a>.</p>
 <p>MQLite exposes one canonical observation through <code>AdminService/Observe</code>, the Go
 SDK, CLI, MCP, console and Prometheus <code>/metrics</code>. Queue snapshots and committed
 message effects originate in the engine. HTTP request measurements originate in
@@ -65,11 +65,66 @@ credential remains required on private networks.</p>
 <p>For a runnable broker, Prometheus and Grafana stack, see
 <a href="https://github.com/mqlitehq/mqlite/blob/main/ops/observability/README.md">the local observability demo</a>. For an existing
 platform, use the <a href="observability-cloud.html">cloud and Kubernetes guide</a>.</p>
+<h2 id="access-logs-and-destructive-operation-evidence">Access logs and destructive-operation evidence</h2>
+<p><code>mqlite serve</code> enables request logging to stderr. Each emitted record has a
+broker-generated 32-character <code>request_id</code>; the same value is returned in the
+<code>X-Request-ID</code> response header and exposed to configured CORS clients. The broker
+does not trust or copy a caller-supplied request ID. An enabled-CORS preflight is
+deliberately not logged, and a successful empty <code>Receive</code> is emitted at Debug so
+an Info-level handler may filter it. The ID correlates one HTTP attempt with one
+log record; it is not an idempotency key and does not authorize retrying a destructive request.</p>
+<p><code>actor_kind</code> distinguishes <code>anonymous</code>, <code>unverified</code>, <code>static_admin</code>,
+<code>static_monitor</code>, and <code>managed_key</code>. A successfully authenticated managed key also
+records its public <code>actor_key_id</code>, unless that ID equals a configured static
+credential. Static administrator and monitor credentials have no public ID, and
+invalid, expired, or revoked credentials cannot be safely attributed, so those
+records never invent one. Authentication headers, token
+digests, message bodies, and generated key secrets are not copied into access-log
+fields. Resource names and public IDs are logged by design; never put a secret in
+either.</p>
+<p>The following management records include operation-specific evidence in addition
+to status, error code, actor, request ID, and duration:</p>
+<table>
+<thead>
+<tr>
+<th>RPC</th>
+<th>Fields</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>DeleteQueue</code></td>
+<td><code>queue</code>, <code>force</code>, <code>acceptance</code> (<code>accepted</code>, <code>rejected</code>, or <code>unknown</code>), then <code>result_state</code> and <code>deleted</code> for an accepted result</td>
+</tr>
+<tr>
+<td><code>DeleteSubscription</code></td>
+<td><code>topic</code>, <code>sub</code>, <code>force</code>, the same acceptance and result fields</td>
+</tr>
+<tr>
+<td><code>Purge</code></td>
+<td><code>queue</code>, requested <code>max</code> and <code>older_than_ms</code> bounds, and confirmed <code>purged</code> count</td>
+</tr>
+<tr>
+<td><code>CreateKey</code>, <code>RevokeKey</code></td>
+<td>safe syntactically valid public <code>key_id</code>; a value equal to a configured static credential is omitted; successful operations add <code>result_state=created</code> or <code>revoked</code></td>
+</tr>
+</tbody></table>
+<p>These records are operational evidence, not a persistent audit table. A success
+record describes the broker result; an <code>acceptance=unknown</code> deletion still needs
+read-only reconciliation. Logs do not remove the rule that one owner must
+serialize deletion with same-name recreation. Resource names and public key IDs
+may themselves be sensitive operational metadata, so restrict log access.</p>
+<p>The default access log exists only on stderr. Container and service platforms may
+discard it quickly, and <code>MQLITE_DIAGNOSTIC_LOG</code> deliberately excludes routine
+requests. Forward stderr to an external log store and set its retention to cover
+your incident-response and destructive-request reconciliation window. Embedded
+brokers must pass a retained logger with <code>WithRequestLog</code>; a JSON <code>slog</code> handler is
+recommended when machines consume the evidence. Log delivery and storage
+durability remain the operator&#39;s responsibility.</p>
 <h2 id="maintenance-failure-diagnosis">Maintenance failure diagnosis</h2>
-<p>Brokers running v0.3.3 or later add optional <code>maintenance[].diagnostics</code> and
-<code>storage.operations[].last_error</code> fields to Observe. Older snapshots remain valid;
-missing diagnostics mean <strong>not reported</strong>, not healthy. Existing Prometheus labels
-and cumulative error buckets are unchanged.</p>
+<p>The unreleased v0.4.0 candidate adds optional <code>maintenance[].diagnostics</code> and
+<code>storage.operations[].last_error</code> fields to Observe. v0.3.2 and older snapshots
+remain valid; missing diagnostics mean <strong>not reported</strong>, not healthy. Existing
+Prometheus labels and cumulative error buckets are unchanged.</p>
 <p>Each maintenance task reports its latest outcome (<code>never</code>, <code>ok</code>, <code>failed</code>, or
 <code>interrupted</code>), last run time, consecutive failed passes, recovery time, and the
 latest eight failed steps. One pass can fail at several steps but increments the
@@ -150,32 +205,69 @@ not an empty list of healthy queues. Prometheus responds with available in-proce
 measurements and <code>mqlite_collection_success 0</code>, omitting queue gauges that could not
 be collected. Failure before the endpoint, including invalid scrape credentials,
 causes Prometheus <code>up</code> to become zero instead.</p>
-<p>Queue counts are actual retained rows from a grouped database query. They describe
-stored states, not guaranteed immediate delivery eligibility: visibility, TTL,
-lease expiry awaiting maintenance and ordering rules can affect claims. Different
-measurement domains are sampled at different instants. The observation is not an
-atomic transaction encompassing every database, HTTP and in-process counter.</p>
+<p>Queue gauges come from an exact grouped database query at the reported
+<code>sampled_at_ms</code>. One process-local gauge snapshot is shared across native
+<code>Observe</code>, <code>/metrics</code> and console requests for about 10 seconds. A cache hit
+preserves the original timestamp instead of presenting cached rows as new.
+Message writes and polling do not extend the fixed cache deadline; a queue create
+or delete invalidates the snapshot. The deadline begins when a refresh finishes,
+so after an unusually slow scan the gauges can trail current messages by the scan
+duration plus roughly one cache window. Per-queue <code>Stats</code> remains a fresh indexed
+read.</p>
+<p>Counts describe stored states at the sample time, not guaranteed immediate
+delivery eligibility: visibility, TTL, lease expiry awaiting maintenance and
+ordering rules can affect claims. Runtime probes, process counters and queue
+gauges are sampled at different instants. The observation is not an atomic
+transaction encompassing every database, HTTP and in-process counter. Collection
+duration is the elapsed time of the gauge refresh that produced <code>sampled_at_ms</code>;
+it remains unchanged on a cache hit.</p>
 <p><code>/healthz</code> is open process liveness. <code>mqlite_storage_read_available</code> reports a real
 storage read probe; success does not prove writes, end-to-end delivery or data
 integrity. Failed read latency is absent, not zero. Local storage size is unavailable
 for memory/remote backends, not a fabricated zero-byte database.</p>
 <h3 id="collection-cost-and-interval">Collection cost and interval</h3>
-<p>Each observation collects the full queue inventory with one grouped message scan
-and a storage read probe. The scan includes retained rows, so its cost grows with
-backlog as well as queue count. A local SQLite database uses the same single-writer
-connection for application work and collection; monitoring is not free or isolated
-from message-operation latency.</p>
+<p>Each observation runs a storage read probe. A cache refresh also collects the full
+queue inventory with one grouped message scan. State-filtered aggregates avoid
+updating every state counter for every row, but the exact refresh still reads all
+retained rows. Concurrent refreshes share that scan, and successful rows are
+reused for about 10 seconds; failed scans are not cached, so later requests can
+retry. Refresh cost therefore grows with current backlog as well as queue count.
+Here retained means rows present in <code>messages</code> at the sample time, not lifetime
+throughput. Completed messages are normally deleted immediately; active, locked,
+deferred, scheduled and dead-lettered rows remain until their corresponding
+lifecycle action, while an abnormal retained <code>completed</code> row is still counted in
+<code>total</code> and <code>unexpected</code>. Exact per-queue <code>Stats</code> uses one literal branch per
+message state and the existing queue-prefixed partial indexes, so it does not scan
+unrelated queues.</p>
+<p>The cache retains one queue-gauge slice whose size grows with queue inventory,
+not backlog depth. Each request receives its own slice and still allocates and
+serializes the full response.</p>
+<p>A local file database runs <code>Stats</code>, the <code>SELECT 1</code> storage probe and global refresh
+on one dedicated <code>mode=ro</code> plus <code>query_only</code> connection. It cannot write or
+checkpoint, and WAL reads do not occupy the sole writer connection, so a deep
+refresh does not sit in front of Send, Receive or
+settlement. Reader work serializes on that one connection. A refresh still
+consumes CPU and storage bandwidth and holds a WAL snapshot until it finishes;
+long scans can delay checkpoint progress and grow the WAL. <code>:memory:</code> cannot use a
+second connection without becoming a different database, so its refresh and
+probe still share the sole writer connection. Remote Turso/libSQL observations
+use the existing small provider pool and consume provider query resources.</p>
 <p>Start production scraping at 15 seconds, measure collection duration and actual
 send/receive latency under the expected retained backlog, then adjust the scrape
-and native/console polling intervals. Each native observation or Prometheus scrape
-collects its own snapshot. Grafana dashboard refreshes query Prometheus instead
-of adding direct broker scans. The local demonstration uses a faster interval to
-make transitions visible; choose production cadence from measured workload needs.</p>
+and native/console polling intervals. Requests inside the roughly 10-second gauge
+window share one snapshot, but each request still runs a storage probe and builds
+its response; aggressive polling is not free. Grafana dashboard refreshes query
+Prometheus instead of adding direct broker requests. The local demonstration uses
+a faster interval to make transitions visible; choose production cadence from
+measured workload needs.</p>
 <p>RPC/result and storage/error dimensions have fixed vocabularies, but their
 zero-initialized counters and histogram buckets still produce many series. Queue
-dimensions grow with the configured inventory. Measure scrape response size,
-duration and series count before increasing inventory or polling frequency; a
-working small demo does not establish a large-deployment capacity limit.</p>
+dimensions grow with the configured inventory, including active subscription
+backing queues. The default 10,000-subscription ceiling is a metadata guard, not a
+promise that a 10,000-entity observation is cheap. Measure scrape response size,
+duration, memory and series count before increasing inventory or polling
+frequency; a working small demo does not establish a large-deployment capacity
+limit.</p>
 <h2 id="metric-contract">Metric contract</h2>
 <p>Prometheus uses text exposition 0.0.4. Labels are bounded categories except for
 configured entity names. Credentials, key IDs, message IDs, payloads, expressions,
@@ -222,7 +314,7 @@ use Unix seconds in Prometheus and epoch milliseconds in native JSON.</p>
 <tr>
 <td><code>mqlite_collection_duration_seconds</code></td>
 <td>gauge</td>
-<td>Queue collection elapsed time</td>
+<td>Latest queue-gauge refresh elapsed time; unchanged on cache hits</td>
 </tr>
 <tr>
 <td><code>mqlite_entities</code></td>
@@ -252,7 +344,7 @@ use Unix seconds in Prometheus and epoch milliseconds in native JSON.</p>
 <tr>
 <td><code>mqlite_message_events_total</code></td>
 <td>counter</td>
-<td><code>queue</code>, <code>event</code>; confirmed effects defined below</td>
+<td><code>queue</code>, <code>event</code>; confirmed effects defined below; <code>queue=&quot;&quot;</code> combines retired queues</td>
 </tr>
 <tr>
 <td><code>mqlite_rpc_requests_total</code></td>
@@ -367,8 +459,18 @@ and registered RPC/result combinations are initialized to zero, so the first
 event can be detected after an earlier successful scrape. Use <code>rate</code>/<code>increase</code>
 across observed samples; a first scrape after an event cannot reconstruct its time.
 Maintenance tasks are <code>locks</code>, <code>scheduled</code>, <code>ttl</code>,
-<code>dedup</code>, <code>receipts</code>, <code>retention</code>, <code>reclaim</code>. Check enabled status and each task&#39;s
-actual cadence before alerting on its last-success time.
+<code>dedup</code>, <code>receipts</code>, <code>retention</code>, <code>reclaim</code>, <code>subscription_expiry</code>,
+<code>lifecycle</code>. <code>subscription_expiry</code> is the one-second indexed transition of due
+fixed-lifetime subscriptions; a full 1,000-row due batch continues after a 10 ms
+yield, and data-plane expiry does not wait for the scan. <code>lifecycle</code> is the
+event-driven bounded cleanup pass for queue and subscription backing queues
+already marked deleting. A full 512-row empty-subscription batch continues after
+a 10 ms yield. Loaded-message cleanup, errors and confirmation passes remain
+paced at one second; an idle store does not run the task, so a quiet
+<code>last_success</code> timestamp is expected. An uncertain remote delete
+commit temporarily schedules up to 30 one-second discovery passes even when the
+first inventory read is empty. Check enabled status and
+each task&#39;s actual cadence before alerting on its last-success time.
 Canceled passes during normal shutdown are <code>interrupted</code>, not successful passes
 or maintenance errors; they do not advance the last-success timestamp.
 Filter counters cover compilation/evaluation failures while routing published
@@ -380,11 +482,19 @@ transaction retry or exact receive/settlement replay does not create a second
 committed effect. An uncertain remote outcome is not classified as a known
 rollback. Counters are process-local and reset at restart; unobserved activity
 before a crash can be lost. They are operational measurements, not a durable
-billing or business audit ledger.
-Custom raw SQL through <code>EngineTx.SQL</code> is not attributed to message-effect events.
-Queue gauges still report the actual retained database rows, including unexpected
-states; do not use event counters to reconstruct changes made outside the normal
-message operations.</p>
+billing or business audit ledger.</p>
+<p>After physical queue or subscription deletion completes, MQLite removes that
+backing queue&#39;s named counter series and folds its existing counts into one bounded
+retired aggregate. Native
+observations and Prometheus expose this aggregate with <code>queue=&quot;&quot;</code>; the empty label
+does not name an addressable queue. It combines all retired queue names and any
+late transaction effects from an older queue-topology epoch. Recreating the same
+name starts a fresh named series while the prior counts remain in the aggregate.
+Include <code>queue=&quot;&quot;</code> when querying total process activity, or filter it out when a
+query is intended to describe current named queues only.</p>
+<p>Raw SQL through <code>EngineTx.SQL</code> is supported only for caller-owned tables; those
+writes produce no message-effect events. Direct access to mqlite-owned tables is
+unsupported and can bypass lifecycle and observability invariants.</p>
 <table>
 <thead>
 <tr>
@@ -438,12 +548,34 @@ events into a message ledger. A claim does not prove a response reached the clie
 and completion means the consumer reported success, not independently verified
 business-side processing. Broker redelivery, client HTTP retry and storage retry
 are separate concepts.</p>
-<h3 id="compatibility-from-v031">Compatibility from v0.3.1</h3>
-<p>Prometheus scraping is now disabled by default. On upgrade, enable
+<h3 id="compatibility-and-planned-v040-migration">Compatibility and planned v0.4.0 migration</h3>
+<p>Prometheus scraping has been disabled by default since v0.3.2. On upgrade, enable
 <code>MQLITE_METRICS=on</code> or <code>--metrics</code> to keep scraping the same API port, and configure
-a monitor token for the collector. All five pre-existing families remain available
-when enabled. These compatibility views read canonical values; they do not
-maintain separate counters:</p>
+a monitor token for the collector.</p>
+<p>The unreleased candidate removes the two ambiguous aliases whose removal was
+announced in v0.3.2.
+Update recording rules, alerts, dashboards and direct PromQL before replacing the
+broker:</p>
+<table>
+<thead>
+<tr>
+<th>Removed on main / planned v0.4.0</th>
+<th>Replacement</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>mqlite_queue_total</code></td>
+<td><code>mqlite_queue_retained_messages</code> (same gauge value)</td>
+</tr>
+<tr>
+<td><code>mqlite_queue_oldest_message_age_ms</code></td>
+<td><code>mqlite_queue_oldest_message_age_seconds</code> (divide old thresholds by 1,000)</td>
+</tr>
+</tbody></table>
+<p>The native <code>Observe</code> JSON contract is unchanged: <code>queues[].oldest_message_age_ms</code>
+still uses milliseconds. The following original Prometheus families remain as
+compatibility projections of canonical measurements; they do not maintain
+separate counters:</p>
 <table>
 <thead>
 <tr>
@@ -456,14 +588,6 @@ maintain separate counters:</p>
 <td>Same queue state gauges</td>
 </tr>
 <tr>
-<td><code>mqlite_queue_total</code></td>
-<td>Same value as <code>mqlite_queue_retained_messages</code>; still a gauge</td>
-</tr>
-<tr>
-<td><code>mqlite_queue_oldest_message_age_ms</code></td>
-<td>Canonical seconds multiplied by 1000</td>
-</tr>
-<tr>
 <td><code>mqlite_messages_completed_total</code></td>
 <td><code>mqlite_message_events_total{event=&quot;completed&quot;}</code></td>
 </tr>
@@ -472,10 +596,7 @@ maintain separate counters:</p>
 <td>Same post-authentication handler histogram</td>
 </tr>
 </tbody></table>
-<p>The ambiguous <code>queue_total</code> and millisecond age names are deprecated for new
-consumers; use the canonical names. They are retained until the next minor version
-(v0.4.0), when any removal requires an explicit migration. No independent lifetime
-completion counter is introduced.</p>
+<p>No independent lifetime completion counter is introduced.</p>
 <h2 id="dashboard-and-useful-queries">Dashboard and useful queries</h2>
 <p>The provisioned dashboard offers instance/queue selection, traffic, backlog,
 request/authentication results, storage, maintenance and active alerts. Empty
@@ -556,10 +677,18 @@ invalid queries and missing datasources verify that the checker rejects failures
 interrupts only that isolated stack to verify scrape-auth recovery, Grafana
 connection failure/recovery and persistence/counter reset after broker restart.
 Managed-cloud/Kubernetes deployment validation remains environment-specific.</p>
-<p>DeleteQueue is an additive RPC observation extension. New brokers include its
-request counters and the <code>queue_not_empty</code> and <code>queue_changed</code> outcomes. The required decoder baseline
-is unchanged so new clients continue to accept observations from older brokers.
-An occupied-queue rejection is an application outcome, not a storage failure.</p>
+<p>DeleteQueue, DeleteSubscription and ListSubscriptionsPage are additive RPC
+observation extensions. New brokers include their request counters plus the
+<code>queue_not_empty</code>, <code>subscription_not_empty</code> and <code>resource_exhausted</code> outcomes.
+<code>ListQueues.state</code> and the paged subscription inventory with
+<code>include_deleting=true</code>, rather than the canonical observation&#39;s queue gauges,
+identify resources whose cleanup is pending. The <code>subscription_expiry</code> and
+<code>lifecycle</code> maintenance rows report transition and cleanup health; a force or
+expiry-authorized discard does not masquerade as normal
+completion or retention message effects. The required decoder baseline is
+unchanged, so new clients continue to accept observations from older brokers.
+An occupied-resource or capacity rejection is an application outcome, not a
+storage failure.</p>
 
   </main>
 </div>

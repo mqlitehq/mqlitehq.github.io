@@ -1,12 +1,14 @@
 {
-  "sourceVersion": "0.3.3",
-  "latestRelease": "v0.3.3",
+  "sourceVersion": "0.4.0",
+  "latestRelease": "v0.3.2",
   "source": "https://github.com/mqlitehq/mqlite/tree/main/docs",
   "routes": [
     "/mqlite.v1.AdminService/CreateQueue",
     "/mqlite.v1.AdminService/DeleteQueue",
+    "/mqlite.v1.AdminService/DeleteSubscription",
     "/mqlite.v1.AdminService/ListQueues",
     "/mqlite.v1.AdminService/ListSubscriptions",
+    "/mqlite.v1.AdminService/ListSubscriptionsPage",
     "/mqlite.v1.AdminService/Observe",
     "/mqlite.v1.AdminService/Purge",
     "/mqlite.v1.AdminService/Redrive",
@@ -37,8 +39,11 @@
     "create_key",
     "create_queue",
     "defer",
+    "delete_queue",
+    "delete_subscription",
     "list_keys",
     "list_queues",
+    "list_subscriptions",
     "observe",
     "peek",
     "purge",
@@ -49,7 +54,8 @@
     "renew",
     "revoke_key",
     "send",
-    "stats"
+    "stats",
+    "subscribe"
   ],
   "cliCommands": [
     "abandon",
@@ -57,6 +63,8 @@
     "complete",
     "create-queue",
     "defer",
+    "delete-queue",
+    "delete-subscription",
     "key",
     "list",
     "list-subscriptions",

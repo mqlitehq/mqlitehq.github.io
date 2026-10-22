@@ -107,14 +107,18 @@
   FIFO groups and topic fan-out — <strong>embedded in your Go process</strong> or served as a
   <strong>tiny HTTP broker</strong>. Same engine, same file, your choice.</p>
   <div class="chips">
-    <a class="chip v" href="https://github.com/mqlitehq/mqlite/releases/tag/v0.3.3">latest release v0.3.3</a>
-    <span class="chip">docs source v0.3.3</span>
+    <a class="chip v" href="https://github.com/mqlitehq/mqlite/releases/tag/v0.3.2">latest supported release v0.3.2</a>
+    <span class="chip">main docs · unreleased v0.4.0 candidate</span>
     <span class="chip">pure Go · no CGO</span>
     <span class="chip">one binary · one file</span>
     <span class="chip">JSON over HTTP · curl-able</span>
     <span class="chip">local SQLite or remote Turso</span>
     <span class="chip">MIT</span>
   </div>
+  <p class="sub">This site follows the unreleased v0.4.0 candidate on <code>main</code>.
+  Use <a href="https://github.com/mqlitehq/mqlite/tree/v0.3.2/docs">the v0.3.2 documentation</a>
+  with supported release artifacts. v0.3.3 is withdrawn and unsupported; its
+  public artifacts remain only for forensic or compatibility inspection and must not be deployed.</p>
   <div class="cta">
     <a class="btn primary" href="#quickstart">Quickstart</a>
     <a class="btn ghost" href="concepts.html">Read the concepts</a>
@@ -161,12 +165,13 @@
       Start embedded; move the same code to a broker, or the storage to replicated
       <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/turso.md">Turso</a>, without rewriting your app.</p></div>
     <div class="why"><h3><em>2</em>Reliable under concurrency</h3>
-      <p>Honestly <strong>at-least-once</strong>: new settlements require a current token and
+      <p>Default Peek-Lock delivery is honestly <strong>at-least-once</strong>; explicit
+      receive-and-delete chooses at-most-once broker removal. New settlements require a current token and
       unexpired lease; idempotent
       send/receive/settle, single-broker crash recovery, and O(log n) claims on a deep backlog.
       FIFO groups stay ordered even across consumer crashes and lock expiry.</p></div>
     <div class="why"><h3><em>3</em>Simple, unambiguous interface</h3>
-      <p>Every operation is <strong>one HTTP POST with a JSON body</strong> — 27 routes in source v0.3.3, curl-able by
+      <p>Every operation is <strong>one HTTP POST with a JSON body</strong> — 29 routes in source v0.4.0, curl-able by
       construction, exactly one settlement verb per outcome (<code>Complete</code> /
       <code>Abandon</code> / <code>Reject</code> / <code>Defer</code>), no aliases. Easy for people; easy for
       <a href="agents.html">agents</a>.</p></div>
@@ -236,31 +241,32 @@ func main() {
     <a href="concepts.html"><b>Peek-Lock delivery</b>receive → work → settle; renew before expiry; expired locks auto-redeliver</a>
     <a href="concepts.html"><b>Retries → DLQ</b>max_delivery_count then dead-letter; redrive back; bounded retention</a>
     <a href="concepts.html"><b>FIFO groups</b>standard / group_fifo / strict_fifo; order holds across crashes, lock expiry &amp; delayed retries</a>
-    <a href="concepts.html"><b>Topics + filters</b>fan-out with one expr predicate per subscription, fail-closed</a>
+    <a href="concepts.html"><b>Topics + subscription lifecycle</b>filtered fan-out · paged inventory · empty-only or explicit force delete · fixed TTL backstop</a>
+    <a href="api.html#deletequeue"><b>Safe resource deletion</b>queues and subscriptions default to empty-only; explicit force discards retained states; names stay reserved during cleanup</a>
     <a href="concepts.html"><b>Scheduling &amp; TTL</b>deliver later; cancel a never-delivered scheduled message; per-message TTL capped by the queue</a>
     <a href="concepts.html"><b>Duplicate detection</b>message_id window collapses repeats; conflicts fail loud (409)</a>
     <a href="concepts.html"><b>Defer</b>set a message aside, fetch it back by sequence number</a>
-    <a href="observability.html"><b>Ops built in</b>/ui console · unified Observe and /metrics · CLI · MCP · Grafana starter (since v0.3.2)</a>
+    <a href="observability.html"><b>Ops built in</b>/ui console · unified Observe and /metrics · 26 CLI commands · 22 MCP tools · Grafana starter</a>
   </div>
 </section>
 
 <section class="land" id="honest">
   <h2># the honest part</h2>
-  <p class="lede">Published historical measurements from specific workloads; remeasure v0.3.3 with your payloads, concurrency and monitoring enabled before sizing production. Full method: <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/benchmark.md">docs/benchmark.md</a>.</p>
+  <p class="lede">Published historical measurements from specific workloads; remeasure the current candidate with your payloads, concurrency and monitoring enabled before sizing production. Full method: <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/benchmark.md">docs/benchmark.md</a>.</p>
   <div class="numbers"><table>
     <tr><th>Setup</th><th>Measured</th><th>Read this as</th></tr>
     <tr><td>Local file DB, 12-core machine</td>
-        <td class="num">19.5k msg/s single · ~35k batched</td>
-        <td>an embedded queue that keeps up with your app</td></tr>
+        <td class="num">15,926–17,963 msg/s single · 35,146 batched</td>
+        <td>historical local results; rerun the workload before sizing</td></tr>
     <tr><td>1-vCPU / 256 MB cloud box, embedded engine</td>
-        <td class="num">6–7.5k msg/s batched · 1,507 msg/s drain</td>
-        <td>batch your sends and receives — that's the sweet spot</td></tr>
+        <td class="num">6.0–6.7k msg/s batched · 1,507 msg/s drain</td>
+        <td>batching amortized commit cost in this measured setup</td></tr>
     <tr><td>Remote Turso (co-located)</td>
         <td class="num">~45 ms per durable commit</td>
-        <td>you're buying durability + geo-replication, <strong>not</strong> throughput</td></tr>
+        <td>commit latency dominated this measured remote path</td></tr>
     <tr><td>Memory / disk</td>
-        <td class="num">25–34 MB RSS · file auto-shrinks when drained</td>
-        <td>measure current peak memory with your queue, payload and monitoring load</td></tr>
+        <td class="num">27–34 MB peak RSS · freed DB pages are reusable</td>
+        <td>file reclamation is gradual; size disk for peak backlog and measure your workload</td></tr>
   </table></div>
   <h3 class="subh">when NOT to use mqlite — it is a single-writer, single-node queue by design</h3>
   <div class="numbers"><table>
@@ -269,13 +275,13 @@ func main() {
     <tr><td>A clustered, highly-available multi-node broker</td><td>NATS · RabbitMQ</td></tr>
     <tr><td>A queue inside the Postgres you already run</td><td>pgmq · River</td></tr>
     <tr><td>Sustained six-figure msg/s on one node</td><td>not this — the single-writer model is the point, not a bug</td></tr>
-    <tr><td>“Exactly-once delivery”</td><td>nobody sells that honestly; mqlite is at-least-once, so write idempotent handlers</td></tr>
+    <tr><td>Exactly-once external side effects</td><td>default Peek-Lock delivery is at-least-once; make handlers idempotent</td></tr>
   </table></div>
 </section>
 
 <section class="land" id="quickstart">
   <h2># quickstart</h2>
-  <p class="lede">Three ways in — they all drive the same engine. These examples pin v0.3.3; see <a href="deployment.html">Deployment</a> for installation and runtime settings.</p>
+  <p class="lede">Three ways in — they all drive the same engine. These examples pin the supported v0.3.2 release; see <a href="deployment.html">Deployment</a> for installation and runtime settings.</p>
   <div class="tabs">
     <div class="tabbar">
       <button class="on" data-t="go">Embedded Go</button>
@@ -283,7 +289,7 @@ func main() {
       <button data-t="docker">Docker</button>
     </div>
     <div class="tabpane on" data-t="go">
-      <p>No server at all: one import, one file — the queue lives inside your process. <code>go get github.com/mqlitehq/mqlite@v0.3.3</code> (Go ≥ 1.21).</p>
+      <p>No server at all: one import, one file — the queue lives inside your process. <code>go get github.com/mqlitehq/mqlite@v0.3.2</code> (Go ≥ 1.21).</p>
       <pre><code class="language-go">package main
 
 import (
@@ -330,8 +336,8 @@ func main() {
     </div>
     <div class="tabpane" data-t="broker">
       <p>One tiny process, secure by default: it generates a <code>mqk_…</code> token and prints it if you don't set one. Every operation is one POST.</p>
-      <p>v0.3.3 uses port 6754 and schema token 5. Upgrading from v0.2.0 (port 8080, schema token 2) requires a new database; follow the <a href="operations.html#upgrade-and-rollback">upgrade and rollback procedure</a>.</p>
-      <pre><code class="language-bash">go install github.com/mqlitehq/mqlite/cmd/mqlite@v0.3.3   # default port 6754
+      <p>The supported v0.3.2 release uses port 6754 and schema token 5. v0.3.3 is withdrawn and unsupported; its public artifacts remain only for forensic or compatibility inspection and must not be deployed. Candidate lifecycle APIs described elsewhere on this site are not part of v0.3.2.</p>
+      <pre><code class="language-bash">go install github.com/mqlitehq/mqlite/cmd/mqlite@v0.3.2   # default port 6754
 
 # start the broker on :6754 with a known token, in the background
 MQLITE_TOKENS=mqk_dev MQLITE_DB=file:./mq.db mqlite serve &
@@ -352,12 +358,12 @@ curl -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
     </div>
     <div class="tabpane" data-t="docker">
       <p>A named volume keeps queue data across container replacement. The admin console is available at <code>/ui</code>.</p>
-      <p>This example pins the v0.3.3 image. For production configuration and recovery, follow <a href="deployment.html">Deployment</a> and the <a href="operations.html">operations runbook</a>.</p>
+      <p>This example pins the supported v0.3.2 image. For production configuration and recovery, follow <a href="deployment.html">Deployment</a> and the <a href="operations.html">operations runbook</a>.</p>
       <pre><code class="language-bash">docker run -d --name mqlite -p 127.0.0.1:6754:6754 \
   -e MQLITE_TOKENS=mqk_dev \
   -e MQLITE_DB=file:/data/mq.db \
   -v mqdata:/data \
-  ghcr.io/mqlitehq/mqlite:0.3.3
+  ghcr.io/mqlitehq/mqlite:0.3.2
 
 curl http://localhost:6754/          # discovery card (no auth)
 # then open the admin console in a browser: http://localhost:6754/ui</code></pre>
@@ -381,7 +387,7 @@ curl http://localhost:6754/          # discovery card (no auth)
 <section class="land" id="operations">
   <h2># run it in production</h2>
   <p class="lede">Start with one broker over a persistent local SQLite file. Choose a durability setting and rehearse recovery before putting messages into production.</p>
-  <p>Prometheus collection is off by default. Enable <code>--metrics</code> or <code>MQLITE_METRICS=on</code> to serve authenticated <code>/metrics</code> on the API port, and give the collector a separate <code>MQLITE_MONITOR_TOKENS</code> credential. Keep collection on a private network; if the API has public ingress, deny <code>/metrics</code> there. The starter includes Prometheus, Grafana, a dashboard and verification scenarios.</p>
+  <p>Prometheus collection is off by default. Enable <code>--metrics</code> or <code>MQLITE_METRICS=on</code> to serve authenticated <code>/metrics</code> on the API port, and give the collector a separate <code>MQLITE_MONITOR_TOKENS</code> credential. Keep collection on a private network; if the API has public ingress, deny <code>/metrics</code> there. The unreleased v0.4.0 candidate removes the deprecated <code>mqlite_queue_total</code> and <code>mqlite_queue_oldest_message_age_ms</code> aliases; migrate to <code>mqlite_queue_retained_messages</code> and <code>mqlite_queue_oldest_message_age_seconds</code> before upgrading. The starter includes Prometheus, Grafana, a dashboard and verification scenarios.</p>
   <div class="sem">
     <a href="operations.html"><b>Operations runbook</b>production boundary, backups, restore, upgrades and rollback</a>
     <a href="deployment.html"><b>Deployment</b>installation, one broker, persistent storage, authentication and TLS</a>
@@ -396,7 +402,7 @@ curl http://localhost:6754/          # discovery card (no auth)
   <div class="quote">
     The API was shaped so a model can drive it without tripping: one POST per operation,
     one verb per outcome, a machine-readable discovery card at <code>GET /</code>, an
-    <b>MCP server</b> (<code>mqlite-mcp</code>, 18 tools in source v0.3.3), and
+    <b>MCP server</b> (<code>mqlite-mcp</code>, 22 tools in the unreleased v0.4.0 candidate), and
     <a href="llms.txt"><code>llms.txt</code></a> / <a href="llms-full.txt"><code>llms-full.txt</code></a>
     for anything that reads the web. Copy-paste prompts and setup:
     <a href="agents.html"><b>For AI agents →</b></a>

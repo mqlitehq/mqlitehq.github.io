@@ -29,8 +29,8 @@
   </div>
 </div></nav>
 <div class="wrap">
-  <div class="stamp">Generated from <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/internals.md">mqlite main · docs/internals.md</a> — source v0.3.3; latest release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.3.3">v0.3.3</a>.
-  These docs track main; check release notes for published artifacts. Edit the canonical Markdown and re-run <code>tools/build.mjs</code>.</div>
+  <div class="stamp">Source: <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/internals.md">mqlite main · docs/internals.md</a> — unreleased v0.4.0 candidate. Latest supported release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.3.2">v0.3.2</a>.
+  These docs track main; use the linked release for published artifacts.</div>
   <main class="prose">
 <h1 id="how-mqlite-works--building-a-reliable-queue-on-one-sqlite-file">How mqlite works — building a reliable queue on one SQLite file</h1>
 <blockquote>
@@ -73,7 +73,7 @@ machinery; one carries your data:</p>
 </tr>
 <tr>
 <td><code>queues</code></td>
-<td>per-queue config: lock duration, retry bound, TTL, dedup window, ordering mode, DLQ retention</td>
+<td>per-queue config plus durable <code>active</code> / <code>deleting</code> lifecycle state, deletion start time, and a subscription&#39;s fixed absolute expiry</td>
 </tr>
 <tr>
 <td><code>subscriptions</code></td>
@@ -103,7 +103,7 @@ machinery; one carries your data:</p>
 <p>The heart, abridged:</p>
 <pre><code class="language-sql">CREATE TABLE messages (
     id             INTEGER PRIMARY KEY AUTOINCREMENT,  -- SQLite rowid = the sequence number
-    queue          TEXT NOT NULL REFERENCES queues(name),
+    queue          TEXT NOT NULL,
     state          TEXT NOT NULL DEFAULT &#39;active&#39;
                        CHECK (state IN (&#39;active&#39;,&#39;locked&#39;,&#39;deferred&#39;,
                                         &#39;scheduled&#39;,&#39;completed&#39;,&#39;dead_lettered&#39;)),
@@ -116,7 +116,7 @@ machinery; one carries your data:</p>
     -- ... message_id, group_id, subject, properties, dead_letter_reason ...
 ) STRICT;
 </code></pre>
-<p>Three deliberate choices hide in this table:</p>
+<p>Four deliberate choices hide in this table:</p>
 <ul>
 <li><strong><code>id INTEGER PRIMARY KEY AUTOINCREMENT</code> <em>is</em> SQLite&#39;s rowid</strong> — strictly increasing
 and never reused, even after the row is deleted (it may gap). That single column gives
@@ -126,6 +126,16 @@ for free.</li>
 broker-side object or a TCP connection. Kill the process at any instant and the
 queue&#39;s exact state survives in the file — recovery (§6) is a <code>SELECT</code>, not a
 reconstruction.</li>
+<li><strong>Queue retirement has indexed parent guards.</strong> Every supported message insert
+first resolves an active <code>queues</code> row in the same transaction. A queue-key update
+also requires a parent, and parent rename or deletion is restricted while any
+message remains. The parent guards use one literal state probe per queue-prefix
+partial index. A conventional foreign key would make SQLite scan the entire
+<code>messages</code> table on every parent delete unless every message also paid for a
+duplicate full <code>(queue, id)</code> index; a per-insert trigger likewise adds cost to
+every Send. Direct writes to mqlite-owned tables are outside the supported
+<code>EngineTx.SQL</code> contract. Subscription references remain native foreign keys and
+have a child-key index.</li>
 <li><strong>Every timestamp is epoch milliseconds</strong> in plain <code>INTEGER</code> columns, and the
 clock is injectable — which is why the failure paths in the test suite run
 deterministically instead of with <code>sleep()</code>.</li>
@@ -134,8 +144,8 @@ deterministically instead of with <code>sleep()</code>.</li>
 <p>Here is the design decision everything else leans on. SQLite allows one writer at
 a time — most systems fight that; mqlite <strong>builds on it</strong>:</p>
 <ul>
-<li><strong>In-process, the connection pool has size one</strong> (<code>SetMaxOpenConns(1)</code>).
-<code>database/sql</code> queues every caller onto that connection, so <em>all writes are
+<li><strong>In-process, the writer pool has size one</strong> (<code>SetMaxOpenConns(1)</code>).
+<code>database/sql</code> queues every mutation onto that connection, so <em>all writes are
 serialized before SQLite ever sees them</em>. There is no lock contention, no
 <code>SQLITE_BUSY</code> retry loop, no interleaving to reason about. Two goroutines
 cannot half-claim the same message because their statements cannot overlap.</li>
@@ -145,8 +155,13 @@ takes an OS lock on a <code>&lt;db&gt;.lock</code> sidecar (keyed on the <em>can
 file fails fast with <code>ErrDBLocked</code> instead of corrupting claims. Want multiple
 processes? Run the broker — one broker <em>is</em> the one writer.</li>
 <li><strong>The file is in WAL mode</strong>, so at the file level readers never block the
-writer and never see torn state. (In embedded mode reads still funnel through
-the same single connection; WAL is what makes that safe and cheap.) <code>synchronous=NORMAL</code> is the default
+writer and never see torn state. Monitoring probes, fresh per-queue <code>Stats</code> and
+global observation refreshes use one separate <code>mode=ro</code> plus <code>query_only</code>
+connection; global queue gauges are shared for about 10 seconds and concurrent
+refreshes coalesce.
+Ordinary engine reads and every mutation retain their existing
+writer-connection ordering. An in-memory engine cannot share that reader and
+stays on its single connection. <code>synchronous=NORMAL</code> is the default
 durability point; <code>FULL</code> is a knob (<code>MQLITE_SYNC</code>) when an fsync per commit is
 worth ~4–11× of your local throughput (on remote Turso it&#39;s a no-op — the
 server owns durability).</li>
@@ -251,6 +266,16 @@ it is small and boring on purpose:</p>
 </tr>
 </thead>
 <tbody><tr>
+<td>lifecycle</td>
+<td>event-driven; 10 ms after a full empty-subscription batch, otherwise 1 s between continuation passes</td>
+<td>continue bounded physical cleanup for queues and subscription backing queues durably marked <code>deleting</code></td>
+</tr>
+<tr>
+<td>subscription expiry</td>
+<td>1 s discovery; 10 ms between full due batches</td>
+<td>transition a bounded indexed batch whose fixed absolute deadline has arrived; data-plane fencing does not wait for this scan</td>
+</tr>
+<tr>
 <td>reaper</td>
 <td>1 s</td>
 <td>expired locks → back to <code>active</code> — or to the DLQ once <code>delivery_count ≥ max</code></td>
@@ -268,9 +293,49 @@ it is small and boring on purpose:</p>
 <tr>
 <td>janitors</td>
 <td>60 s</td>
-<td>prune old receipts, dedup entries; return freed pages to the OS</td>
+<td>prune old receipts and dedup entries; reclaim up to 256 local free pages once 256 accumulate</td>
 </tr>
 </tbody></table>
+<p><strong>Resource deletion is a durable state machine.</strong> An empty-only queue or
+subscription delete verifies every message state in the same transaction that
+changes the backing <code>queues.lifecycle_state</code> from <code>active</code> to <code>deleting</code>; force
+skips the empty check because its caller explicitly authorized discard. That
+transaction also starts bounded physical cleanup. If cleanup finishes, the same
+commit removes the resource and there is no observable intermediate <code>deleting</code>
+state. Otherwise it commits the marker, which invalidates cached configuration,
+wakes long polls, rejects further queue work and keeps the namespace occupied. A
+subscription stops participating in fan-out in that commit. Later passes remove
+messages, dedup rows and both receipt tables before deleting the queue row itself;
+the subscription mapping and backing queue are removed explicitly in one transaction.</p>
+<p>A temporary subscription stores one <code>queues.expires_at</code> value at first creation.
+Every operation checks it against fresh broker time at its transactional effect;
+the equality boundary is expired. Locks are capped at that instant and long polls
+wake there. The indexed expiry loop durably marks due rows <code>deleting</code>, but it is a
+cleanup mechanism rather than the correctness fence. Expiry itself is the saved
+force authorization and never changes on retry, filter update or message activity.</p>
+<p>The accepting call removes no more than 1,000 physical rows and targets about
+8 MiB. Each lifecycle pass globally caps cleanup at 4,096 rows and targets about
+8 MiB. Its ordinary per-resource path visits at most 32 backing queues locally,
+or one such queue on remote Turso/libSQL. The remote cap bounds Hrana
+round trips inside one write transaction; the persisted cursor provides fair rotation.
+<code>Open</code> runs a pass before lock recovery. The marker is therefore both the restart
+cursor and the force authorization. A crash cannot reactivate the queue or require
+an operator to re-authorize discard. A single oversized row may exceed the byte
+target to guarantee forward progress. Accepted pending deletes wake the worker;
+bursts coalesce into one signal. A full 512-subscription empty fast-path batch
+schedules its next pass after 10 ms; other unfinished passes continue after one
+second. With no deleting resource the worker opens no transaction, which avoids an
+idle polling round trip on remote stores. The one exception is a remote deletion
+or cleanup transaction whose commit acknowledgement is uncertain: after the
+immediate pass, the worker performs 30 delayed probes one second apart so a commit
+that becomes visible after the first inventory snapshot is still discovered.
+Restart recovery remains the durable fallback after that window. A separate
+set-based path handles the common empty case before the ordinary resource scan. It
+can delete up to 512 subscription mappings and their backing queue rows in one
+transaction without consuming the ordinary 32-local/1-remote resource-count
+allowance. Those two rows per subscription still consume the shared 4,096-row
+budget. Exact affected-row checks keep this safe even when foreign keys are off.
+Subscriptions with any retained state remain on the ordinary fair row/byte path.</p>
 <p><strong>Crash recovery is one statement.</strong> On <code>Open</code>, every <code>locked</code> row is an orphan
 of a previous process (locks are rows, remember) and is reclaimed — back to
 <code>active</code>, or straight to the dead-letter state if it died on its final allowed
@@ -357,8 +422,11 @@ performance shape is a regression-tested contract, not a hope (§5).</li>
 <li><strong>A schema golden test</strong> — the complete canonical DDL is pinned. A database
 with a different guard token is refused (<code>ErrSchemaVersionMismatch</code>); existing
 table layouts are never migrated. Incompatible changes require a token change.
-The independent <code>access_keys</code> addition preserves token 5, with a separate golden
-for its DDL, the unchanged prior DDL and actual old-binary compatibility checks.</li>
+The independent <code>access_keys</code> addition originally preserved token 5 and remains
+part of the canonical schema, with a separate golden for its DDL. Durable
+resource lifecycle and fixed subscription expiry advance the current canonical
+schema to token 7; real schema-5 and intermediate schema-6 files are refused in
+both directions.</li>
 <li><strong>An integrity sweep</strong> — a randomized send/receive/crash workload asserting
 every message arrives (no loss), arrives intact (content hash), and never
 exceeds its delivery bound.</li>
