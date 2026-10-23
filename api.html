@@ -29,7 +29,7 @@
   </div>
 </div></nav>
 <div class="wrap">
-  <div class="stamp">Source: <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/api-reference.md">mqlite main · docs/api-reference.md</a> — unreleased v0.4.0 candidate. Latest supported release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.3.2">v0.3.2</a>.
+  <div class="stamp">Source: <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/api-reference.md">mqlite main · docs/api-reference.md</a> — source v0.4.0. Latest supported release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.0">v0.4.0</a>.
   These docs track main; use the linked release for published artifacts.</div>
   <main class="prose">
 <h1 id="mqlite-http-api-reference">mqlite HTTP API reference</h1>
@@ -38,9 +38,9 @@
 construction. This document is generated from the wire contract in
 <a href="https://github.com/mqlitehq/mqlite/blob/main/wire/wire.go"><code>wire/wire.go</code></a> (the single source of truth shared by the broker
 and the Go SDK, so the two can&#39;t drift) and the server&#39;s error mapping.</p>
-<p>This reference follows <code>main</code>, the unreleased v0.4.0 candidate. The latest
-supported release is v0.3.2; use the documentation in that tag for its smaller
-management surface. Sections for candidate-only methods are labeled below.</p>
+<p>This reference describes v0.4.0, the latest supported release. v0.3.3 is
+withdrawn and unsupported; use the documentation in the v0.3.2 tag when working
+with its smaller management surface.</p>
 <p>Every RPC body must be exactly one non-null JSON object, including operations
 whose request is otherwise empty (<code>{}</code>). Unknown fields and data after that object
 are rejected. Repeated fields retain Go&#39;s <code>encoding/json</code> behavior: later scalar
@@ -569,11 +569,10 @@ from the oldest active or locked message; it is zero when neither state is prese
 <h2 id="adminservice">AdminService</h2>
 <p>All paths are <code>/mqlite.v1.AdminService/&lt;Method&gt;</code>.</p>
 <h3 id="deletequeue">DeleteQueue</h3>
-<p>The corrected name-only contract below is on <strong>main</strong> and planned for v0.4.0. The
-incompatible request shape shipped in the withdrawn, unsupported v0.3.3 release;
-its public artifacts remain available for forensic or compatibility inspection
-and must not be deployed. <code>main</code> declares <code>retract v0.3.3</code>, but Go module tools
-will discover that directive only after a later version containing it is tagged.</p>
+<p>v0.4.0 uses the corrected name-only contract below. The incompatible request
+shape shipped in the withdrawn, unsupported v0.3.3 release; its public artifacts
+remain available for forensic or compatibility inspection and must not be
+deployed. v0.4.0 carries the <code>retract v0.3.3</code> directive for Go module tools.</p>
 <p>Deletes a <strong>plain queue</strong>. Requires administrator/manage permission. The default
 is empty-only; force is a separate, explicit authorization to discard retained
 work.</p>
@@ -650,8 +649,7 @@ authorize discard and receive the <code>Deleted</code> / <code>State</code> outc
 <code>deleting</code> or unknown outcome read-only via <code>ListQueues</code>; background cleanup
 progresses without another delete.</p>
 <p>The public identity remains the queue name; force does not introduce a lifetime
-token. Durable deletion and fixed-lifetime metadata make the unreleased v0.4.0
-candidate schema token 7,
+token. Durable deletion and fixed-lifetime metadata make v0.4.0 schema token 7,
 which refuses schema-5 and schema-6 files rather than migrating them. Schema 6
 belonged only to intermediate unreleased builds and was never tagged.
 The console exposes <strong>delete queue</strong> in a plain queue&#39;s detail page and requires
@@ -661,7 +659,7 @@ is still cleaning up, the console reconciles with <code>ListQueues</code>; it do
 second delete that could target a same-name replacement. Older brokers report the
 operation as unsupported.</p>
 <h3 id="deletesubscription">DeleteSubscription</h3>
-<p>Available on <strong>main</strong> and planned for v0.4.0.</p>
+<p>Available in v0.4.0.</p>
 <p>Deletes one exact topic/subscription pair. It uses the same durable, bounded
 lifecycle as <code>DeleteQueue</code>, but owns both the topic roster mapping and the
 subscription&#39;s backing queue.</p>
@@ -799,7 +797,7 @@ matches all). Topic and subscription names are valid UTF-8 strings of 1–128
 bytes. A malformed expr or name is rejected with <code>400 invalid_argument</code>.
 <strong>Response</strong> <code>{}</code>.</li>
 <li>The same route accepts <code>SubscribeWithOptionsRequest</code>, which adds optional
-<code>ttl_ms</code> on <strong>main</strong>, planned for v0.4.0. A positive integer stores a fixed lifetime
+<code>ttl_ms</code> in v0.4.0. A positive integer stores a fixed lifetime
 from the first successful creation; omitted or zero creates a permanent
 subscription when the name is new, and preserves an existing subscription&#39;s
 lifetime. JSON <code>null</code>, fractions,
@@ -844,8 +842,7 @@ orphan should be retired. Do not edit MQLite-owned tables directly.</li>
 # → {}
 </code></pre>
 <h3 id="listqueues">ListQueues</h3>
-<p>The <code>state</code> field and deleting-resource visibility below are available in
-<strong>main</strong>, planned for v0.4.0.</p>
+<p>The <code>state</code> field and deleting-resource visibility below are available in v0.4.0.</p>
 <ul>
 <li><strong>Request</strong> <code>{}</code>. <strong>Response</strong> <code>ListQueuesResponse</code>: <code>queues</code> ([{<code>name</code>, <code>kind</code>,
 <code>state</code>, <code>lock_duration_ms</code>, <code>max_delivery_count</code>, <code>default_ttl_ms</code>,
@@ -866,7 +863,7 @@ its maximum size; new integrations should use the paged route below. The Go SDK
 retains the original three-field <code>SubscriptionInfo</code> type for this method.</li>
 </ul>
 <h3 id="listsubscriptionspage">ListSubscriptionsPage</h3>
-<p>Available on <strong>main</strong> and planned for v0.4.0.</p>
+<p>Available in v0.4.0.</p>
 <ul>
 <li>POST <code>/mqlite.v1.AdminService/ListSubscriptionsPage</code>.</li>
 <li>Request fields: <code>topic</code> (optional exact topic), <code>after</code> (an opaque cursor from

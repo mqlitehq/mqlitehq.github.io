@@ -29,17 +29,15 @@
   </div>
 </div></nav>
 <div class="wrap">
-  <div class="stamp">Source: <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/operations.md">mqlite main · docs/operations.md</a> — unreleased v0.4.0 candidate. Latest supported release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.3.2">v0.3.2</a>.
+  <div class="stamp">Source: <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/operations.md">mqlite main · docs/operations.md</a> — source v0.4.0. Latest supported release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.0">v0.4.0</a>.
   These docs track main; use the linked release for published artifacts.</div>
   <main class="prose">
 <h1 id="production-operations">Production operations</h1>
-<p>This runbook covers the latest supported release, v0.3.2 (port 6754, schema
-token 5), and the <code>main</code> branch&#39;s unreleased v0.4.0 candidate (port 6754, schema
+<p>This runbook covers the latest supported release, v0.4.0 (port 6754, schema
 token 7). v0.3.3 is withdrawn and unsupported; its public assets and exact image
 remain available for forensic or compatibility inspection and must not be
-deployed. Pin production deployments to v0.3.2 until a corrected release is
-tagged. Although <code>main</code> declares <code>retract v0.3.3</code>, Go module tools will discover
-that directive only after a later version containing it is tagged.
+deployed. The v0.4.0 module retracts v0.3.3. Upgrading from v0.3.2 or another
+schema-5 release requires a fresh database as described below.
 Runtime-managed access keys require v0.3.1; v0.3.0 supports configured tokens only.
 Unified <code>Observe</code> and configured monitor credentials require v0.3.2.
 Upgrading from v0.2.0 changes both its default port (8080) and schema token (2);
@@ -70,7 +68,7 @@ stable <code>MessageID</code>/body, receive <code>AttemptID</code>, and the exac
 when retrying within their documented retention windows; do not treat an HTTP
 timeout as proof that a write failed.</li>
 </ul>
-<p>The next three boundaries apply to the unreleased <code>main</code> candidate. v0.3.2 has
+<p>The next three boundaries apply to v0.4.0 and later. v0.3.2 has
 the complete active-only <code>ListSubscriptions</code> operation, but it does not provide
 queue/subscription deletion, lifecycle-aware paged subscription inventory, the
 subscription capacity setting, or fixed subscription TTL.</p>
@@ -272,20 +270,19 @@ establish database compatibility, and MQLite does not run schema migrations.</p>
 <td>First preserve candidate data and reconcile new messages and external effects. Blindly restoring the old snapshot would discard those new writes.</td>
 </tr>
 </tbody></table>
-<p>For a future <strong>v0.3.0, v0.3.1, v0.3.2 or withdrawn v0.3.3 → v0.4.0</strong>
-cutover, the schema changes
+<p>For a cutover from <strong>v0.3.0, v0.3.1, v0.3.2 or withdrawn v0.3.3 to v0.4.0</strong>,
+the schema changes
 from <strong>5 → 7</strong> while port <strong>6754</strong> stays unchanged. Durable queue lifecycle and
 fixed subscription-expiry columns and indexes make the database incompatible;
 there is no in-place migration. Schema 6 belonged only to an intermediate
 unreleased lifecycle build, was never tagged, and is refused too.
 Follow the different-token procedure above: stop producers and consumers, take a
 consistent schema-5 backup, account for every retained message state and managed
-key, preserve the matching old binary/database pair, and start the candidate or
-eventual v0.4.0 release with
-a fresh database. Do not edit the schema token or point schema-7 code at the old
+key, preserve the matching old binary/database pair, and start v0.4.0 with a
+fresh database. Do not edit the schema token or point schema-7 code at the old
 file. Move work through an application-level drain/replay process with stable
 business identities if it must survive the cutover.</p>
-<p>The unreleased candidate clients also change the deletion contract to
+<p>The v0.4.0 clients use the deletion contract
 <code>{name,force?}</code> with a typed
 <code>{deleted,state}</code> result; update broker, SDK, CLI, MCP and console together. A
 rollback after schema-7 accepts writes requires preserving and reconciling those
@@ -296,10 +293,9 @@ separate from access logs and database backups.</p>
 <code>mqlite_queue_retained_messages</code>. Replace
 <code>mqlite_queue_oldest_message_age_ms</code> with
 <code>mqlite_queue_oldest_message_age_seconds</code> and divide thresholds by 1,000. The
-planned v0.4.0 release
-removes both deprecated aliases; native <code>Observe</code> JSON keeps
+v0.4.0 release removes both deprecated aliases; native <code>Observe</code> JSON keeps
 <code>queues[].oldest_message_age_ms</code>. Validate recording rules, alerts and dashboards
-against the candidate before resuming traffic.</p>
+against v0.4.0 before resuming traffic.</p>
 <p>For <strong>v0.3.1 → v0.3.2</strong>, schema token <strong>5</strong>, port <strong>6754</strong>, message data and
 managed-key storage remain unchanged. Follow the same-schema procedure above;
 do not overlap brokers. Validate existing key permissions and a complete canary
@@ -316,10 +312,10 @@ restore the previous authorized scraper/rule configuration; the old <code>/metri
 endpoint requires an administrator. Keep administrator authentication enabled.
 Preserve writes accepted by the candidate rather than blindly restoring the
 pre-upgrade snapshot. The two deprecated metric aliases remain available in
-v0.3.2 and are removed on <code>main</code> for the planned v0.4.0 release; see
-<a href="observability.html#compatibility-and-planned-v040-migration">metric compatibility</a>.</p>
+v0.3.2 and are removed in v0.4.0; see
+<a href="observability.html#compatibility-and-v040-migration">metric compatibility</a>.</p>
 <p>For <strong>v0.3.0 → v0.3.1 or v0.3.2</strong>, schema token <strong>5</strong> and the port remain unchanged.
-The candidate adds the independent <code>access_keys</code> table without rewriting existing
+The newer release adds the independent <code>access_keys</code> table without rewriting existing
 queue or message tables. Rehearse opening a restored copy first. Rolling back to
 v0.3.0 preserves that extra table, but the old binary cannot authenticate managed
 keys or enforce their permissions: reconnect clients with configured administrator

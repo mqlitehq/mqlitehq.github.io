@@ -1,6 +1,6 @@
 {
   "sourceVersion": "0.4.0",
-  "latestRelease": "v0.3.2",
+  "latestRelease": "v0.4.0",
   "source": "https://github.com/mqlitehq/mqlite/tree/main/docs",
   "routes": [
     "/mqlite.v1.AdminService/CreateQueue",
