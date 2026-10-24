@@ -239,8 +239,8 @@ func main() {
   <figure class="fig"><img src="assets/fig-overview.svg" alt="mqlite model: send straight to a queue (active → locked → consumer, with a DLQ side-loop), or publish to a topic that fans out to per-subscription backing queues; a message matching no subscription is dropped." style="width:100%;display:block"></figure>
   <h3 class="subh">the source version described here is covered by the conformance TCK — details in <a href="concepts.html">Concepts</a>; the full construction story (schema, locks, fencing, recovery) is in <a href="internals.html">Internals</a></h3>
   <div class="sem">
-    <a href="concepts.html"><b>Peek-Lock delivery</b>receive → work → settle; renew before expiry; expired locks auto-redeliver</a>
-    <a href="concepts.html"><b>Retries → DLQ</b>max_delivery_count then dead-letter; redrive back; bounded retention</a>
+    <a href="concepts.html"><b>Peek-Lock delivery</b>receive increments the count; renew extends the same attempt; settle before expiry</a>
+    <a href="concepts.html"><b>Retries → DLQ</b>the final ordinary Peek-Lock attempt remains usable; dead-letter only if that attempt fails</a>
     <a href="concepts.html"><b>FIFO groups</b>standard / group_fifo / strict_fifo; order holds across crashes, lock expiry &amp; delayed retries</a>
     <a href="concepts.html"><b>Topics + subscription lifecycle</b>filtered fan-out · paged inventory · empty-only or explicit force delete · fixed TTL backstop</a>
     <a href="api.html#deletequeue"><b>Safe resource deletion</b>queues and subscriptions default to empty-only; explicit force discards retained states; names stay reserved during cleanup</a>
@@ -329,7 +329,8 @@ func main() {
     }
     for _, m := range msgs {
         fmt.Printf("got: %s\n", m.Body)
-        if err := m.Complete(ctx); err != nil { // or m.Abandon(ctx) to retry, m.Reject(ctx) -> DLQ
+        // Abandon retries below max (DLQ at max); Reject sends directly to DLQ.
+        if err := m.Complete(ctx); err != nil {
             log.Fatal(err)
         }
     }

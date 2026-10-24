@@ -30,9 +30,10 @@ binary/database pair and starting v0.4.1 with a fresh database.
   base64 in JSON. GET / is an open discovery card listing every endpoint.
 - Delivery: Peek-Lock (receive → work → settle with a lock_token) or
   receive-and-delete. Exactly one settlement verb per outcome:
-  Complete / Abandon / Reject / Defer. Locks renewable (Renew); a 1 s reaper returns
-  expired locks to active or to DLQ at the delivery limit. Peek-Lock is at-least-once;
-  handlers must be idempotent.
+  Complete / Abandon / Reject / Defer. Each newly granted claim increments
+  delivery_count; Renew extends the same live claim without incrementing it. A 1 s
+  reaper returns expired locks to active or to DLQ at the delivery limit. Peek-Lock
+  is at-least-once; handlers must be idempotent.
 - Lease boundary: new settlements and Renew require the current lock_token and
   locked_until_ms > now; equality is expired, even before the reaper runs. Renew
   before expiry. An unexpired exact-request receipt can replay an already committed
@@ -42,9 +43,12 @@ binary/database pair and starting v0.4.1 with a fresh database.
   before returning it and grants no lease:
   empty lock_token and zero locked_until_ms (omitted in JSON), including receive
   attempt replays. The SDK exposes a zero LockedUntil time.
-- Retries: delivery_count per message; at max_delivery_count on retry → dead-letter
-  queue (state, not a separate queue). Redrive moves dead letters back. DLQ
-  age/count/byte settings are asynchronous retention targets, so retained state
+- Retries: the Nth ordinary Peek-Lock claim at max_delivery_count remains a usable
+  final attempt and may be renewed or completed. Abandon, lock expiry or startup
+  recovery after that failed attempt moves it to the dead-letter state (not a
+  separate queue) instead of an ordinary N+1 claim. ReceiveDeferred increments the
+  count but currently has no max admission check. Redrive moves dead letters back.
+  DLQ age/count/byte settings are asynchronous retention targets, so retained state
   may temporarily exceed them between bounded cleanup passes.
 - Ordering: standard (per-group_id FIFO, cross-group parallel), group_fifo
   (group_id required), strict_fifo (whole-queue serial). Order holds across

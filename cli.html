@@ -583,11 +583,13 @@ MQLITE_DB=file:/data/mq.db mqlite vacuum --full   # full rewrite
 <code>lock-token</code>). Positional args are always <code>&lt;queue&gt; &lt;seq&gt; &lt;lock-token&gt;</code>. Client mode only
 in practice (a broker holds the lock between calls — see the note under Global flags).</p>
 <pre><code class="language-bash">mqlite complete orders 42 lt_9f3a…                 # done
-mqlite abandon  orders 42 lt_9f3a… --delay 60s     # release for retry, after a backoff
+mqlite abandon  orders 42 lt_9f3a… --delay 60s     # retry after backoff, or DLQ at the limit
 mqlite reject   orders 42 lt_9f3a… --reason bad    # dead-letter it (--detail …)
 mqlite defer    orders 42 lt_9f3a…                 # set aside for receive-deferred
-mqlite renew    orders 42 lt_9f3a…                 # extend the lock lease
+mqlite renew    orders 42 lt_9f3a…                 # extend the same live delivery&#39;s lease
 </code></pre>
+<p><code>renew</code> does not create another delivery attempt or increase <code>delivery_count</code>, and
+it cannot revive a lease after it expires.</p>
 <h3 id="schedule-queue-body--enqueue-for-future-delivery"><code>schedule &lt;queue&gt; &lt;body&gt;</code> — enqueue for future delivery</h3>
 <pre><code class="language-bash">mqlite schedule orders &#39;{&quot;id&quot;:1}&#39; --at 30m                     # a duration from now
 mqlite schedule orders &#39;{&quot;id&quot;:1}&#39; --at 2027-01-02T15:04:05Z    # or an absolute RFC3339 time (must be future)

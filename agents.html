@@ -101,9 +101,9 @@
     <tr><td><code>delete_subscription</code></td><td>delete one exact topic/name pair; optional <code>force</code> discards retained work</td></tr>
     <tr><td><code>send</code></td><td>send a message (<code>queue</code>, <code>body</code>, optional <code>message_id</code> / <code>group_id</code>)</td></tr>
     <tr><td><code>receive</code></td><td>peek-lock messages → returns <code>seq_number</code> + <code>lock_token</code></td></tr>
-    <tr><td><code>complete</code> / <code>abandon</code> / <code>reject</code></td><td>settle: done / retry / dead-letter</td></tr>
-    <tr><td><code>renew</code></td><td>extend a held lock before it expires — hold a message across long work</td></tr>
-    <tr><td><code>defer</code> / <code>receive_deferred</code></td><td>set a locked message aside by <code>seq_number</code>, then fetch deferred messages back by seq</td></tr>
+    <tr><td><code>complete</code> / <code>abandon</code> / <code>reject</code></td><td>settle: done / retry below the limit (DLQ at the limit) / immediate dead-letter</td></tr>
+    <tr><td><code>renew</code></td><td>extend the same live claim before expiry; <code>delivery_count</code> is unchanged</td></tr>
+    <tr><td><code>defer</code> / <code>receive_deferred</code></td><td>set aside, then claim by seq; the claim increments <code>delivery_count</code> and currently has no max admission check</td></tr>
     <tr><td><code>peek</code></td><td>browse without locking (optionally by state)</td></tr>
     <tr><td><code>stats</code></td><td>queue depth by state</td></tr>
     <tr><td><code>observe</code></td><td>broker health and lifecycle clock, queue snapshots, message effects, storage and request measurements (since v0.3.2)</td></tr>
@@ -169,13 +169,15 @@ Rules:
   include_deleting=true; an absent name confirms completion under the one-owner rule.
 - Consume with Peek-Lock:
     QueueService/Receive  {"queue":"jobs","max_messages":1,"wait_time_ms":5000}
-  Each returned message has seq_number + lock_token. You MUST settle every
-  message you receive, using its lock_token:
+  Each newly granted Peek-Lock claim increments delivery_count. Each returned
+  message has seq_number + lock_token. You MUST settle every message you receive,
+  using its lock_token:
     QueueService/Complete {"queue":"jobs","seq_number":N,"lock_token":"..."}  done
-    QueueService/Abandon  {...,"delay_ms":60000}   retry later (optional backoff)
+    QueueService/Abandon  {...,"delay_ms":60000}   retry below limit; at limit -> DLQ
     QueueService/Reject   {...}                    give up -> dead-letter queue
   If you settle nothing, the lock expires (default 30s). Recovery returns the
-  message to active, or sends it to the DLQ at its delivery limit.
+  message to active, or sends a failed final attempt to the DLQ. Reaching the
+  limit does not interrupt that final claim: it may still be renewed or completed.
   New settlements and Renew require locked_until_ms &gt; now: the exact deadline
   is already expired, even before the reaper runs. An unexpired receipt only lets
   the exact request replay a previously committed settlement after expiry.
@@ -185,8 +187,9 @@ Rules:
 - Default Peek-Lock delivery is AT-LEAST-ONCE: you may see a message twice.
   Make your handling idempotent (set message_id on send; check your own state
   before acting).
-- Long-running work: call QueueService/Renew with the lock_token to extend the
-  lock before it expires.
+- Long-running work: call QueueService/Renew with the lock_token before expiry.
+  It extends the same claim without increasing delivery_count, does not stack
+  durations, and cannot revive an expired lease.
 - Pub/sub: AdminService/Subscribe {"topic":"events","name":"my-sub",
   "filter":{"expr":"subject == \"order\""},"ttl_ms":900000} — then Send to
   "events" fans out; Receive from "my-sub". Filter may be omitted; omitted or zero

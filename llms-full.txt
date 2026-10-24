@@ -72,7 +72,7 @@ is deleted from the database:
                    │  locked  │ ◄─ ReceiveDeferred  │ deferred │
                    └────┬─────┘    (by seq)         └──────────┘
                         │ complete ─► ✗ removed
-                        │ renew ─► (stays locked)
+                        │ renew ─► (same attempt; count unchanged)
                         │ reject, or abandon / lock-expiry, count ≥ max:
                         ▼
                    ┌───────────────┐ ◄── TTL expiry (active/locked/deferred/scheduled;
@@ -87,42 +87,69 @@ Every transition, with its trigger and the condition under which it fires:
 |---|---|---|---|
 | _(new)_ | `Send` | active | delivered immediately |
 | _(new)_ | `Send` scheduled | scheduled | enqueue time is in the future |
-| scheduled | scheduler loop | active | enqueue time reached |
+| scheduled | scheduler loop | active | enqueue time reached; `count` unchanged |
 | scheduled | `Cancel` | ✗ removed | cancel before it activates; never-delivered rows only (`delivery_count=0`) |
 | active | `Receive` / claim | locked | `count`++; lock acquired |
 | locked | `Complete` | ✗ removed | matching `lock_token` and unexpired lease |
-| locked | `Abandon` | active | `count < max`, no backoff delay (immediate redelivery) |
-| locked | `Abandon` | scheduled | `count < max` with `delay_ms > 0`: backoff parking — auto-reactivated when due, holds its group on ordered queues |
-| locked | `Abandon` | dead_lettered | `count ≥ max` |
+| locked | `Abandon` | active | `count < max`, no backoff delay (immediate redelivery); `count` unchanged |
+| locked | `Abandon` | scheduled | `count < max` with `delay_ms > 0`: backoff parking — auto-reactivated when due, holds its group on ordered queues; `count` unchanged |
+| locked | `Abandon` | dead_lettered | `count ≥ max`; `count` unchanged |
 | locked | lock expiry (reaper) | active | `count < max`; auto-redelivered |
 | locked | lock expiry (reaper) | dead_lettered | `count ≥ max` (`MaxDeliveryCountExceeded`) |
 | locked | `Reject` | dead_lettered | explicit, with a reason |
 | locked | `Defer` | deferred | set aside; fetched later by seq |
-| locked | `Renew` | locked | extends the lock lease |
-| deferred | `ReceiveDeferred` | locked | fetched by seq; `count`++ |
+| locked | `Renew` / `RenewBatch` | locked | extends the same live lease without incrementing `count`; cannot revive an expired lease |
+| deferred | `ReceiveDeferred` | locked | fetched explicitly by seq; `count`++ (currently no `max` admission check) |
 | active / locked / deferred / scheduled | TTL expiry | dead_lettered | queue has `dead_letter_on_expire=1` (`TTLExpired`) |
 | active / locked / deferred / scheduled | TTL expiry | ✗ removed | queue has `dead_letter_on_expire=0` (discard) |
 | dead_lettered | `Redrive` | active | back to this (or a target) queue; `count` reset to 0 |
 | dead_lettered | `Purge` | ✗ removed | manual deletion |
 | dead_lettered | DLQ retention | ✗ removed | asynchronous background cleanup targets age / count / bytes and can temporarily lag; touches **only** dead-letter rows |
 
+- **`delivery_count` counts claims, not renewals or backoff.** A newly granted
+  `Receive` or `ReceiveDeferred` claim increments it. `Renew`, `RenewBatch`,
+  `Abandon`, lock expiry, and the scheduler do not. With `max=10`, the ordinary
+  Peek-Lock `Receive` that returns `count=10` is a complete final attempt: it may renew
+  its live lease repeatedly and still `Complete`. Reaching 10 does not itself move
+  the row. If that attempt is abandoned, its lease expires, or startup recovery
+  finds it locked, the row goes to the DLQ instead of receiving ordinary Peek-Lock
+  attempt number 11. Explicit `ReceiveDeferred` currently differs: it increments `count` but does
+  not currently refuse the claim based on `max`, so do not treat the configured
+  maximum as an admission limit for that by-sequence recovery path.
 - **The DLQ is not a separate queue.** It is messages in the same queue with
-  `state='dead_lettered'`. A message lands there when its `delivery_count` reaches
-  `max_delivery_count` (i.e. `≥`), on an explicit `reject`, or on TTL expiry (when the
-  queue's `dead_letter_on_expire=1`). Inspect with `peek state=dead_lettered`, send back
-  with `redrive`, or delete with `purge`.
+  `state='dead_lettered'`. A message lands there when a failed locked attempt is
+  abandoned, reaped, or recovered with `delivery_count >= max_delivery_count`, on
+  an explicit `Reject`, or on TTL expiry (when the queue's
+  `dead_letter_on_expire=1`). Inspect with `peek state=dead_lettered`, send back with
+  `redrive`, or delete with `purge`.
 - **Redrive atomicity is internal.** Each database batch moves completely or not at
   all, including source deletion plus target insertion for a cross-queue move.
   Consumers still receive redriven work at least once, so handlers and external
   effects must remain idempotent.
 - **Lease deadlines fence every settlement and renewal.** A new effect requires the
   current token and `locked_until_ms > now`; equality is expired, even before the
-  reaper runs. Renew before that deadline. A live receipt can replay an already
-  committed settlement only for the same queue, sequence, token, operation and
-  effect-bearing arguments, including after the original lease expires.
+  reaper runs. Renew before that deadline. On a queue or subscription without a
+  fixed expiry, the committed deadline is
+  `max(current deadline, broker now + lock_duration)` — renewal never
+  shortens a lease, but rapid calls do not add durations together. A subscription's
+  fixed lifetime caps the candidate deadline. Renewal keeps the same token, state,
+  and delivery attempt, and cannot revive an expired lease. A live receipt can
+  replay an already committed settlement only for the same queue, sequence, token,
+  operation and effect-bearing arguments, including after the original lease
+  expires.
+- **Lease, message TTL, and subscription lifetime are different clocks.** The lease
+  temporarily fences one delivery attempt. Message TTL bounds how long the row may
+  live and can expire it while locked. A fixed subscription lifetime bounds the
+  whole backing queue and caps its locks. `Renew` changes only the lease; it extends
+  neither message TTL nor subscription lifetime.
 - **Two redelivery paths.** `Abandon` is an explicit, client-driven settlement; **lock
   expiry** is automatic — the reaper (~1s) reclaims a lock held past `lock_duration`
   without settling. Both redeliver while `count < max` and dead-letter once `count ≥ max`.
+- **Delayed Abandon reuses `scheduled` as retry backoff.** It does not create or
+  count another attempt. The same row waits there until due, the scheduler returns
+  it to `active` without changing `count`, and the next claim increments the count.
+  `Cancel` deliberately accepts only never-delivered scheduled sends
+  (`delivery_count=0`), not a retry parked by Abandon.
 - **Ordering survives lock expiry.** On ordered paths (`group_fifo`, `strict_fifo`,
   and grouped messages on a `standard` queue — they share the same claim rule) an
   expired-but-not-yet-reaped lock still blocks its group (strict: the whole queue):
@@ -704,6 +731,12 @@ A batch `Receive` runs this in a loop **inside one transaction** — one commit,
 one fsync, for the whole batch (that change alone took a 1-vCPU broker from 591
 to 1,507 msg/s of sustained drain).
 
+`ReceiveDeferred` uses a separate by-sequence claim, but it likewise increments
+`delivery_count` in the same UPDATE that moves `deferred → locked`. It currently
+has no `max_delivery_count` predicate: the maximum is enforced when a failed lock
+is Abandoned, reaped, or recovered, not as an admission check on explicit deferred
+recovery. Settlement, renewal, and the scheduler never increment the count.
+
 **The lock is a lease plus a fencing token.** `locked_until` is a timestamp —
 not a connection, not a heartbeat — so a dead consumer's lock simply *expires*.
 `lock_token` is 128 random bits handed only to the claimer, and every
@@ -720,8 +753,17 @@ is already expired, including before the background reaper runs. The broker samp
 time after local writer admission and afresh for every settlement statement and remote
 retry. A stale consumer's new settlement affects zero rows and returns `lock_lost`.
 After redelivery, the changed token also fences the previous owner. `Renew` and
-`RenewBatch` require the same live lease and never revive an expired one. A live
-exact-request receipt can replay an already committed settlement (§7).
+`RenewBatch` require the same live lease and never revive an expired one. They keep
+the token, state, and `delivery_count` unchanged. On a queue or subscription without a fixed expiry, the write is
+`locked_until = MAX(locked_until, broker_now + lock_duration)`; the candidate is
+capped at a fixed subscription lifetime. Thus renewal cannot shorten a lease and
+rapid calls do not stack durations. A live exact-request receipt can replay an
+already committed settlement (§7).
+
+The lease is only the ownership window for one attempt. Message TTL is a separate
+row-lifetime deadline and can expire the message while it is locked; a subscription
+lifetime is a resource deadline that caps every lease and eventually removes the
+backing queue. Renewal extends neither one.
 
 Receive-and-delete removes the claimed row in the same transaction. It grants no
 lease: both its token and deadline are cleared before the response or attempt record
@@ -784,7 +826,7 @@ it is small and boring on purpose:
 | lifecycle | event-driven; 10 ms after a full empty-subscription batch, otherwise 1 s between continuation passes | continue bounded physical cleanup for queues and subscription backing queues durably marked `deleting` |
 | subscription expiry | 1 s discovery; 10 ms between full due batches | transition a bounded indexed batch whose fixed absolute deadline has arrived; data-plane fencing does not wait for this scan |
 | reaper | 1 s | expired locks → back to `active` — or to the DLQ once `delivery_count ≥ max` |
-| scheduler | 1 s | `scheduled` rows whose time arrived → `active` |
+| scheduler | 1 s | `scheduled` rows whose time arrived → `active`; `delivery_count` unchanged |
 | TTL sweep | 10 s | expired messages → DLQ (or discard), from *any* non-terminal state |
 | janitors | 60 s | prune old receipts and dedup entries; reclaim up to 256 local free pages once 256 accumulate |
 
@@ -836,12 +878,17 @@ of a previous process (locks are rows, remember) and is reclaimed — back to
 `active`, or straight to the dead-letter state if it died on its final allowed
 attempt. Same rule as the reaper; a crash never buys an extra delivery.
 
-**Retries are bounded by data.** `delivery_count` is incremented *at claim time*
-inside the claim UPDATE itself, so no failure mode can lose count. When it
-reaches the queue's `max_delivery_count`, the reaper/recovery route the message
-to `state='dead_lettered'` — the DLQ is not a separate queue, just a state you
-can `Peek`, `Redrive` (back to active, count reset) or `Purge`, with retention
-bounds (age/count/bytes) so an unattended broker doesn't grow forever.
+**Ordinary retries are bounded by data.** `delivery_count` is incremented *at
+claim time* inside the claim UPDATE itself, so no failure mode can lose count.
+Reaching the maximum does not interrupt that claim: with `max_delivery_count=10`,
+ordinary Peek-Lock claim 10 is a full final attempt that can be renewed repeatedly and
+completed. If it is Abandoned, its lock expires, or startup recovery finds it
+still locked, that transition sees `delivery_count >= max_delivery_count` and
+moves it to `state='dead_lettered'` instead of allowing ordinary Peek-Lock claim 11.
+`ReceiveDeferred` is the explicit exception described in §4: it increments the
+count without a maximum admission check. The DLQ is not a separate queue, just a
+state you can `Peek`, `Redrive` (back to active, count reset) or `Purge`, with
+retention bounds (age/count/bytes) so an unattended broker doesn't grow forever.
 
 ## 7 · Honest at-least-once, and the two receipt tables
 
@@ -1351,6 +1398,8 @@ Peek-Lock (default) or Receive-and-Delete; long-polls up to `wait_time_ms`.
 Receive-and-Delete removes the row before returning it and grants no lease:
 `lock_token` is empty and `locked_until_ms` is zero (omitted when empty), including
 replays with the same receive attempt ID. The SDK exposes a zero `LockedUntil` time.
+Every newly granted `Receive` claim increments `delivery_count`; replaying a live
+`receive_attempt_id` returns the saved claim and does not increment it again.
 
 - **Request** `ReceiveRequest`: `queue`, `max_messages` (int, default 1, max 256),
   `wait_time_ms` (int, long-poll; max 20000), `receive_mode` (int: `0` peek-lock,
@@ -1387,12 +1436,25 @@ original lease deadline; it cannot authorize a different request or revive a lea
 | Method | Extra fields | Effect |
 |---|---|---|
 | `Complete` | — | delete the message (done) |
-| `Abandon` | `delay_ms` (int, optional) | release the lock → redelivered after `delay_ms`; with a delay the head keeps holding its group's line on ordered queues |
+| `Abandon` | `delay_ms` (int, optional) | release the lock without incrementing `delivery_count`: below max, redeliver after `delay_ms` (a delayed head keeps holding its group's line on ordered queues); at max, move to the DLQ |
 | `Reject` | `dead_letter_reason`, `dead_letter_description` (optional) | move to the DLQ |
 | `Defer` | — | set aside; retrieve later by seq via `ReceiveDeferred` |
-| `Renew` | — | extend the lock by the queue's lock duration |
+| `Renew` | — | extend the same live lease without changing state, token, or `delivery_count`; cannot revive an expired lease |
 
 `SettleRequest`: `queue`, `seq_number`, `lock_token` (+ the extras above).
+
+For a queue or subscription without a fixed expiry, Renew commits
+`locked_until_ms = max(current locked_until_ms, broker_now + lock_duration_ms)`.
+It never shortens a lease, and rapid renewals do not stack durations. For a fixed-life
+subscription, its absolute expiry caps the candidate deadline. Renew before the
+current deadline; once the lease is expired, Renew fails with `409 lock_lost`.
+
+`max_delivery_count` is evaluated when a locked attempt fails, not when its final
+ordinary Peek-Lock claim is granted. For example, with a maximum of 10, an ordinary Peek-Lock `Receive`
+may return `delivery_count=10`; that consumer can renew the lease repeatedly and
+Complete successfully. If it instead Abandons, lets the lease expire, or leaves the
+lock for startup recovery, the message goes to the DLQ and is not ordinarily claimed
+an eleventh time. `ReceiveDeferred` currently differs, as described below.
 
 > **Defer + ordering.** A deferred message keeps its head-of-line position: in a
 > `group_fifo`/`strict_fifo` (or otherwise grouped) queue the messages behind it — its
@@ -1404,7 +1466,16 @@ original lease deadline; it cannot authorize a different request or revive a lea
 > **Abandon + ordering.** With `delay_ms > 0` the message parks as `scheduled` until the
 > backoff lapses and — like a deferred head — holds its head-of-line position on ordered
 > queues: its group (the whole queue under `strict_fifo`) is not delivered ahead of it.
-> With no delay it is redelivered immediately.
+> Below max, no delay makes it redeliver immediately; at max, Abandon moves it to
+> the DLQ regardless of `delay_ms`. Abandon and the scheduler do not
+> increment `delivery_count`; only the next claim does. Because `Cancel` is restricted
+> to never-delivered scheduled sends (`delivery_count=0`), it cannot remove a retry
+> parked here.
+
+> **Three separate deadlines.** A lock lease controls one attempt. Message TTL controls
+> the stored message and can expire it while locked. A fixed subscription lifetime
+> controls the entire subscription and caps its locks. Renew changes only the lease;
+> it does not extend message TTL or subscription lifetime.
 
 ### CompleteBatch
 
@@ -1435,7 +1506,10 @@ against a 2 s lock, and most of the locks expire mid-pass.
 reaches you. The result still has to be mapped, encoded and travel back, so on a very short lease
 it can lapse on the way. **`locked_until_ms` is the authoritative fact: compare it against your own
 clock.** (If the write itself outlived the lock, you get `ok=false` rather than a lock you never
-really held.)
+really held.) Like single-message Renew, the batch operation leaves token, state, and
+`delivery_count` unchanged and commits the later of the existing deadline and the
+broker's fresh `now + lock_duration` candidate (capped by a fixed subscription
+lifetime).
 
 > **Why 512?** Renewal is a claim about the *future* ("this lease is live"), and that claim is
 > only keepable within a single statement: across several, the first batch's lease can expire —
@@ -1449,6 +1523,11 @@ Lock previously-`Defer`'d messages by sequence number.
 
 - **Request** `ReceiveDeferredRequest`: `queue`, `seq_numbers` ([int]).
 - **Response** `ReceiveResponse`: `messages` ([Message]).
+- Each successful by-sequence claim increments `delivery_count`. It currently does
+  **not** reject a deferred message merely because its count is already at
+  `max_delivery_count`; after retrieval, normal settlement/DLQ rules still apply.
+  Consequently, the ordinary retry path is bounded at its Nth claim, but this
+  explicit recovery path can produce a count above N.
 
 ### Schedule
 
@@ -1641,8 +1720,8 @@ Config is **queue-level**: it's set here, not per `Send`/`Receive`.
 | Field | Type | Default | Meaning |
 |---|---|---|---|
 | `kind` | string | `queue` | `queue` (normal). `subscription` can reconfigure an existing legitimate backing queue through the advanced engine/wire surface, but cannot create a backing queue without a topic mapping; use `Subscribe` to create one. |
-| `lock_duration_ms` | int (ms) | `30000` (30s) | the **peek-lock window**: how long a `Receive`'d message stays invisible to other consumers before its lock expires and it's redelivered. `Renew` extends a held lock by this same amount. There is **no per-`Receive` override** — it's fixed by the queue. `0` → the 30s default. |
-| `max_delivery_count` | int | `10` | how many delivery attempts before a message is dead-lettered (`reason=MaxDeliveryCountExceeded`). Reached at `>=` (the Nth delivery is the last). `0` → the default of 10. |
+| `lock_duration_ms` | int (ms) | `30000` (30s) | the **peek-lock window**: how long a `Receive`'d message stays invisible to other consumers before its lock expires and it's redelivered. `Renew` uses this duration to extend the same live attempt; the committed deadline is never earlier than the existing one. There is **no per-`Receive` override** — it's fixed by the queue. `0` → the 30s default. |
+| `max_delivery_count` | int | `10` | ordinary delivery-attempt budget. The Nth ordinary Peek-Lock `Receive` is a usable final attempt; it is dead-lettered with `reason=MaxDeliveryCountExceeded` only if that locked attempt is abandoned, its lease expires, or it is recovered on startup at `delivery_count >= N`. `ReceiveDeferred` increments the count but currently does not use N as an admission check. `0` → the default of 10. |
 | `default_ttl_ms` | int (ms) | `0` = unlimited | per-message time-to-live applied when a `Send` doesn't set its own `ttl_ms`. On expiry the message goes to the DLQ or is discarded — see `dead_letter_on_expire`. |
 | `dead_letter_on_expire` | bool | `true` | on TTL expiry: `true` → move to the DLQ; `false` → discard silently. |
 | `dedup_window_ms` | int (ms) | `0` = **off** | duplicate-detection window. `0` disables dedup entirely (then `message_id` is just metadata). `>0` collapses repeats of the same `message_id` within the window — see [The `Message` object → `message_id`, dedup & uniqueness](#message_id-dedup--uniqueness). |
@@ -1837,7 +1916,7 @@ empty). "Dir" = whether *you set it on send* (**in**) or *the broker sets it on*
 | `correlation_id`, `reply_to`, `content_type` | string | in | free-form ASB-style metadata; the broker stores but never interprets them (`content_type` only hints filter `body_json` decoding). |
 | `properties` | object<string,string> | in | custom **string→string** headers, stored verbatim; visible to filters as `properties["k"]`. Values must be strings. |
 | `seq_number` | int | out | broker-assigned, strictly increasing, **never reused** (may gap); the handle you settle/peek with while the message lives. |
-| `delivery_count` | int | out | how many times this message has been delivered (claimed). |
+| `delivery_count` | int | out | how many `Receive` / `ReceiveDeferred` claims have been granted. Settlement, renewal, and scheduled activation do not increment it. |
 | `lock_token` | string | out | fencing token from peek-lock `Receive`; settle with it. |
 | `state` | string | out | `Peek` only: `active`/`locked`/`deferred`/`scheduled`/`dead_lettered`. |
 | `enqueued_at_ms`, `expires_at_ms`, `visible_at_ms`, `locked_until_ms` | int | out | epoch-ms timestamps. |
@@ -2249,11 +2328,14 @@ Settle a message received earlier with `receive --no-ack` (which printed its
 in practice (a broker holds the lock between calls — see the note under Global flags).
 ```bash
 mqlite complete orders 42 lt_9f3a…                 # done
-mqlite abandon  orders 42 lt_9f3a… --delay 60s     # release for retry, after a backoff
+mqlite abandon  orders 42 lt_9f3a… --delay 60s     # retry after backoff, or DLQ at the limit
 mqlite reject   orders 42 lt_9f3a… --reason bad    # dead-letter it (--detail …)
 mqlite defer    orders 42 lt_9f3a…                 # set aside for receive-deferred
-mqlite renew    orders 42 lt_9f3a…                 # extend the lock lease
+mqlite renew    orders 42 lt_9f3a…                 # extend the same live delivery's lease
 ```
+
+`renew` does not create another delivery attempt or increase `delivery_count`, and
+it cannot revive a lease after it expires.
 
 ### `schedule <queue> <body>` — enqueue for future delivery
 ```bash
@@ -3925,9 +4007,9 @@ models misuse them):
 | `send` | send a message (`queue`, `body`, optional `message_id`/`group_id`) |
 | `receive` | peek-lock messages → returns `seq_number` + `lock_token` |
 | `complete` | acknowledge a message (`queue`, `seq_number`, `lock_token`) |
-| `abandon` | release a message for redelivery |
+| `abandon` | end this delivery attempt; retry now/later below the limit, otherwise dead-letter |
 | `reject` | dead-letter a message |
-| `renew` | extend a message's lock so long-running work isn't redelivered |
+| `renew` | extend the same live delivery lock without increasing `delivery_count`; cannot revive an expired lock |
 | `defer` | set a message aside for later retrieval by `seq_number` |
 | `receive_deferred` | retrieve deferred messages by their `seq_numbers` |
 | `peek` | browse without locking (optionally by `state`) |
@@ -4116,7 +4198,9 @@ func main() {
 	}
 	for _, m := range msgs {
 		fmt.Printf("got: %s\n", m.Body)
-		if err := m.Complete(ctx); err != nil { // or m.Abandon(ctx) to retry, m.Reject(ctx) -> DLQ
+		// Alternatives: Abandon retries below max and sends a failed final attempt
+		// to the DLQ; Reject sends directly to the DLQ.
+		if err := m.Complete(ctx); err != nil {
 			log.Fatal(err)
 		}
 	}
@@ -4180,8 +4264,9 @@ directly modifying mqlite's internal tables is unsupported. See the
 ## 3. Remote client + hands-off consumer
 
 Talk to a running broker over HTTP. The `Receiver` runs a managed consume loop:
-return `nil` → Complete, return an error → Abandon (with auto lock-renewal and
-configurable concurrency).
+return `nil` → Complete, return an error → Abandon (redelivery below the maximum;
+the failed final attempt goes to the DLQ), with auto lock-renewal and configurable
+concurrency.
 
 ```go
 package main
@@ -4206,7 +4291,8 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// consume: nil -> Complete, error -> Abandon; auto-renew the lock; 4 in flight.
+	// nil -> Complete; error -> Abandon (retry below max; DLQ at max).
+	// Auto-renew the lock; keep up to 4 messages in flight.
 	err = cli.Receiver("orders", mqlite.WithAutoRenew(), mqlite.WithConcurrency(4)).
 		Run(ctx, func(ctx context.Context, m *mqlite.Message) error {
 			return process(m.Body) // MUST be idempotent (at-least-once)
@@ -4218,6 +4304,14 @@ func main() {
 
 func process(body []byte) error { log.Printf("got: %s", body); return nil }
 ```
+
+`WithAutoRenew` keeps the current delivery attempt alive; it does not spend another
+`delivery_count`. Each successful renewal keeps the later of the existing lease
+deadline and the broker's fresh `now + lock_duration` candidate (capped at a fixed
+subscription expiry), rather than adding a duration to the old deadline. It must
+arrive before the current lease expires and it cannot extend message TTL or a fixed
+subscription lifetime. Renewal or its response can still fail late, so the handler
+remains idempotent: another consumer may receive the message after the lease is lost.
 
 ## 4. Topic subscription lifecycle
 
