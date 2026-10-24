@@ -358,7 +358,7 @@ curl -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
      localhost:6754/mqlite.v1.QueueService/Receive</code></pre>
     </div>
     <div class="tabpane" data-t="docker">
-      <p>A named volume keeps queue data across container replacement. The admin console is available at <code>/ui</code>; v0.4.1 shows the broker clock and fixed subscription deadlines there.</p>
+      <p>A named volume keeps queue data across container replacement. The admin console is available at <code>/ui</code>; v0.4.1 groups subscriptions by topic and shows permanent or fixed lifetimes against the broker clock. On current brokers its five-second loop calls only <code>Observe</code>; lifecycle inventory refreshes happen on connection, explicit refresh, and configuration changes.</p>
       <p>This example pins the supported v0.4.1 image. For production configuration and recovery, follow <a href="deployment.html">Deployment</a> and the <a href="operations.html">operations runbook</a>.</p>
       <pre><code class="language-bash">docker run -d --name mqlite -p 127.0.0.1:6754:6754 \
   -e MQLITE_TOKENS=mqk_dev \

@@ -77,7 +77,13 @@ binary/database pair and starting v0.4.1 with a fresh database.
   subscription plus `correlation_id` for high-rate request/reply traffic. In v0.4.1
   and later, compare absolute deadlines with Status or Observe `server_time_ms`;
   `sampled_at_ms` may be cached and a browser clock is not authoritative. The bundled
-  console shows creation, deadline or permanent lifetime, and remaining lifetime.
+  console groups subscriptions by topic and shows creation, deadline or permanent
+  lifetime, and broker-relative remaining lifetime. On current brokers its five-second
+  loop calls only Observe; connection, explicit refresh and configuration changes load
+  lifecycle inventory, while message operations do not. Older brokers cache the legacy
+  fallback instead of repeatedly probing the paged route. This console behavior changes
+  neither the schema nor the HTTP/wire API; it uses ListSubscriptionsPage and
+  `server_time_ms` already present in v0.4.1.
 - Maintenance diagnostics (v0.4.0 and later): Observe exposes bounded failure
   details and recovery status. Optional private diagnostic logs retain redacted
   details across restarts; cumulative error counts are not current health.
