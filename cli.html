@@ -29,7 +29,7 @@
   </div>
 </div></nav>
 <div class="wrap">
-  <div class="stamp">Source: <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/cli.md">mqlite main · docs/cli.md</a> — source v0.4.0. Latest supported release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.0">v0.4.0</a>.
+  <div class="stamp">Source: <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/cli.md">mqlite main · docs/cli.md</a> — source v0.4.1. Latest supported release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.1">v0.4.1</a>.
   These docs track main; use the linked release for published artifacts.</div>
   <main class="prose">
 <h1 id="cli-reference-mqlite">CLI reference (<code>mqlite</code>)</h1>
@@ -637,8 +637,12 @@ It also opens the console&#39;s read-only overview/metrics views. <code>manage</
 observation; managed <code>send</code>/<code>listen</code> keys do not gain broker-wide monitoring. Monitor
 credentials are configured at startup and cannot be created through <code>key create</code>.</p>
 <h3 id="status--backend-snapshot"><code>status</code> — backend snapshot</h3>
-<pre><code class="language-bash">mqlite status                 # backend, location, schema, ping, size, queue/subscription counts
+<pre><code class="language-bash">mqlite status                 # backend, broker UTC clock, schema, ping, size, queue/subscription counts
 </code></pre>
+<p>Current brokers print the lifecycle clock as <code>broker time</code>; JSON output exposes
+the same value as <code>server_time_ms</code>. It is the clock used for TTL, scheduling and
+lease deadlines. Older compatible brokers omit it, which means unavailable rather
+than Unix epoch zero.</p>
 <h3 id="list-subscriptions--subscriptions-with-topic--filter"><code>list-subscriptions</code> — subscriptions with topic + filter</h3>
 <pre><code class="language-bash">mqlite list-subscriptions                                      # all active (legacy-compatible)
 mqlite list-subscriptions --topic orders --limit 100

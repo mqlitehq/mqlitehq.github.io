@@ -1,9 +1,9 @@
 mqlite main — full documentation bundle.
-Source version: v0.4.0. Latest supported release: [v0.4.0](https://github.com/mqlitehq/mqlite/releases/tag/v0.4.0).
+Source version: v0.4.1. Latest supported release: [v0.4.1](https://github.com/mqlitehq/mqlite/releases/tag/v0.4.1).
 These docs track main; consult release notes for published artifacts and upgrade requirements.
 Source of truth: https://github.com/mqlitehq/mqlite/tree/main/docs
 
-<!-- ===== mqlite main · source v0.4.0; latest supported release v0.4.0 · docs/concepts.md ===== -->
+<!-- ===== mqlite main · source v0.4.1; latest supported release v0.4.1 · docs/concepts.md ===== -->
 
 # Core concepts & subscription filters
 
@@ -545,7 +545,7 @@ network I/O APIs are exposed; `now()` can read the wall clock:
   for the filter rules MQLite guarantees.
 
 
-<!-- ===== mqlite main · source v0.4.0; latest supported release v0.4.0 · docs/internals.md ===== -->
+<!-- ===== mqlite main · source v0.4.1; latest supported release v0.4.1 · docs/internals.md ===== -->
 
 # How mqlite works — building a reliable queue on one SQLite file
 
@@ -1038,7 +1038,7 @@ with the conformance suite as the judge.
 [benchmark.md](https://github.com/mqlitehq/mqlite/blob/main/docs/benchmark.md).*
 
 
-<!-- ===== mqlite main · source v0.4.0; latest supported release v0.4.0 · docs/api-reference.md ===== -->
+<!-- ===== mqlite main · source v0.4.1; latest supported release v0.4.1 · docs/api-reference.md ===== -->
 
 # mqlite HTTP API reference
 
@@ -1048,7 +1048,7 @@ construction. This document is generated from the wire contract in
 [`wire/wire.go`](https://github.com/mqlitehq/mqlite/blob/main/wire/wire.go) (the single source of truth shared by the broker
 and the Go SDK, so the two can't drift) and the server's error mapping.
 
-This reference describes v0.4.0, the latest supported release. v0.3.3 is
+This reference describes v0.4.1, the latest supported release. v0.3.3 is
 withdrawn and unsupported; use the documentation in the v0.3.2 tag when working
 with its smaller management surface.
 
@@ -1189,6 +1189,7 @@ and console. Requires `manage` or a configured monitor credential.
 
 | Field | Meaning |
 |---|---|
+| `server_time_ms` | Broker lifecycle clock near response assembly; absent or zero means unavailable, including on an older compatible broker |
 | `sampled_at_ms`, `started_at_ms`, `backend`, `version` | Queue sampling instant, engine lifetime and non-sensitive identity |
 | `access` | Request capability: `manage`, `monitor` or `anonymous`; SDK embedded mode uses `embedded` |
 | `collection` | Queue collection `state`, `last_success_at_ms`, latest queue-gauge refresh `duration_seconds`, bounded `error_code` |
@@ -1212,6 +1213,16 @@ clock value. Counters reset on engine/process restart; they are not a durable
 message ledger. Histograms contain cumulative finite buckets and a total count
 that is also the Prometheus `+Inf` bucket. The existing handler histogram excludes
 authentication; whole-request duration includes it and normal Receive long polls.
+`server_time_ms` is read separately near response assembly, from the same broker
+clock used for lifecycle deadlines. It can therefore advance while a cache hit
+correctly preserves an older `sampled_at_ms`.
+
+After a queue or subscription is physically deleted, its process-lifetime message
+effects move to the documented `messages[].queue == ""` retired aggregate. v0.4.1
+corrects the Go decoder and bundled console to accept that special label while
+still requiring a complete, unique event domain. Its event semantics and schema
+token are unchanged from v0.4.0; v0.4.1 separately adds the optional,
+forward-compatible `server_time_ms` observation field described above.
 
 The shared decoder bounds observations to 32 MiB and rejects incomplete objects,
 inconsistent availability and malformed histogram data. The complete JSON schema
@@ -1806,7 +1817,10 @@ or auth token.
   local path, or a masked remote host like `libsql://***.turso.io`), `schema_version`,
   `ping_ms` (a `SELECT 1` read round-trip; `-1` if it failed), `db_size_bytes` (local
   on-disk footprint: db + WAL + shm; `0` for memory/remote), `queues`, `subscriptions`,
-  `uptime_ms`, `auth` (bool).
+  `server_time_ms` (UTC epoch milliseconds from the broker clock used for lifecycle
+  deadlines), `uptime_ms`, `auth` (bool). An absent or zero `server_time_ms` means
+  the clock is unavailable, including when a current client connects to an older
+  broker that omitted it.
 
 ## The `Message` object
 
@@ -1886,7 +1900,7 @@ deletion is a successful operation even when its typed HTTP result is
 `state:"deleting"`.
 
 
-<!-- ===== mqlite main · source v0.4.0; latest supported release v0.4.0 · docs/cli.md ===== -->
+<!-- ===== mqlite main · source v0.4.1; latest supported release v0.4.1 · docs/cli.md ===== -->
 
 # CLI reference (`mqlite`)
 
@@ -2288,8 +2302,13 @@ credentials are configured at startup and cannot be created through `key create`
 
 ### `status` — backend snapshot
 ```bash
-mqlite status                 # backend, location, schema, ping, size, queue/subscription counts
+mqlite status                 # backend, broker UTC clock, schema, ping, size, queue/subscription counts
 ```
+
+Current brokers print the lifecycle clock as `broker time`; JSON output exposes
+the same value as `server_time_ms`. It is the clock used for TTL, scheduling and
+lease deadlines. Older compatible brokers omit it, which means unavailable rather
+than Unix epoch zero.
 
 ### `list-subscriptions` — subscriptions with topic + filter
 ```bash
@@ -2344,7 +2363,7 @@ See also: [api-reference.md](https://github.com/mqlitehq/mqlite/blob/main/docs/a
 [examples.md](https://github.com/mqlitehq/mqlite/blob/main/docs/examples.md) (Go SDK).
 
 
-<!-- ===== mqlite main · source v0.4.0; latest supported release v0.4.0 · docs/access-keys.md ===== -->
+<!-- ===== mqlite main · source v0.4.1; latest supported release v0.4.1 · docs/access-keys.md ===== -->
 
 # Access keys
 
@@ -2513,7 +2532,7 @@ revocation state or discard newer credentials. Review keys using a configured
 administrator before reopening traffic. See [backup and upgrade procedures](https://github.com/mqlitehq/mqlite/blob/main/docs/operations.md).
 
 
-<!-- ===== mqlite main · source v0.4.0; latest supported release v0.4.0 · docs/deployment.md ===== -->
+<!-- ===== mqlite main · source v0.4.1; latest supported release v0.4.1 · docs/deployment.md ===== -->
 
 # Deploying mqlite
 
@@ -2565,37 +2584,42 @@ and error reference: [api-reference.md](https://github.com/mqlitehq/mqlite/blob/
 ## Docker / GHCR
 
 > **Version and upgrade compatibility.**
-> The latest supported release is **v0.4.0**, with default port **6754** and
-> schema token **7**. Pin the exact v0.4.0 binary or image rather than relying on
+> The latest supported release is **v0.4.1**, with default port **6754** and
+> schema token **7**. Pin the exact v0.4.1 binary or image rather than relying on
 > a moving image alias. v0.3.3 is withdrawn, unsupported, and retracted by
-> v0.4.0; its public assets and exact image remain available for forensic or
-> compatibility inspection and must not be deployed.
+> v0.4.0 and later; its public assets and exact image remain available for
+> forensic or compatibility inspection and must not be deployed.
 >
-> v0.4.0 cannot open a v0.3.x schema-5 database and no in-place migration exists.
+> v0.4.x cannot open a v0.3.x schema-5 database and no in-place migration exists.
 > Schema 6 was used only by intermediate untagged lifecycle builds and is also
 > refused. Preserve the matching schema-5 binary/database pair, take a consistent
-> backup, account for retained work, and start v0.4.0 with a fresh database.
+> backup, account for retained work, and start v0.4.1 with a fresh database.
 > v0.4.0 also removes the deprecated Prometheus aliases described in
 > [observability](https://github.com/mqlitehq/mqlite/blob/main/docs/observability.md#compatibility-and-v040-migration).
 > **v0.2.0 uses port 8080 and schema token 2.** Follow the
 > [upgrade and rollback procedure](https://github.com/mqlitehq/mqlite/blob/main/docs/operations.md#upgrade-and-rollback) before
 > replacing it.
 
+v0.4.0 → v0.4.1 is a same-schema replacement. It fixes console, CLI and Go SDK
+observation validation after deleting a resource with process-lifetime message
+effects, exposes the broker lifecycle clock and makes subscription deadlines
+visible in the console; it does not require a database rebuild.
+
 The exact supported image is multi-arch (amd64 + arm64):
 
 ```bash
-# v0.4.0, default port 6754
+# v0.4.1, default port 6754
 docker run -d --name mqlite -p 6754:6754 \
   -v mqlite-data:/data \
   -e MQLITE_DB=file:/data/mq.db \
   -e MQLITE_TOKENS=mqk_prod_CHANGEME \
   -e MQLITE_MONITOR_TOKENS=mqk_monitor_CHANGEME \
   -e MQLITE_SYNC=FULL \
-  ghcr.io/mqlitehq/mqlite:0.4.0
+  ghcr.io/mqlitehq/mqlite:0.4.1
 ```
 
 - The named volume `mqlite-data` persists the SQLite file across restarts.
-- Pin exact `0.4.0` in production. Images `>= 0.3.0` listen on `6754`;
+- Pin exact `0.4.1` in production. Images `>= 0.3.0` listen on `6754`;
   **`0.2.x` and earlier listen on `8080`**.
 - Verify: `curl http://localhost:6754/` (discovery card) and `/healthz`. Metrics is
   disabled by default. For a private broker or an ingress that blocks public
@@ -2612,7 +2636,7 @@ app            = "your-mqlite"
 primary_region = "sin"            # pick a region near you
 
 [build]
-  image = "ghcr.io/mqlitehq/mqlite:0.4.0"   # latest supported exact image
+  image = "ghcr.io/mqlitehq/mqlite:0.4.1"   # latest supported exact image
 
 [env]
   MQLITE_DB = "file:/data/mq.db"            # SQLite on the persistent volume
@@ -2726,15 +2750,15 @@ online snapshots, offline directory copies, isolated restore validation and roll
 Use a fresh restore directory so an old WAL/SHM cannot attach to the snapshot.
 
 **v0.2.0 databases use schema 2; v0.3.0/v0.3.1/v0.3.2 and withdrawn
-v0.3.3 use schema 5; v0.4.0 uses schema 7.**
+v0.3.3 use schema 5; v0.4.0 and v0.4.1 use schema 7.**
 Intermediate untagged lifecycle builds used schema 6. There is no in-place
 migration between these tokens. Before testing a different token, account for
 retained work in every state, keep the old binary/database pair and a consistent
-backup, and create the v0.4.0 database separately. Do not restamp an old file.
+backup, and create the v0.4.x database separately. Do not restamp an old file.
 Within the tagged schema-5 line, v0.3.0 → v0.3.1 adds compatible managed-key
 storage and v0.3.1 → v0.3.2 leaves the schema unchanged. `Observe` and configured
 monitor credentials require v0.3.2; restore compatible monitoring configuration
-when rolling back. Follow the runbook before a v0.4.0 fresh-database cutover
+when rolling back. Follow the runbook before a v0.4.x fresh-database cutover
 and metric-name migration.
 See [upgrade and rollback](https://github.com/mqlitehq/mqlite/blob/main/docs/operations.md#upgrade-and-rollback).
 
@@ -2790,7 +2814,7 @@ curl -H "Authorization: Bearer $T" -H 'Content-Type: application/json' \
 - [ ] Enable `MQLITE_METRICS=on` for authenticated Prometheus scraping on the API port; use private routing or public-ingress path filtering to keep `/metrics` private — see [observability.md](https://github.com/mqlitehq/mqlite/blob/main/docs/observability.md).
 
 
-<!-- ===== mqlite main · source v0.4.0; latest supported release v0.4.0 · docs/observability.md ===== -->
+<!-- ===== mqlite main · source v0.4.1; latest supported release v0.4.1 · docs/observability.md ===== -->
 
 # Observability
 
@@ -2978,17 +3002,22 @@ token. See the
 
 ## Availability and freshness
 
-The native snapshot includes `sampled_at_ms`, a collection status, last successful
-collection time and elapsed collection duration. A failed queue read is unavailable,
-not an empty list of healthy queues. Prometheus responds with available in-process
-measurements and `mqlite_collection_success 0`, omitting queue gauges that could not
-be collected. Failure before the endpoint, including invalid scrape credentials,
-causes Prometheus `up` to become zero instead.
+The native snapshot includes `server_time_ms`, `sampled_at_ms`, a collection
+status, last successful collection time and elapsed collection duration.
+`server_time_ms` is the broker lifecycle clock read near response assembly; it is
+the reference for TTL, scheduling and lease deadlines. A failed queue read is
+unavailable, not an empty list of healthy queues. Prometheus responds with
+available in-process measurements and `mqlite_collection_success 0`, omitting
+queue gauges that could not be collected. Failure before the endpoint, including
+invalid scrape credentials, causes Prometheus `up` to become zero instead.
 
 Queue gauges come from an exact grouped database query at the reported
 `sampled_at_ms`. One process-local gauge snapshot is shared across native
 `Observe`, `/metrics` and console requests for about 10 seconds. A cache hit
 preserves the original timestamp instead of presenting cached rows as new.
+Every native Observe response reads a fresh `server_time_ms` after assembling its
+measurements, so it is not part of that cache and must not be substituted for the
+queue sample time.
 Message writes and polling do not extend the fixed cache deadline; a queue create
 or delete invalidates the snapshot. The deadline begins when a refresh finishes,
 so after an unusually slow scan the gauges can trail current messages by the scan
@@ -3154,6 +3183,13 @@ name starts a fresh named series while the prior counts remain in the aggregate.
 Include `queue=""` when querying total process activity, or filter it out when a
 query is intended to describe current named queues only.
 
+v0.4.1 corrects the official Go decoder and bundled console to accept this
+documented empty label. v0.4.0 already emitted the aggregate, but its strict
+clients rejected the otherwise complete observation after such a retirement.
+The retired-aggregate event semantics and schema token do not change in v0.4.1.
+The same release adds optional `server_time_ms`; older clients ignore it, and
+current clients treat its absence from an older broker as unavailable.
+
 Raw SQL through `EngineTx.SQL` is supported only for caller-owned tables; those
 writes produce no message-effect events. Direct access to mqlite-owned tables is
 unsupported and can bypass lifecycle and observability invariants.
@@ -3317,7 +3353,7 @@ An occupied-resource or capacity rejection is an application outcome, not a
 storage failure.
 
 
-<!-- ===== mqlite main · source v0.4.0; latest supported release v0.4.0 · docs/observability-cloud.md ===== -->
+<!-- ===== mqlite main · source v0.4.1; latest supported release v0.4.1 · docs/observability-cloud.md ===== -->
 
 # Cloud and Kubernetes monitoring
 
@@ -3466,21 +3502,29 @@ validation steps. Local integration evidence must not be presented as a managed-
 deployment test.
 
 
-<!-- ===== mqlite main · source v0.4.0; latest supported release v0.4.0 · docs/operations.md ===== -->
+<!-- ===== mqlite main · source v0.4.1; latest supported release v0.4.1 · docs/operations.md ===== -->
 
 # Production operations
 
-This runbook covers the latest supported release, v0.4.0 (port 6754, schema
+This runbook covers the latest supported release, v0.4.1 (port 6754, schema
 token 7). v0.3.3 is withdrawn and unsupported; its public assets and exact image
 remain available for forensic or compatibility inspection and must not be
-deployed. The v0.4.0 module retracts v0.3.3. Upgrading from v0.3.2 or another
-schema-5 release requires a fresh database as described below.
+deployed. The v0.4.1 module retains v0.4.0's retraction of v0.3.3. Upgrading
+from v0.3.2 or another schema-5 release requires a fresh database as described
+below.
 Runtime-managed access keys require v0.3.1; v0.3.0 supports configured tokens only.
 Unified `Observe` and configured monitor credentials require v0.3.2.
 Upgrading from v0.2.0 changes both its default port (8080) and schema token (2);
 follow [upgrade and rollback](#upgrade-and-rollback) before replacing the broker.
 See [deployment](https://github.com/mqlitehq/mqlite/blob/main/docs/deployment.md) for installation and [observability](https://github.com/mqlitehq/mqlite/blob/main/docs/observability.md)
 for metric definitions and alerts.
+
+v0.4.0 → v0.4.1 is a same-schema patch upgrade. It fixes strict Observe clients
+and the console rejecting the documented retired message aggregate after a
+message-bearing queue or subscription is deleted, exposes the lifecycle clock,
+and makes fixed subscription deadlines visible in the console. No database
+rebuild or metric migration is required; still quiesce clients and avoid
+overlapping brokers during the binary replacement.
 
 ## Operating boundaries
 
@@ -3537,6 +3581,8 @@ subscription capacity setting, or fixed subscription TTL.
   Subscription deadlines, scheduled delivery, message TTL and lock expiry all use
   that clock. A forward step can make deadlines arrive early; a backward step can
   delay a subscription expiry that has not yet been durably marked `deleting`.
+  Compare absolute deadlines with Status or Observe `server_time_ms`; do not use
+  the browser clock or cached `sampled_at_ms` as the lifecycle reference.
 - Treat global queue gauges as sampled monitoring data. Within one broker process,
   `Observe`, `/metrics` and the console share them for about 10 seconds and expose
   the original `sampled_at_ms`; use fresh per-queue `Stats` when an operation needs
@@ -3558,8 +3604,9 @@ MQLite version and schema token. Use the same configuration when rehearsing and
 running the service, especially durability, message limits and DLQ retention.
 
 `GET /healthz` is a process liveness check; its handler does not query storage.
-Use authenticated `AdminService/Status` to inspect the backend (`ping_ms >= 0`),
-then a dedicated canary queue to verify a complete write/consume/settle cycle.
+Use authenticated `AdminService/Status` to inspect the backend (`ping_ms >= 0`)
+and its lifecycle clock (`server_time_ms`), then a dedicated canary queue to
+verify a complete write/consume/settle cycle.
 A successful read does not prove that disk space remains for a write.
 
 ```bash
@@ -3807,7 +3854,7 @@ in this release, so do not improvise a direct SQL table copy between schemas.
 rules behind these procedures.
 
 
-<!-- ===== mqlite main · source v0.4.0; latest supported release v0.4.0 · docs/mcp.md ===== -->
+<!-- ===== mqlite main · source v0.4.1; latest supported release v0.4.1 · docs/mcp.md ===== -->
 
 # MCP server (`mqlite-mcp`)
 
@@ -4006,7 +4053,7 @@ Environment tokens are not listed or revocable through these tools. Key tools ar
 unavailable when broker authentication is explicitly disabled.
 
 
-<!-- ===== mqlite main · source v0.4.0; latest supported release v0.4.0 · docs/examples.md ===== -->
+<!-- ===== mqlite main · source v0.4.1; latest supported release v0.4.1 · docs/examples.md ===== -->
 
 # Examples
 

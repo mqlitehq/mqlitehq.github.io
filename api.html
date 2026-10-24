@@ -29,7 +29,7 @@
   </div>
 </div></nav>
 <div class="wrap">
-  <div class="stamp">Source: <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/api-reference.md">mqlite main · docs/api-reference.md</a> — source v0.4.0. Latest supported release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.0">v0.4.0</a>.
+  <div class="stamp">Source: <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/api-reference.md">mqlite main · docs/api-reference.md</a> — source v0.4.1. Latest supported release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.1">v0.4.1</a>.
   These docs track main; use the linked release for published artifacts.</div>
   <main class="prose">
 <h1 id="mqlite-http-api-reference">mqlite HTTP API reference</h1>
@@ -38,7 +38,7 @@
 construction. This document is generated from the wire contract in
 <a href="https://github.com/mqlitehq/mqlite/blob/main/wire/wire.go"><code>wire/wire.go</code></a> (the single source of truth shared by the broker
 and the Go SDK, so the two can&#39;t drift) and the server&#39;s error mapping.</p>
-<p>This reference describes v0.4.0, the latest supported release. v0.3.3 is
+<p>This reference describes v0.4.1, the latest supported release. v0.3.3 is
 withdrawn and unsupported; use the documentation in the v0.3.2 tag when working
 with its smaller management surface.</p>
 <p>Every RPC body must be exactly one non-null JSON object, including operations
@@ -214,6 +214,10 @@ and console. Requires <code>manage</code> or a configured monitor credential.</p
 </tr>
 </thead>
 <tbody><tr>
+<td><code>server_time_ms</code></td>
+<td>Broker lifecycle clock near response assembly; absent or zero means unavailable, including on an older compatible broker</td>
+</tr>
+<tr>
 <td><code>sampled_at_ms</code>, <code>started_at_ms</code>, <code>backend</code>, <code>version</code></td>
 <td>Queue sampling instant, engine lifetime and non-sensitive identity</td>
 </tr>
@@ -261,7 +265,16 @@ runtime counter. Its queue gauges share one aggregate SQL read and one engine
 clock value. Counters reset on engine/process restart; they are not a durable
 message ledger. Histograms contain cumulative finite buckets and a total count
 that is also the Prometheus <code>+Inf</code> bucket. The existing handler histogram excludes
-authentication; whole-request duration includes it and normal Receive long polls.</p>
+authentication; whole-request duration includes it and normal Receive long polls.
+<code>server_time_ms</code> is read separately near response assembly, from the same broker
+clock used for lifecycle deadlines. It can therefore advance while a cache hit
+correctly preserves an older <code>sampled_at_ms</code>.</p>
+<p>After a queue or subscription is physically deleted, its process-lifetime message
+effects move to the documented <code>messages[].queue == &quot;&quot;</code> retired aggregate. v0.4.1
+corrects the Go decoder and bundled console to accept that special label while
+still requiring a complete, unique event domain. Its event semantics and schema
+token are unchanged from v0.4.0; v0.4.1 separately adds the optional,
+forward-compatible <code>server_time_ms</code> observation field described above.</p>
 <p>The shared decoder bounds observations to 32 MiB and rejects incomplete objects,
 inconsistent availability and malformed histogram data. The complete JSON schema
 is represented by <a href="https://github.com/mqlitehq/mqlite/blob/main/wire/observability.go"><code>wire/observability.go</code></a> and
@@ -930,7 +943,10 @@ or auth token.</p>
 local path, or a masked remote host like <code>libsql://***.turso.io</code>), <code>schema_version</code>,
 <code>ping_ms</code> (a <code>SELECT 1</code> read round-trip; <code>-1</code> if it failed), <code>db_size_bytes</code> (local
 on-disk footprint: db + WAL + shm; <code>0</code> for memory/remote), <code>queues</code>, <code>subscriptions</code>,
-<code>uptime_ms</code>, <code>auth</code> (bool).</li>
+<code>server_time_ms</code> (UTC epoch milliseconds from the broker clock used for lifecycle
+deadlines), <code>uptime_ms</code>, <code>auth</code> (bool). An absent or zero <code>server_time_ms</code> means
+the clock is unavailable, including when a current client connects to an older
+broker that omitted it.</li>
 </ul>
 <h2 id="the-message-object">The <code>Message</code> object</h2>
 <p>One shape for both send <strong>input</strong> and receive/peek <strong>output</strong> (fields are omitted when
