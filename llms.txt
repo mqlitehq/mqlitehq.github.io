@@ -174,8 +174,9 @@ binary/database pair and starting v0.4.0 with a fresh database.
 - [Dependency policy](https://github.com/mqlitehq/mqlite/blob/main/docs/dependencies.md): the Go 1.21 floor, deliberate pins and security checks.
 - [For AI agents](agents.html): MCP server setup and a
   copy-paste system prompt for driving the raw HTTP API.
-- [Full docs bundle](llms-full.txt): every document above plus MCP and examples as
-  one plain-markdown file, with source boundaries and version metadata preserved.
+- [Full docs bundle](llms-full.txt): the 14 canonical source documents linked above,
+  plus MCP and examples as one plain-markdown file, with source boundaries and
+  version metadata preserved. The hand-written agent guide remains a separate page.
 
 ## Source
 

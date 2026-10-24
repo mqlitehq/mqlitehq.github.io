@@ -48,6 +48,9 @@ test('the complete generated output and source inventories are explicit', () => 
     'turso.md', 'retention.md', 'benchmark.md', 'conformance.md', 'dependencies.md',
     'mcp.md', 'examples.md',
   ]);
+  const summary = readFileSync(resolve(site, 'llms.txt'), 'utf8');
+  assert.ok(summary.includes(`the ${BUNDLE_FILES.length - 2} canonical source documents linked above`));
+  assert.ok(summary.includes('The hand-written agent guide remains a separate page.'));
   assert.deepEqual(GENERATED_FILES, ['concepts.html', 'internals.html', 'api.html', 'cli.html', 'access-keys.html', 'deployment.html', 'observability.html', 'observability-cloud.html', 'operations.html', 'llms-full.txt', 'site-metadata.json', 'assets/highlight.min.js']);
 });
 
