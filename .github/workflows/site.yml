@@ -28,9 +28,15 @@ jobs:
       - name: Install generator dependencies
         working-directory: tools
         run: npm ci
+      - name: Install Chromium for the landing-page contract
+        working-directory: tools
+        run: npx playwright install --with-deps chromium
       - name: Test generation and rejection contracts
         working-directory: tools
         run: node --test build.test.mjs
+      - name: Test the accessible landing-page demo
+        working-directory: tools
+        run: npx playwright test --config playwright.config.mjs
       - name: Verify every generated output and source-derived claim
         working-directory: tools
         run: node build.mjs ../mqlite-src --check

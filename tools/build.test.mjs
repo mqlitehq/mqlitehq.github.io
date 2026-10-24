@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { resolve, dirname } from 'node:path';
@@ -197,6 +197,30 @@ test('the full Pages workflow contract pins validation, artifact scope and main-
   assert.equal(workflow, readFileSync(resolve(here, 'site-workflow.golden.yml'), 'utf8'));
 });
 
+test('the product demo stays semantic, page-local and lightweight', () => {
+  const index = readFileSync(resolve(site, 'index.html'), 'utf8');
+  assert.match(index, /assets\/demo\.css/);
+  assert.match(index, /assets\/demo\.js/);
+  assert.match(index, /<ol class="demo-transcript">/);
+  for (const fact of [
+    'topic stores nothing',
+    'same message ID, different sequence numbers',
+    'without incrementing the count',
+    'Delivery is at-least-once',
+  ]) assert.ok(index.includes(fact), fact);
+
+  for (const [, output] of PAGES) {
+    const body = readFileSync(resolve(site, output), 'utf8');
+    assert.ok(!body.includes('assets/demo.css'), output);
+    assert.ok(!body.includes('assets/demo.js'), output);
+  }
+  const assets = ['assets/demo.css', 'assets/demo.js'];
+  const bytes = assets.reduce((total, file) => total + statSync(resolve(site, file)).size, 0);
+  assert.ok(bytes <= 20 * 1024, `demo assets are ${bytes} bytes; budget is 20480`);
+  assert.match(readFileSync(resolve(site, 'assets/demo.css'), 'utf8'), /prefers-reduced-motion:\s*reduce/);
+  assert.match(readFileSync(resolve(site, 'assets/demo.js'), 'utf8'), /IntersectionObserver/);
+});
+
 test('the real Pages package contains the complete static inventory with identical bytes and valid links', (t) => {
   const root = mkdtempSync(resolve(tmpdir(), 'mqlite-site-package-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
@@ -208,7 +232,7 @@ test('the real Pages package contains the complete static inventory with identic
   });
   const expected = [
     'access-keys.html', 'agents.html', 'api.html', 'assets/fig-overview.svg',
-    'assets/highlight.min.js', 'assets/site.css', 'assets/site.js', 'cli.html',
+    'assets/demo.css', 'assets/demo.js', 'assets/highlight.min.js', 'assets/site.css', 'assets/site.js', 'cli.html',
     'concepts.html', 'deployment.html', 'favicon.svg', 'index.html', 'internals.html',
     'llms-full.txt', 'llms.txt', 'logo.svg', 'observability.html', 'observability-cloud.html', 'operations.html',
     'site-metadata.json',
