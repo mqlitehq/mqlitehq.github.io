@@ -29,7 +29,7 @@
   </div>
 </div></nav>
 <div class="wrap">
-  <div class="stamp">Source: <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/internals.md">mqlite main · docs/internals.md</a> — source v0.4.0. Latest supported release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.0">v0.4.0</a>.
+  <div class="stamp">Source: <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/internals.md">mqlite main · docs/internals.md</a> — source v0.4.1. Latest supported release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.1">v0.4.1</a>.
   These docs track main; use the linked release for published artifacts.</div>
   <main class="prose">
 <h1 id="how-mqlite-works--building-a-reliable-queue-on-one-sqlite-file">How mqlite works — building a reliable queue on one SQLite file</h1>
@@ -201,6 +201,11 @@ race: whoever&#39;s UPDATE runs first gets the row; the next one gets the next r
 A batch <code>Receive</code> runs this in a loop <strong>inside one transaction</strong> — one commit,
 one fsync, for the whole batch (that change alone took a 1-vCPU broker from 591
 to 1,507 msg/s of sustained drain).</p>
+<p><code>ReceiveDeferred</code> uses a separate by-sequence claim, but it likewise increments
+<code>delivery_count</code> in the same UPDATE that moves <code>deferred → locked</code>. It currently
+has no <code>max_delivery_count</code> predicate: the maximum is enforced when a failed lock
+is Abandoned, reaped, or recovered, not as an admission check on explicit deferred
+recovery. Settlement, renewal, and the scheduler never increment the count.</p>
 <p><strong>The lock is a lease plus a fencing token.</strong> <code>locked_until</code> is a timestamp —
 not a connection, not a heartbeat — so a dead consumer&#39;s lock simply <em>expires</em>.
 <code>lock_token</code> is 128 random bits handed only to the claimer, and every
@@ -214,8 +219,20 @@ is already expired, including before the background reaper runs. The broker samp
 time after local writer admission and afresh for every settlement statement and remote
 retry. A stale consumer&#39;s new settlement affects zero rows and returns <code>lock_lost</code>.
 After redelivery, the changed token also fences the previous owner. <code>Renew</code> and
-<code>RenewBatch</code> require the same live lease and never revive an expired one. A live
-exact-request receipt can replay an already committed settlement (§7).</p>
+<code>RenewBatch</code> require the same live lease and never revive an expired one. They keep
+the token, state, and <code>delivery_count</code> unchanged. On a queue or subscription without a fixed expiry, the write is
+<code>locked_until = MAX(locked_until, broker_now + lock_duration)</code>; the candidate is
+capped at a fixed subscription lifetime. Thus renewal cannot shorten a lease and
+rapid calls do not stack durations. A live exact-request receipt can replay an
+already committed settlement (§7).</p>
+<p>The lease is only the ownership window for one attempt. Message TTL is a separate
+normal-delivery deadline and can expire the message while it is locked; expiry
+dead-letters it by default and removes the row only when discard is configured.
+The queue default is also a ceiling for an explicit message TTL. The effective TTL
+is anchored at the message&#39;s initial <code>visible_at</code>, so scheduled waiting does not
+consume it and delayed Abandon does not restart it. A subscription lifetime is a
+resource deadline that caps every lease and eventually removes the backing queue.
+Renewal extends neither one.</p>
 <p>Receive-and-delete removes the claimed row in the same transaction. It grants no
 lease: both its token and deadline are cleared before the response or attempt record
 is created. The SDK therefore returns a zero <code>LockedUntil</code> time in that mode.</p>
@@ -283,7 +300,7 @@ it is small and boring on purpose:</p>
 <tr>
 <td>scheduler</td>
 <td>1 s</td>
-<td><code>scheduled</code> rows whose time arrived → <code>active</code></td>
+<td><code>scheduled</code> rows whose time arrived → <code>active</code>; <code>delivery_count</code> unchanged</td>
 </tr>
 <tr>
 <td>TTL sweep</td>
@@ -340,12 +357,17 @@ Subscriptions with any retained state remain on the ordinary fair row/byte path.
 of a previous process (locks are rows, remember) and is reclaimed — back to
 <code>active</code>, or straight to the dead-letter state if it died on its final allowed
 attempt. Same rule as the reaper; a crash never buys an extra delivery.</p>
-<p><strong>Retries are bounded by data.</strong> <code>delivery_count</code> is incremented <em>at claim time</em>
-inside the claim UPDATE itself, so no failure mode can lose count. When it
-reaches the queue&#39;s <code>max_delivery_count</code>, the reaper/recovery route the message
-to <code>state=&#39;dead_lettered&#39;</code> — the DLQ is not a separate queue, just a state you
-can <code>Peek</code>, <code>Redrive</code> (back to active, count reset) or <code>Purge</code>, with retention
-bounds (age/count/bytes) so an unattended broker doesn&#39;t grow forever.</p>
+<p><strong>Ordinary retries are bounded by data.</strong> <code>delivery_count</code> is incremented <em>at
+claim time</em> inside the claim UPDATE itself, so no failure mode can lose count.
+Reaching the maximum does not interrupt that claim: with <code>max_delivery_count=10</code>,
+ordinary Peek-Lock claim 10 is a full final attempt that can be renewed repeatedly and
+completed. If it is Abandoned, its lock expires, or startup recovery finds it
+still locked, that transition sees <code>delivery_count &gt;= max_delivery_count</code> and
+moves it to <code>state=&#39;dead_lettered&#39;</code> instead of allowing ordinary Peek-Lock claim 11.
+<code>ReceiveDeferred</code> is the explicit exception described in §4: it increments the
+count without a maximum admission check. The DLQ is not a separate queue, just a
+state you can <code>Peek</code>, <code>Redrive</code> (back to active, count reset) or <code>Purge</code>, with
+retention bounds (age/count/bytes) so an unattended broker doesn&#39;t grow forever.</p>
 <h2 id="7--honest-at-least-once-and-the-two-receipt-tables">7 · Honest at-least-once, and the two receipt tables</h2>
 <p>Exactly-once delivery across crashes is not a thing anyone can sell you: after a
 crash, &quot;did my acknowledgement land before the power died?&quot; is unanswerable, so

@@ -29,7 +29,7 @@
   </div>
 </div></nav>
 <div class="wrap">
-  <div class="stamp">Source: <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/observability.md">mqlite main · docs/observability.md</a> — source v0.4.0. Latest supported release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.0">v0.4.0</a>.
+  <div class="stamp">Source: <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/observability.md">mqlite main · docs/observability.md</a> — source v0.4.1. Latest supported release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.1">v0.4.1</a>.
   These docs track main; use the linked release for published artifacts.</div>
   <main class="prose">
 <h1 id="observability">Observability</h1>
@@ -199,21 +199,34 @@ certificate checks. Grafana connects to Prometheus and does not need the MQLite
 token. See the
 <a href="https://prometheus.io/docs/prometheus/latest/configuration/configuration/">Prometheus authorization reference</a>.</p>
 <h2 id="availability-and-freshness">Availability and freshness</h2>
-<p>The native snapshot includes <code>sampled_at_ms</code>, a collection status, last successful
-collection time and elapsed collection duration. A failed queue read is unavailable,
-not an empty list of healthy queues. Prometheus responds with available in-process
-measurements and <code>mqlite_collection_success 0</code>, omitting queue gauges that could not
-be collected. Failure before the endpoint, including invalid scrape credentials,
-causes Prometheus <code>up</code> to become zero instead.</p>
+<p>The native snapshot includes <code>server_time_ms</code>, <code>sampled_at_ms</code>, a collection
+status, last successful collection time and elapsed collection duration.
+<code>server_time_ms</code> is the broker lifecycle clock read near response assembly; it is
+the reference for TTL, scheduling and lease deadlines. A failed queue read is
+unavailable, not an empty list of healthy queues. Prometheus responds with
+available in-process measurements and <code>mqlite_collection_success 0</code>, omitting
+queue gauges that could not be collected. Failure before the endpoint, including
+invalid scrape credentials, causes Prometheus <code>up</code> to become zero instead.</p>
 <p>Queue gauges come from an exact grouped database query at the reported
 <code>sampled_at_ms</code>. One process-local gauge snapshot is shared across native
 <code>Observe</code>, <code>/metrics</code> and console requests for about 10 seconds. A cache hit
 preserves the original timestamp instead of presenting cached rows as new.
+Every native Observe response reads a fresh <code>server_time_ms</code> after assembling its
+measurements, so it is not part of that cache and must not be substituted for the
+queue sample time.
 Message writes and polling do not extend the fixed cache deadline; a queue create
 or delete invalidates the snapshot. The deadline begins when a refresh finishes,
 so after an unusually slow scan the gauges can trail current messages by the scan
 duration plus roughly one cache window. Per-queue <code>Stats</code> remains a fresh indexed
 read.</p>
+<p>On a current broker, the console&#39;s five-second loop calls only <code>Observe</code>. Managed
+queue and subscription topology is loaded on connection and refreshed explicitly
+or after configuration changes; publishing, receiving, and settlement do not scan
+it. Subscription pages include deleting rows and are grouped by topic in the
+browser. Opening or refreshing one subscription detail performs a bounded lookup
+scoped to that topic. An Observe-unsupported broker instead polls <code>Stats</code> for its
+cached queue set and uses the legacy subscription list without repeatedly probing
+the paged route.</p>
 <p>Counts describe stored states at the sample time, not guaranteed immediate
 delivery eligibility: visibility, TTL, lease expiry awaiting maintenance and
 ordering rules can affect claims. Runtime probes, process counters and queue
@@ -492,6 +505,12 @@ late transaction effects from an older queue-topology epoch. Recreating the same
 name starts a fresh named series while the prior counts remain in the aggregate.
 Include <code>queue=&quot;&quot;</code> when querying total process activity, or filter it out when a
 query is intended to describe current named queues only.</p>
+<p>v0.4.1 corrects the official Go decoder and bundled console to accept this
+documented empty label. v0.4.0 already emitted the aggregate, but its strict
+clients rejected the otherwise complete observation after such a retirement.
+The retired-aggregate event semantics and schema token do not change in v0.4.1.
+The same release adds optional <code>server_time_ms</code>; older clients ignore it, and
+current clients treat its absence from an older broker as unavailable.</p>
 <p>Raw SQL through <code>EngineTx.SQL</code> is supported only for caller-owned tables; those
 writes produce no message-effect events. Direct access to mqlite-owned tables is
 unsupported and can bypass lifecycle and observability invariants.</p>
