@@ -203,6 +203,12 @@ Rules:
   parks the message in scheduled and keeps blocking its ordered group until due
   (strict_fifo: the whole queue). Cancel only removes never-delivered scheduled
   messages, with delivery_count = 0.
+- Message TTL: use top-level ttl_ms for a uniform Send batch or messages[].ttl_ms
+  when item lifetimes differ. A positive queue default is both the default and
+  ceiling. The fixed expires_at_ms is initial visible_at_ms + effective TTL, so a
+  scheduled message starts its TTL when first due. Renew, delayed Abandon and
+  scheduler activation never extend it. Expiry ends normal delivery and then
+  dead-letters or discards according to queue policy.
 - Errors are JSON {"code","message"}: 400 invalid_argument · 401 unauthenticated ·
   403 permission_denied · 404 not_found ·
   409 name_conflict / already_exists / lock_lost / key_conflict /

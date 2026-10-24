@@ -262,10 +262,14 @@ replay an already committed settlement only for the same queue, sequence, token,
 operation and effect-bearing arguments, including after the original lease
 expires.</li>
 <li><strong>Lease, message TTL, and subscription lifetime are different clocks.</strong> The lease
-temporarily fences one delivery attempt. Message TTL bounds how long the row may
-live and can expire it while locked. A fixed subscription lifetime bounds the
-whole backing queue and caps its locks. <code>Renew</code> changes only the lease; it extends
-neither message TTL nor subscription lifetime.</li>
+temporarily fences one delivery attempt. Message TTL bounds normal delivery
+eligibility and can expire a message while locked; expiry moves it to the DLQ by
+default, while <code>dead_letter_on_expire=false</code> discards the row. A positive queue
+default is also the ceiling for an explicit Send TTL. The effective message TTL
+starts at its initial <code>visible_at</code> (the scheduled delivery time for a scheduled
+Send), and delayed Abandon does not restart it. A fixed subscription lifetime
+bounds the whole backing queue and caps its locks. <code>Renew</code> changes only the lease;
+it extends neither message TTL nor subscription lifetime.</li>
 <li><strong>Two redelivery paths.</strong> <code>Abandon</code> is an explicit, client-driven settlement; <strong>lock
 expiry</strong> is automatic — the reaper (~1s) reclaims a lock held past <code>lock_duration</code>
 without settling. Both redeliver while <code>count &lt; max</code> and dead-letter once <code>count ≥ max</code>.</li>

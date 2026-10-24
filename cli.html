@@ -279,12 +279,12 @@ token, then revoke the old ID. No broker restart is needed. See
 <tr>
 <td><code>--max-delivery</code></td>
 <td>0 → 10</td>
-<td>deliveries before a message goes to the DLQ (<code>0</code> inherits 10)</td>
+<td>ordinary Peek-Lock claim budget: the Nth claim is a usable final attempt; only failure of that locked attempt sends it to the DLQ (<code>0</code> inherits 10)</td>
 </tr>
 <tr>
 <td><code>--ttl</code></td>
 <td>0 (unlimited)</td>
-<td>default message TTL</td>
+<td>default <strong>and ceiling</strong> for message TTL; a shorter Send TTL is honored, a longer one is capped</td>
 </tr>
 <tr>
 <td><code>--dedup</code></td>
@@ -425,7 +425,7 @@ echo &#39;{&quot;id&quot;:2}&#39; | mqlite send orders -
 </tr>
 <tr>
 <td><code>--ttl</code></td>
-<td>per-message TTL</td>
+<td>per-message TTL; starts at initial visibility and is capped by a positive queue default</td>
 <td></td>
 </tr>
 </tbody></table>
@@ -613,7 +613,9 @@ mqlite schedule orders &#39;{&quot;id&quot;:1}&#39; --at 2027-01-02T15:04:05Z   
 <td>same as <code>send</code></td>
 </tr>
 </tbody></table>
-<p>Cancel a scheduled message before it activates with <strong><code>cancel &lt;queue&gt; &lt;seq&gt;</code></strong>.</p>
+<p>Cancel a never-delivered scheduled Send (<code>delivery_count=0</code>) before it activates
+with <strong><code>cancel &lt;queue&gt; &lt;seq&gt;</code></strong>. A retry parked in <code>scheduled</code> by delayed
+<code>Abandon</code> has already been delivered and cannot be cancelled this way.</p>
 <h3 id="receive-deferred-queue---seq---fetch-deferred-messages-by-seq"><code>receive-deferred &lt;queue&gt; --seq …</code> — fetch deferred messages by seq</h3>
 <pre><code class="language-bash">mqlite receive-deferred orders --seq 42,57      # re-locks them and prints tokens to settle
 </code></pre>

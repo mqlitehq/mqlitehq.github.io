@@ -138,10 +138,14 @@ Every transition, with its trigger and the condition under which it fires:
   operation and effect-bearing arguments, including after the original lease
   expires.
 - **Lease, message TTL, and subscription lifetime are different clocks.** The lease
-  temporarily fences one delivery attempt. Message TTL bounds how long the row may
-  live and can expire it while locked. A fixed subscription lifetime bounds the
-  whole backing queue and caps its locks. `Renew` changes only the lease; it extends
-  neither message TTL nor subscription lifetime.
+  temporarily fences one delivery attempt. Message TTL bounds normal delivery
+  eligibility and can expire a message while locked; expiry moves it to the DLQ by
+  default, while `dead_letter_on_expire=false` discards the row. A positive queue
+  default is also the ceiling for an explicit Send TTL. The effective message TTL
+  starts at its initial `visible_at` (the scheduled delivery time for a scheduled
+  Send), and delayed Abandon does not restart it. A fixed subscription lifetime
+  bounds the whole backing queue and caps its locks. `Renew` changes only the lease;
+  it extends neither message TTL nor subscription lifetime.
 - **Two redelivery paths.** `Abandon` is an explicit, client-driven settlement; **lock
   expiry** is automatic — the reaper (~1s) reclaims a lock held past `lock_duration`
   without settling. Both redeliver while `count < max` and dead-letter once `count ≥ max`.
@@ -761,9 +765,13 @@ rapid calls do not stack durations. A live exact-request receipt can replay an
 already committed settlement (§7).
 
 The lease is only the ownership window for one attempt. Message TTL is a separate
-row-lifetime deadline and can expire the message while it is locked; a subscription
-lifetime is a resource deadline that caps every lease and eventually removes the
-backing queue. Renewal extends neither one.
+normal-delivery deadline and can expire the message while it is locked; expiry
+dead-letters it by default and removes the row only when discard is configured.
+The queue default is also a ceiling for an explicit message TTL. The effective TTL
+is anchored at the message's initial `visible_at`, so scheduled waiting does not
+consume it and delayed Abandon does not restart it. A subscription lifetime is a
+resource deadline that caps every lease and eventually removes the backing queue.
+Renewal extends neither one.
 
 Receive-and-delete removes the claimed row in the same transaction. It grants no
 lease: both its token and deadline are cleared before the response or attempt record
@@ -1380,11 +1388,35 @@ All paths are `/mqlite.v1.QueueService/<Method>`.
 Enqueue one or more messages in one transaction.
 
 - **Request** `SendRequest`: `queue` (string), `messages` ([Message]),
-  `scheduled_enqueue_time_ms` (int, optional), `ttl_ms` (int, optional).
+  `scheduled_enqueue_time_ms` (int, optional), batch-wide `ttl_ms` (int,
+  optional). Each input Message may instead carry its own `ttl_ms`; do not combine
+  a positive batch-wide value with positive per-message values.
 - **Response** `SendResponse`: `seq_numbers` ([int]) — one per input message, positional.
 - **Dedup:** in a multi-message batch, a slot that hits a dedup conflict (same
   `message_id`, different body) comes back as `0` (skipped) while the rest commit. A
   **single-message** Send instead returns `409 already_exists`.
+
+The batch-wide `ttl_ms` applies to every message and remains the compact form for a
+uniform batch. Per-message `ttl_ms` supports a mixed-TTL batch. When no positive
+batch-wide TTL is present, zero or omission uses the queue default for that item;
+otherwise it inherits the positive batch-wide value. MQLite v0.4.1 clients use
+the batch-wide field when every item has the same TTL and the per-message field
+only when values differ.
+An older strict broker rejects that newer mixed-TTL shape instead of silently
+changing the TTLs.
+
+A positive queue `default_ttl_ms` is both the default and the ceiling: the
+effective TTL is the smaller positive value of the message/request and queue
+values; if only one is positive, that value applies; if neither is positive,
+expiry is unlimited. Negative TTLs and positive values below the wire's 1 ms
+precision are invalid, as is an effective deadline that cannot fit in epoch
+milliseconds. At enqueue, `expires_at_ms = initial visible_at_ms + effective
+TTL`, so a scheduled Send starts its TTL at its scheduled visibility time rather
+than when the request is accepted.
+Later renewal, delayed Abandon, and scheduler activation do not move
+`expires_at_ms`. This message TTL is unrelated to
+`AdminService/Subscribe.ttl_ms`, which is the fixed lifetime of the subscription
+resource and its backing queue.
 
 ```bash
 curl -H "Authorization: Bearer $T" -H 'Content-Type: application/json' \
@@ -1473,9 +1505,10 @@ an eleventh time. `ReceiveDeferred` currently differs, as described below.
 > parked here.
 
 > **Three separate deadlines.** A lock lease controls one attempt. Message TTL controls
-> the stored message and can expire it while locked. A fixed subscription lifetime
-> controls the entire subscription and caps its locks. Renew changes only the lease;
-> it does not extend message TTL or subscription lifetime.
+> normal-delivery eligibility and can expire while locked; expiry dead-letters the
+> message by default or discards it when queue policy says so. A fixed subscription
+> lifetime controls the entire subscription and caps its locks. Renew changes only
+> the lease; it does not extend message TTL or subscription lifetime.
 
 ### CompleteBatch
 
@@ -1720,9 +1753,9 @@ Config is **queue-level**: it's set here, not per `Send`/`Receive`.
 | Field | Type | Default | Meaning |
 |---|---|---|---|
 | `kind` | string | `queue` | `queue` (normal). `subscription` can reconfigure an existing legitimate backing queue through the advanced engine/wire surface, but cannot create a backing queue without a topic mapping; use `Subscribe` to create one. |
-| `lock_duration_ms` | int (ms) | `30000` (30s) | the **peek-lock window**: how long a `Receive`'d message stays invisible to other consumers before its lock expires and it's redelivered. `Renew` uses this duration to extend the same live attempt; the committed deadline is never earlier than the existing one. There is **no per-`Receive` override** — it's fixed by the queue. `0` → the 30s default. |
+| `lock_duration_ms` | int (ms) | `30000` (30s) | the **peek-lock window**. At `locked_until_ms`, new settlement and renewal fail immediately; the reaper later returns the row to `active` below the delivery limit or dead-letters it at the limit. `Renew` uses this duration to extend the same live attempt; the committed deadline is never earlier than the existing one. There is **no per-`Receive` override** — it's fixed by the queue. `0` → the 30s default. |
 | `max_delivery_count` | int | `10` | ordinary delivery-attempt budget. The Nth ordinary Peek-Lock `Receive` is a usable final attempt; it is dead-lettered with `reason=MaxDeliveryCountExceeded` only if that locked attempt is abandoned, its lease expires, or it is recovered on startup at `delivery_count >= N`. `ReceiveDeferred` increments the count but currently does not use N as an admission check. `0` → the default of 10. |
-| `default_ttl_ms` | int (ms) | `0` = unlimited | per-message time-to-live applied when a `Send` doesn't set its own `ttl_ms`. On expiry the message goes to the DLQ or is discarded — see `dead_letter_on_expire`. |
+| `default_ttl_ms` | int (ms) | `0` = unlimited | default **and ceiling** for message TTL. A shorter positive Send `ttl_ms` is honored; a longer one is capped. For a scheduled Send the effective TTL starts at scheduled visibility. On expiry normal delivery ends and the message goes to the DLQ or is discarded — see `dead_letter_on_expire`. |
 | `dead_letter_on_expire` | bool | `true` | on TTL expiry: `true` → move to the DLQ; `false` → discard silently. |
 | `dedup_window_ms` | int (ms) | `0` = **off** | duplicate-detection window. `0` disables dedup entirely (then `message_id` is just metadata). `>0` collapses repeats of the same `message_id` within the window — see [The `Message` object → `message_id`, dedup & uniqueness](#message_id-dedup--uniqueness). |
 | `ordering_mode` | string | `standard` | `standard` (per-`GroupID` FIFO, cross-group parallel; ungrouped messages unordered) · `group_fifo` (same, but every send **must** carry a `group_id` → else `400 group_required`) · `strict_fifo` (one global head-of-line FIFO for the whole queue). See [conformance §5](https://github.com/mqlitehq/mqlite/blob/main/docs/conformance.md#5--ordering-modes). |
@@ -1915,6 +1948,7 @@ empty). "Dir" = whether *you set it on send* (**in**) or *the broker sets it on*
 | `subject` | string | in | free-form **routing label** (= ASB Label). **Not unique**, may repeat or be empty. Split on `.` into `subject_parts` for filters (`"orders.eu.new"` → `["orders","eu","new"]`). |
 | `correlation_id`, `reply_to`, `content_type` | string | in | free-form ASB-style metadata; the broker stores but never interprets them (`content_type` only hints filter `body_json` decoding). |
 | `properties` | object<string,string> | in | custom **string→string** headers, stored verbatim; visible to filters as `properties["k"]`. Values must be strings. |
+| `ttl_ms` | int (ms) | in | optional per-message TTL for mixed-TTL batch Send; without a positive batch-wide TTL, zero/omitted uses the queue default. A positive value must be at least 1 ms and is mutually exclusive with a positive batch-wide `SendRequest.ttl_ms`; all effective TTLs are still capped by a positive queue default. |
 | `seq_number` | int | out | broker-assigned, strictly increasing, **never reused** (may gap); the handle you settle/peek with while the message lives. |
 | `delivery_count` | int | out | how many `Receive` / `ReceiveDeferred` claims have been granted. Settlement, renewal, and scheduled activation do not increment it. |
 | `lock_token` | string | out | fencing token from peek-lock `Receive`; settle with it. |
@@ -2154,8 +2188,8 @@ mqlite create-queue orders --lock 30s --max-delivery 5 --dedup 10m --ordering st
 | Flag | Default | |
 |---|---|---|
 | `--lock` | 0 → 30s | Peek-Lock duration (`0` inherits the engine default, 30s) |
-| `--max-delivery` | 0 → 10 | deliveries before a message goes to the DLQ (`0` inherits 10) |
-| `--ttl` | 0 (unlimited) | default message TTL |
+| `--max-delivery` | 0 → 10 | ordinary Peek-Lock claim budget: the Nth claim is a usable final attempt; only failure of that locked attempt sends it to the DLQ (`0` inherits 10) |
+| `--ttl` | 0 (unlimited) | default **and ceiling** for message TTL; a shorter Send TTL is honored, a longer one is capped |
 | `--dedup` | 0 (off) | dedup window |
 | `--ordering` | `standard` | `standard` / `group_fifo` / `strict_fifo` |
 | `--dlq-max-age` | 0 (inherit) | per-queue DLQ retention: drop dead letters older than this |
@@ -2235,7 +2269,7 @@ echo '{"id":2}' | mqlite send orders -
 | `--group` | group id (ordering / session key) |
 | `--subject` | subject (label) |
 | `--reply-to` | reply-to address |
-| `--ttl` | per-message TTL |
+| `--ttl` | per-message TTL; starts at initial visibility and is capped by a positive queue default |
 
 ### `receive <queue>` — consume (Peek-Lock)
 By default it receives and auto-Completes. Use `--no-ack` to leave messages locked and
@@ -2347,7 +2381,9 @@ mqlite schedule orders '{"id":1}' --at 2027-01-02T15:04:05Z    # or an absolute 
 | `--at` | required | delivery time: RFC3339 or a duration (`30m`, `2h`) |
 | `--file` · `--message-id` · `--group` · `--subject` | | same as `send` |
 
-Cancel a scheduled message before it activates with **`cancel <queue> <seq>`**.
+Cancel a never-delivered scheduled Send (`delivery_count=0`) before it activates
+with **`cancel <queue> <seq>`**. A retry parked in `scheduled` by delayed
+`Abandon` has already been delivered and cannot be cancelled this way.
 
 ### `receive-deferred <queue> --seq …` — fetch deferred messages by seq
 ```bash
@@ -2685,7 +2721,9 @@ and error reference: [api-reference.md](https://github.com/mqlitehq/mqlite/blob/
 v0.4.0 → v0.4.1 is a same-schema replacement. It fixes console, CLI and Go SDK
 observation validation after deleting a resource with process-lifetime message
 effects, exposes the broker lifecycle clock and makes subscription deadlines
-visible in the console; it does not require a database rebuild.
+visible in the console. It also preserves each message TTL in a remote mixed-TTL
+batch; upgrade the v0.4.0 broker and Go client together before relying on that
+additive input shape. It does not require a database rebuild.
 
 The exact supported image is multi-arch (amd64 + arm64):
 
@@ -3613,9 +3651,11 @@ for metric definitions and alerts.
 v0.4.0 → v0.4.1 is a same-schema patch upgrade. It fixes strict Observe clients
 and the console rejecting the documented retired message aggregate after a
 message-bearing queue or subscription is deleted, exposes the lifecycle clock,
-and makes fixed subscription deadlines visible in the console. No database
-rebuild or metric migration is required; still quiesce clients and avoid
-overlapping brokers during the binary replacement.
+and makes fixed subscription deadlines visible in the console. It also preserves
+per-message TTLs in remote mixed-TTL batches; upgrade broker and Go client together
+before relying on that additive input shape. No database rebuild or metric
+migration is required; still quiesce clients and avoid overlapping brokers during
+the binary replacement.
 
 ## Operating boundaries
 

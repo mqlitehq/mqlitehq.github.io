@@ -244,7 +244,7 @@ func main() {
     <a href="concepts.html"><b>FIFO groups</b>standard / group_fifo / strict_fifo; order holds across crashes, lock expiry &amp; delayed retries</a>
     <a href="concepts.html"><b>Topics + subscription lifecycle</b>filtered fan-out · paged inventory · empty-only or explicit force delete · fixed TTL backstop</a>
     <a href="api.html#deletequeue"><b>Safe resource deletion</b>queues and subscriptions default to empty-only; explicit force discards retained states; names stay reserved during cleanup</a>
-    <a href="concepts.html"><b>Scheduling &amp; TTL</b>deliver later; cancel a never-delivered scheduled message; per-message TTL capped by the queue</a>
+    <a href="concepts.html"><b>Scheduling &amp; TTL</b>deliver later; cancel a never-delivered scheduled message; TTL starts at initial visibility and is capped by the queue</a>
     <a href="concepts.html"><b>Duplicate detection</b>message_id window collapses repeats; conflicts fail loud (409)</a>
     <a href="concepts.html"><b>Defer</b>set a message aside, fetch it back by sequence number</a>
     <a href="observability.html"><b>Ops built in</b>/ui console · unified Observe and /metrics · 26 CLI commands · 22 MCP tools · Grafana starter</a>

@@ -24,7 +24,10 @@ binary/database pair and starting v0.4.1 with a fresh database.
   default — a token is auto-generated if none is set).
 - Storage: local SQLite (pure-Go driver) or remote Turso/libSQL. A historical
   co-located Turso workload measured about 45 ms per durable commit; remeasure
-  the current version, database and region before sizing.
+  the current version, database and region before sizing. Both backends share
+  successful queue semantics, validation, state transitions and logical errors;
+  latency, availability, remote outcome_unknown failures and storage operations
+  have different envelopes.
 - Wire protocol: JSON over HTTP, one POST per operation, 29 routes in source v0.4.1 under
   /mqlite.v1.QueueService/*, /mqlite.v1.AdminService/* and /mqlite.v1.AuthService/*. Message bodies are
   base64 in JSON. GET / is an open discovery card listing every endpoint.
@@ -92,8 +95,12 @@ binary/database pair and starting v0.4.1 with a fresh database.
   details and recovery status. Optional private diagnostic logs retain redacted
   details across restarts; cumulative error counts are not current health.
 - Scheduling: deliver at a time (Schedule). Cancel only removes never-delivered
-  scheduled messages (delivery_count = 0), not delayed retries. Per-message TTL is
-  capped by the queue default. Duplicate detection by message_id within a window.
+  scheduled messages (delivery_count = 0), not delayed retries. Message TTL starts
+  at initial visibility, ends normal delivery and then dead-letters or discards by
+  queue policy. A positive queue default is both the default and ceiling; Renew,
+  delayed Abandon and scheduler activation never move the fixed deadline. Mixed
+  HTTP batches use messages[].ttl_ms; a uniform batch may use the top-level field.
+  Duplicate detection is by message_id within a window.
 - Transactional outbox (embedded-only): business write + enqueue commit in ONE
   SQLite transaction via mq.Tx.
 - Ops: /ui embedded admin console, opt-in authenticated /metrics Prometheus

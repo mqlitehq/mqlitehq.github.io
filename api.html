@@ -413,12 +413,33 @@ which case <code>/ui</code> 404s and the card&#39;s optional <code>ui</code> fie
 <p>Enqueue one or more messages in one transaction.</p>
 <ul>
 <li><strong>Request</strong> <code>SendRequest</code>: <code>queue</code> (string), <code>messages</code> ([Message]),
-<code>scheduled_enqueue_time_ms</code> (int, optional), <code>ttl_ms</code> (int, optional).</li>
+<code>scheduled_enqueue_time_ms</code> (int, optional), batch-wide <code>ttl_ms</code> (int,
+optional). Each input Message may instead carry its own <code>ttl_ms</code>; do not combine
+a positive batch-wide value with positive per-message values.</li>
 <li><strong>Response</strong> <code>SendResponse</code>: <code>seq_numbers</code> ([int]) — one per input message, positional.</li>
 <li><strong>Dedup:</strong> in a multi-message batch, a slot that hits a dedup conflict (same
 <code>message_id</code>, different body) comes back as <code>0</code> (skipped) while the rest commit. A
 <strong>single-message</strong> Send instead returns <code>409 already_exists</code>.</li>
 </ul>
+<p>The batch-wide <code>ttl_ms</code> applies to every message and remains the compact form for a
+uniform batch. Per-message <code>ttl_ms</code> supports a mixed-TTL batch. When no positive
+batch-wide TTL is present, zero or omission uses the queue default for that item;
+otherwise it inherits the positive batch-wide value. MQLite v0.4.1 clients use
+the batch-wide field when every item has the same TTL and the per-message field
+only when values differ.
+An older strict broker rejects that newer mixed-TTL shape instead of silently
+changing the TTLs.</p>
+<p>A positive queue <code>default_ttl_ms</code> is both the default and the ceiling: the
+effective TTL is the smaller positive value of the message/request and queue
+values; if only one is positive, that value applies; if neither is positive,
+expiry is unlimited. Negative TTLs and positive values below the wire&#39;s 1 ms
+precision are invalid, as is an effective deadline that cannot fit in epoch
+milliseconds. At enqueue, <code>expires_at_ms = initial visible_at_ms + effective TTL</code>, so a scheduled Send starts its TTL at its scheduled visibility time rather
+than when the request is accepted.
+Later renewal, delayed Abandon, and scheduler activation do not move
+<code>expires_at_ms</code>. This message TTL is unrelated to
+<code>AdminService/Subscribe.ttl_ms</code>, which is the fixed lifetime of the subscription
+resource and its backing queue.</p>
 <pre><code class="language-bash">curl -H &quot;Authorization: Bearer $T&quot; -H &#39;Content-Type: application/json&#39; \
   --data &quot;{\&quot;queue\&quot;:\&quot;orders\&quot;,\&quot;messages\&quot;:[{\&quot;body\&quot;:\&quot;$(printf hi|base64)\&quot;}]}&quot; \
   &quot;$BASE_URL/mqlite.v1.QueueService/Send&quot;
@@ -525,9 +546,10 @@ parked here.</p>
 </blockquote>
 <blockquote>
 <p><strong>Three separate deadlines.</strong> A lock lease controls one attempt. Message TTL controls
-the stored message and can expire it while locked. A fixed subscription lifetime
-controls the entire subscription and caps its locks. Renew changes only the lease;
-it does not extend message TTL or subscription lifetime.</p>
+normal-delivery eligibility and can expire while locked; expiry dead-letters the
+message by default or discards it when queue policy says so. A fixed subscription
+lifetime controls the entire subscription and caps its locks. Renew changes only
+the lease; it does not extend message TTL or subscription lifetime.</p>
 </blockquote>
 <h3 id="completebatch">CompleteBatch</h3>
 <p>Complete many messages in <strong>one round-trip</strong> — settle a whole received batch without
@@ -768,7 +790,7 @@ Config is <strong>queue-level</strong>: it&#39;s set here, not per <code>Send</c
 <td><code>lock_duration_ms</code></td>
 <td>int (ms)</td>
 <td><code>30000</code> (30s)</td>
-<td>the <strong>peek-lock window</strong>: how long a <code>Receive</code>&#39;d message stays invisible to other consumers before its lock expires and it&#39;s redelivered. <code>Renew</code> uses this duration to extend the same live attempt; the committed deadline is never earlier than the existing one. There is <strong>no per-<code>Receive</code> override</strong> — it&#39;s fixed by the queue. <code>0</code> → the 30s default.</td>
+<td>the <strong>peek-lock window</strong>. At <code>locked_until_ms</code>, new settlement and renewal fail immediately; the reaper later returns the row to <code>active</code> below the delivery limit or dead-letters it at the limit. <code>Renew</code> uses this duration to extend the same live attempt; the committed deadline is never earlier than the existing one. There is <strong>no per-<code>Receive</code> override</strong> — it&#39;s fixed by the queue. <code>0</code> → the 30s default.</td>
 </tr>
 <tr>
 <td><code>max_delivery_count</code></td>
@@ -780,7 +802,7 @@ Config is <strong>queue-level</strong>: it&#39;s set here, not per <code>Send</c
 <td><code>default_ttl_ms</code></td>
 <td>int (ms)</td>
 <td><code>0</code> = unlimited</td>
-<td>per-message time-to-live applied when a <code>Send</code> doesn&#39;t set its own <code>ttl_ms</code>. On expiry the message goes to the DLQ or is discarded — see <code>dead_letter_on_expire</code>.</td>
+<td>default <strong>and ceiling</strong> for message TTL. A shorter positive Send <code>ttl_ms</code> is honored; a longer one is capped. For a scheduled Send the effective TTL starts at scheduled visibility. On expiry normal delivery ends and the message goes to the DLQ or is discarded — see <code>dead_letter_on_expire</code>.</td>
 </tr>
 <tr>
 <td><code>dead_letter_on_expire</code></td>
@@ -1027,6 +1049,12 @@ empty). &quot;Dir&quot; = whether <em>you set it on send</em> (<strong>in</stron
 <td>object&lt;string,string&gt;</td>
 <td>in</td>
 <td>custom <strong>string→string</strong> headers, stored verbatim; visible to filters as <code>properties[&quot;k&quot;]</code>. Values must be strings.</td>
+</tr>
+<tr>
+<td><code>ttl_ms</code></td>
+<td>int (ms)</td>
+<td>in</td>
+<td>optional per-message TTL for mixed-TTL batch Send; without a positive batch-wide TTL, zero/omitted uses the queue default. A positive value must be at least 1 ms and is mutually exclusive with a positive batch-wide <code>SendRequest.ttl_ms</code>; all effective TTLs are still capped by a positive queue default.</td>
 </tr>
 <tr>
 <td><code>seq_number</code></td>
