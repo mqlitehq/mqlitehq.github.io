@@ -180,8 +180,8 @@
     <div class="why"><h3><em>4</em>Service Bus flavor, not a clone</h3>
       <p>Peek-Lock, <code>group_id</code> sessions, DLQ + redrive, scheduling and duplicate detection feel
       familiar from Azure Service Bus — in an idiomatic-Go shape, with the
-      <a href="concepts.html">whole model documented</a> and every claim pinned by a
-      <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/conformance.md">conformance suite</a>.</p></div>
+      <a href="concepts.html">whole model documented</a> and its public compatibility
+      invariants pinned by a <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/conformance.md">conformance suite</a>.</p></div>
   </div>
 </section>
 
@@ -192,9 +192,9 @@
       <p>Because the queue <em>is</em> your SQLite database, a business write and its event
       commit in <strong>one transaction</strong>. The message exists if and only if the order does —
       no dual-write race, no CDC pipeline, no poller.</p>
-      <div class="quote"><b>Embedded-only, and nothing else gives you this shape:</b>
-      external brokers can't join your DB transaction, and Postgres-based queues need a
-      Postgres. Here it's one file.</div>
+      <div class="quote"><b>Embedded-only: this shape avoids a separate broker or Postgres dependency.</b>
+      External brokers can't join your SQLite transaction, and Postgres-based queues need a
+      Postgres. Here the business data and queue share one file.</div>
     </div>
     <pre><code class="language-go">package main
 
@@ -254,18 +254,18 @@ func main() {
 
 <section class="land" id="honest">
   <h2># the honest part</h2>
-  <p class="lede">Published historical measurements from specific workloads; remeasure the current release with your payloads, concurrency and monitoring enabled before sizing production. Full method: <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/benchmark.md">docs/benchmark.md</a>.</p>
+  <p class="lede">Published historical measurements from specific workloads; remeasure the current release with your payloads, concurrency and monitoring enabled before sizing production. Methods and limits: <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/benchmark.md">docs/benchmark.md</a>. Historical Turso environment and comparison: <a href="https://github.com/mqlitehq/mqlite/pull/67">PR #67</a>.</p>
   <div class="numbers"><table>
     <tr><th>Setup</th><th>Measured</th><th>Read this as</th></tr>
     <tr><td>Local file DB, 12-core machine</td>
         <td class="num">15,926–17,963 msg/s single · 35,146 batched</td>
         <td>historical local results; rerun the workload before sizing</td></tr>
     <tr><td>1-vCPU / 256 MB cloud box, embedded engine</td>
-        <td class="num">6.0–6.7k msg/s batched · 1,507 msg/s drain</td>
+        <td class="num">6.0–6.7k msg/s batched</td>
         <td>batching amortized commit cost in this measured setup</td></tr>
     <tr><td>Remote Turso (co-located)</td>
-        <td class="num">~45 ms per durable commit</td>
-        <td>commit latency dominated this measured remote path</td></tr>
+        <td class="num">~45 ms p50 per single durable send</td>
+        <td>historical co-located run; remote commit latency dominated this path</td></tr>
     <tr><td>Memory / disk</td>
         <td class="num">27–34 MB peak RSS · freed DB pages are reusable</td>
         <td>file reclamation is gradual; size disk for peak backlog and measure your workload</td></tr>
