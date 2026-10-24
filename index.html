@@ -7,8 +7,10 @@
 <meta name="description" content="Peek-Lock delivery, retries, DLQ, scheduling, dedup, FIFO groups and topic fan-out — embedded in your Go process or served as a tiny broker. Pure Go, no CGO, one SQLite file.">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="assets/site.css">
+<link rel="stylesheet" href="assets/demo.css">
 <script src="assets/highlight.min.js" defer></script>
 <script src="assets/site.js" defer></script>
+<script src="assets/demo.js" defer></script>
 <style>
   /* landing-only */
   .hero { padding: 74px 0 30px; }
@@ -123,6 +125,7 @@
   and must not be deployed.</p>
   <div class="cta">
     <a class="btn primary" href="#quickstart">Quickstart</a>
+    <a class="btn ghost" href="#demo">Watch one message</a>
     <a class="btn ghost" href="concepts.html">Read the concepts</a>
     <a class="btn ghost" href="operations.html">Production operations</a>
     <a class="btn ghost" href="access-keys.html">Access keys</a>
@@ -237,7 +240,85 @@ func main() {
 <section class="land" id="how">
   <h2># how it works</h2>
   <p class="lede">Two delivery targets, one storage story: a topic stores nothing — the thing that stores, is consumed, and can dead-letter is always a queue.</p>
-  <figure class="fig"><img src="assets/fig-overview.svg" alt="mqlite model: send straight to a queue (active → locked → consumer, with a DLQ side-loop), or publish to a topic that fans out to per-subscription backing queues; a message matching no subscription is dropped." style="width:100%;display:block"></figure>
+  <section class="product-demo" id="demo" data-demo data-step="0" aria-labelledby="demo-title">
+    <header class="demo-head">
+      <div>
+        <span class="demo-kicker">animated contract · 9 seconds</span>
+        <h3 id="demo-title">one publish · two independent deliveries</h3>
+      </div>
+      <div class="demo-controls" data-demo-controls>
+        <span class="demo-progress" data-demo-progress>step 1 / 8</span>
+        <button type="button" data-demo-toggle>play animation</button>
+        <button type="button" data-demo-replay>replay</button>
+      </div>
+    </header>
+
+    <div class="demo-visual" aria-hidden="true">
+      <div class="demo-graph">
+        <div class="demo-node producer" data-demo-node="producer">
+          <span class="demo-node-kind">publisher</span>
+          <strong>order.created</strong>
+          <small>message_id order-42</small>
+        </div>
+        <div class="demo-edge" data-demo-edge="publish"><span>publish</span></div>
+        <div class="demo-node topic" data-demo-node="topic">
+          <span class="demo-node-kind">implicit topic</span>
+          <strong>events</strong>
+          <small>routes · stores 0</small>
+        </div>
+        <div class="demo-branch" data-demo-edge="fanout"><span>fan-out</span></div>
+        <div class="demo-stack queues">
+          <div class="demo-node queue" data-demo-node="audit-queue">
+            <span class="demo-node-kind">subscription queue</span>
+            <strong>audit</strong>
+            <small data-demo-value="audit-state">waiting for copy</small>
+          </div>
+          <div class="demo-node queue" data-demo-node="fulfillment-queue">
+            <span class="demo-node-kind">subscription queue</span>
+            <strong>fulfillment</strong>
+            <small data-demo-value="fulfillment-state">waiting for copy</small>
+          </div>
+        </div>
+        <div class="demo-edge-stack">
+          <div class="demo-edge" data-demo-edge="audit-claim"><span>receive</span></div>
+          <div class="demo-edge" data-demo-edge="fulfillment-claim"><span>receive</span></div>
+        </div>
+        <div class="demo-stack consumers">
+          <div class="demo-node consumer" data-demo-node="audit-consumer">
+            <span class="demo-node-kind">audit worker</span>
+            <strong data-demo-value="audit-action">waiting</strong>
+            <small>independent settlement</small>
+          </div>
+          <div class="demo-node consumer" data-demo-node="fulfillment-consumer">
+            <span class="demo-node-kind">fulfillment worker</span>
+            <strong data-demo-value="fulfillment-action">waiting</strong>
+            <small>independent settlement</small>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="demo-caption">
+      <span data-demo-step-label>01 · publish</span>
+      <p data-demo-caption>The publisher sends order.created to the implicit events topic.</p>
+    </div>
+
+    <ol class="demo-transcript">
+      <li data-demo-step="0"><b>01 · publish</b><span>The publisher sends <code>order.created</code> to the implicit <code>events</code> topic.</span></li>
+      <li data-demo-step="1"><b>02 · route</b><span>The topic stores nothing. Both subscription filters match this message.</span></li>
+      <li data-demo-step="2"><b>03 · copy</b><span><code>audit</code> and <code>fulfillment</code> each receive an independent backing-queue copy: same message ID, different sequence numbers.</span></li>
+      <li data-demo-step="3"><b>04 · claim</b><span>Each <code>Receive</code> changes its copy from active to locked and increments <code>delivery_count</code> to 1.</span></li>
+      <li data-demo-step="4"><b>05 · settle differently</b><span><code>audit</code> completes, so only its message copy is removed; the subscription remains. Below the delivery limit, <code>fulfillment</code> abandons with delay, moving its copy locked → scheduled without incrementing the count.</span></li>
+      <li data-demo-step="5"><b>06 · due</b><span>The scheduler returns the delayed copy to active. Its delivery count is still 1.</span></li>
+      <li data-demo-step="6"><b>07 · retry</b><span>The next <code>Receive</code> locks the copy and increments <code>delivery_count</code> to 2.</span></li>
+      <li data-demo-step="7"><b>08 · complete</b><span>The retry completes, so that message copy is removed too; both subscriptions remain. Delivery is at-least-once, so handlers must remain idempotent.</span></li>
+    </ol>
+
+    <noscript>
+      <figure class="fig"><img src="assets/fig-overview.svg" alt="mqlite model: publish routes independent copies to subscription backing queues; receive locks a copy and settlement removes or reschedules it." style="width:100%;display:block"></figure>
+    </noscript>
+    <p class="demo-note">Animation timing is illustrative, not broker latency. A final ordinary claim may still renew and complete at the delivery limit. It enters the DLQ if explicitly rejected, or if that final lock is abandoned, expires, or is recovered after restart.</p>
+  </section>
   <h3 class="subh">the source version described here is covered by the conformance TCK — details in <a href="concepts.html">Concepts</a>; the full construction story (schema, locks, fencing, recovery) is in <a href="internals.html">Internals</a></h3>
   <div class="sem">
     <a href="concepts.html"><b>Peek-Lock delivery</b>receive increments the count; renew extends the same attempt; settle before expiry</a>

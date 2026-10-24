@@ -34,7 +34,9 @@
 
   <!-- failure side-loop: DLQ, closed back via redrive / out via purge -->
   <line x1="205" y1="188" x2="270" y2="182" stroke="#7a786f" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arr)"/>
-  <text x="237" y="172" text-anchor="middle" font-size="10" fill="#98968c">on failure</text>
+  <text x="237" y="157" text-anchor="middle" font-size="8.5" fill="#98968c">reject / failed final lock</text>
+  <text x="237" y="168" text-anchor="middle" font-size="8.5" fill="#98968c">message TTL expiry</text>
+  <text x="237" y="179" text-anchor="middle" font-size="8.5" fill="#98968c">(when DLQ-on-expire)</text>
   <rect x="270" y="160" width="152" height="36" rx="6" fill="rgba(230,103,103,0.10)" stroke="#e66767" stroke-width="1.5"/>
   <text x="346" y="178" text-anchor="middle" dominant-baseline="central" font-size="13" font-weight="600" fill="#f2f1ea">dead-letter (DLQ)</text>
   <path d="M 346 160 L 346 147 L 207 147" fill="none" stroke="#7a786f" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arr)"/>
