@@ -34,6 +34,7 @@ export const BUNDLE_FILES = [
   'examples.md',
 ];
 export const GENERATED_FILES = [...PAGES.map(([, out]) => out), 'llms-full.txt', 'site-metadata.json', 'assets/highlight.min.js'];
+export const HANDWRITTEN_RELEASE_FILES = ['index.html', 'agents.html', 'llms.txt'];
 
 const read = (root, path) => readFileSync(resolve(root, path), 'utf8');
 const requireValue = (condition, message) => {
@@ -188,6 +189,31 @@ export function checkClaims(metadata, root = site) {
     }
   }
   requireValue(Object.keys(counts).every((key) => seen.has(key)), 'site is missing a source-derived API/MCP/CLI count');
+  const source = `v${metadata.sourceVersion}`;
+  const latest = metadata.latestRelease;
+  const escape = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const releaseStatus = new RegExp(
+    `(?:unreleased.{0,160}(?:source\\s+)?${escape(source)}|(?:source\\s+)?${escape(source)}.{0,160}unreleased)`,
+    'i',
+  );
+  for (const file of HANDWRITTEN_RELEASE_FILES) {
+    requireValue(existsSync(resolve(root, file)), `${file}: missing hand-written release facts`);
+    const visible = read(root, file).replace(/<[^>]*>/g, '').replace(/\*\*/g, '').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ');
+    const sourceClaims = [...visible.matchAll(/\bsource\s+(v\d+\.\d+\.\d+(?:-rc\.\d+)?)\b/gi)];
+    requireValue(sourceClaims.length > 0, `${file}: missing source version ${source}`);
+    for (const match of sourceClaims) {
+      requireValue(match[1] === source, `${file}: incorrect source version ${match[1]} (expected ${source})`);
+    }
+    requireValue(
+      new RegExp(`\\blatest supported release(?::| is)?\\s+${escape(latest)}\\b`, 'i').test(visible),
+      `${file}: missing latest supported release ${latest}`,
+    );
+    const expectedUnreleased = latest !== source;
+    requireValue(
+      releaseStatus.test(visible) === expectedUnreleased,
+      `${file}: source ${source} must be described as ${expectedUnreleased ? 'unreleased' : 'released'}`,
+    );
+  }
   const bundle = read(root, 'llms-full.txt');
   requireValue(!/\]\((\.\.\/|[a-z0-9_-]+\.md)/.test(bundle), 'llms-full.txt has relative source links');
 }

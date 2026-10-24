@@ -25,9 +25,9 @@ binary/database pair and starting v0.4.0 with a fresh database.
   and `mqlite serve` (HTTP broker, default :6754, Bearer-token auth, secure by
   default — a token is auto-generated if none is set).
 - Storage: local SQLite (pure-Go driver) or remote Turso/libSQL. A historical
-  co-located Turso workload measured about 45 ms per durable commit; remeasure
-  the current version, database and region before sizing. Both backends share
-  successful queue semantics, validation, state transitions and logical errors;
+  co-located Turso workload measured about 45 ms p50 for a single durable Send;
+  remeasure the current version, database and region before sizing. Both backends
+  share successful queue semantics, validation, state transitions and logical errors;
   latency, availability, remote outcome_unknown failures and storage operations
   have different envelopes.
 - Wire protocol: JSON over HTTP, one POST per operation, 29 routes in source v0.4.1 under

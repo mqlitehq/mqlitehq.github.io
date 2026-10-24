@@ -64,8 +64,10 @@ Before committing, regenerate against the canonical checkout after its docs merg
 metadata, the complete LLM bundle and the vendored highlighter; tests pin that
 entire inventory and verify rejection of stale content. It also checks every
 advertised route/tool/command count against the source, not just one matching
-mention, and verifies local links, assets and page anchors. Update hand-written
-release facts deliberately when a new release lands.
+mention. The three hand-written entry points must each match the source version,
+latest supported release and released/unreleased state. Local links, assets and
+page anchors are verified too, so update those hand-written release facts
+deliberately when a new release lands.
 
 Generated pages preserve the Markdown's ASCII figures directly. Keyword-based SVG
 replacement is intentionally absent, so a source diagram change is immediately

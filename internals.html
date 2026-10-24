@@ -465,8 +465,10 @@ matrix. This tests <em>process</em> death, not power loss.</li>
 hear it from us:</p>
 <ul>
 <li><strong>One writer, one node.</strong> No clustering, no failover replicas, no horizontal
-write scaling. (Remote Turso adds storage-level durability and geo-replication
-— at ~45 ms per durable commit, it buys safety, not speed.)</li>
+write scaling. (Remote Turso adds storage-level durability and geo-replication.
+One <a href="https://github.com/mqlitehq/mqlite/pull/67">historical co-located comparison</a>
+measured ~45 ms p50 for a single durable <code>Send</code>; remeasure your current version,
+database and region before sizing. It buys safety, not speed.)</li>
 <li><strong>Write amplification is physics.</strong> A single 256-byte send costs ~9.7 KB of
 WAL+index writes; batching amortizes it to ~1 KB. That&#39;s SQLite&#39;s B-tree
 telling you to batch — so batch.</li>
