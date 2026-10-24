@@ -167,10 +167,15 @@ binary/database pair and starting v0.4.0 with a fresh database.
 - [Deployment](deployment.html): installation, persistent storage, tokens and TLS.
 - [Observability](observability.html): canonical measurements, availability, credentials, dashboard and alerts.
 - [Cloud monitoring](observability-cloud.html): private authenticated collection on Fly.io, Alibaba Cloud, Azure and Kubernetes.
+- [Turso semantics](https://github.com/mqlitehq/mqlite/blob/main/docs/turso.md): shared business contract, remote failure modes and the one-owner boundary.
+- [Retention](https://github.com/mqlitehq/mqlite/blob/main/docs/retention.md): every authorized removal path, cleanup budget and storage-reclamation boundary.
+- [Benchmark evidence](https://github.com/mqlitehq/mqlite/blob/main/docs/benchmark.md): reproducible workloads, measured results and limits on what they prove.
+- [Conformance contract](https://github.com/mqlitehq/mqlite/blob/main/docs/conformance.md): externally visible invariants and the tests that enforce them.
+- [Dependency policy](https://github.com/mqlitehq/mqlite/blob/main/docs/dependencies.md): the Go 1.21 floor, deliberate pins and security checks.
 - [For AI agents](agents.html): MCP server setup and a
   copy-paste system prompt for driving the raw HTTP API.
-- [Full docs bundle](llms-full.txt): concepts + internals + API + CLI + access keys + MCP + examples
-  + operations + deployment + observability + cloud monitoring as one plain-markdown file.
+- [Full docs bundle](llms-full.txt): every document above plus MCP and examples as
+  one plain-markdown file, with source boundaries and version metadata preserved.
 
 ## Source
 

@@ -42,7 +42,12 @@ test('the complete generated output and source inventories are explicit', () => 
     ['cli.md', 'cli.html'], ['access-keys.md', 'access-keys.html'], ['deployment.md', 'deployment.html'], ['observability.md', 'observability.html'],
     ['observability-cloud.md', 'observability-cloud.html'], ['operations.md', 'operations.html'],
   ]);
-  assert.deepEqual(BUNDLE_FILES, ['concepts.md', 'internals.md', 'api-reference.md', 'cli.md', 'access-keys.md', 'deployment.md', 'observability.md', 'observability-cloud.md', 'operations.md', 'mcp.md', 'examples.md']);
+  assert.deepEqual(BUNDLE_FILES, [
+    'concepts.md', 'internals.md', 'api-reference.md', 'cli.md', 'access-keys.md',
+    'deployment.md', 'observability.md', 'observability-cloud.md', 'operations.md',
+    'turso.md', 'retention.md', 'benchmark.md', 'conformance.md', 'dependencies.md',
+    'mcp.md', 'examples.md',
+  ]);
   assert.deepEqual(GENERATED_FILES, ['concepts.html', 'internals.html', 'api.html', 'cli.html', 'access-keys.html', 'deployment.html', 'observability.html', 'observability-cloud.html', 'operations.html', 'llms-full.txt', 'site-metadata.json', 'assets/highlight.min.js']);
 });
 

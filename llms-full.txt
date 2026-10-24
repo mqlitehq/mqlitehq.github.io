@@ -3990,6 +3990,1467 @@ in this release, so do not improvise a direct SQL table copy between schemas.
 rules behind these procedures.
 
 
+<!-- ===== mqlite main · source v0.4.1; latest supported release v0.4.0 · docs/turso.md ===== -->
+
+# Turso / libSQL: concurrency & embedded replicas (MQLITE-4)
+
+MQLite runs the same engine on a local SQLite file or a remote
+[Turso](https://turso.tech)/libSQL database — set `MQLITE_DB=libsql://<db>.turso.io`
+(+ `MQLITE_DB_AUTH_TOKEN`). The remote path is **CGO-free**: it speaks Hrana over
+HTTP via `libsql-client-go`, so the single static binary still has no native deps.
+This note records how concurrency is handled and why embedded replicas are *not*
+used.
+
+## Backend parity contract
+
+Storage selection is a deployment detail, not a second API mode. Given the same
+committed state, broker time and request, local SQLite and remote Turso/libSQL
+MUST produce the same successful result, validation outcome, message/resource
+state transition and logical sentinel error. The HTTP status/code mapping and Go
+SDK `errors.Is` behavior therefore do not change when an operator changes the
+broker's database DSN. In particular, scheduling, delivery counts, settlement,
+ordering, deduplication, topic fan-out, deletion and TTL use one engine contract.
+
+This is parity of deterministic queue behavior, not a claim that a local file and
+a network service have identical failure or performance envelopes. The documented
+differences are operational or failure-boundary concerns:
+
+- latency, throughput and temporary availability caused by the remote round trip;
+- remote transport/storage failures, including `ErrOutcomeUnknown` when a write
+  may have committed but its acknowledgement was lost;
+- retry and cancellation mechanics during a storage fault — notably, a remote
+  transactional-outbox callback may run more than once and must keep its effects
+  transaction-bound;
+- deployment and maintenance controls: the local file lock, SQLite synchronous
+  mode, file-size accounting and compaction have no identical remote operation;
+  Turso still requires one logical MQLite owner but cannot use that local OS lock;
+  and
+- explicitly operational observation fields such as backend identity and
+  connection-pool data.
+
+Those differences MUST NOT silently change a successful operation's queue
+semantics or turn a documented logical error into a backend-specific one. The
+hermetic suite locks the shared engine and error mappings on every PR; the
+credentials-gated nightly suite compares representative lifecycle, concurrency,
+settlement, access-key and TTL contracts with a real Turso database.
+
+## Concurrency model
+
+MQLite has a **single logical owner** in both modes: each database has exactly one
+active MQLite broker or embedded `Engine`. Replace that owner stop-then-start after
+confirming the old process has exited. Do not use rolling overlap against the same
+database. What differs between storage modes is the connection pool:
+
+```
+┌─────────────────┬──────────────────────────┬────────────────────────────────────┐
+│                 │ local file / :memory:    │ remote Turso / libSQL              │
+├─────────────────┼──────────────────────────┼────────────────────────────────────┤
+│ write ownership │ 1 conn = local writer    │ one broker owns a 4-connection     │
+│                 │ (file lock, MQLITE-6)    │ pool; Turso serializes commits     │
+│ writer pool     │ MaxOpen=1, MaxIdle=1     │ MaxOpen=4, MaxIdle=2               │
+│ observation     │ file: 1 read-only conn;  │ existing provider pool             │
+│                 │ :memory: writer conn     │                                    │
+│ idle handling   │ ConnMaxLifetime=0        │ IdleTime=3s, Lifetime=55s          │
+│ why             │ atomic claims, no        │ recycle conns before Turso closes  │
+│                 │ contention               │ idle Hrana streams                 │
+└─────────────────┴──────────────────────────┴────────────────────────────────────┘
+```
+
+A small remote pool is safe within that one MQLite process because the Turso
+primary serializes writes across its connections; this does not make two brokers
+or embedded `Engine` instances safe. The pool is *more* resilient than a single
+connection because a server-closed idle stream is dropped and replaced instead of
+reused. Each broker process shares its expensive all-queue observation query for
+about 10 seconds on both local and remote backends; separate brokers do not share
+that cache. Per-queue `Stats` and each observation's lightweight storage probe
+still use the backend shown above.
+
+## Connection resilience (the remote hardening)
+
+Turso closes idle Hrana streams; `libsql-client-go` then returns a **wrapped**
+`driver.ErrBadConn` (`"stream is closed: driver: bad connection"`). Because it is
+wrapped, `database/sql` will not transparently retry it, so MQLite does:
+
+- **Bounded retry on transient errors only** — `maxConnAttempts = 6`.
+- **Reads retry on any transport drop.** `retryable = remote && (isConnErr || isBusyErr)`
+  gates `query`/`queryRowScan`: a read is idempotent, so replaying it on a fresh pooled
+  connection is always safe. `isConnErr` spans the whole transport-failure family —
+  `driver.ErrBadConn`, a closed Hrana stream, and their siblings `EOF` / `broken pipe` /
+  `i/o timeout` (behind a proxy like Fly a dropped connection reads as `EOF`, not `RST`).
+- **Writes retry only when the statement provably never applied** — `retryableWrite =
+  remote && (ErrBadConn || isBusyErr)`. A closed stream (`ErrBadConn`) or a `SQLITE_BUSY`
+  (lock never acquired) guarantees the write never ran, so replaying `exec` / the `inTx`
+  commit cannot double-apply. The retry is bounded by `maxConnAttempts`; exhaustion is
+  returned to the caller. The `busy_timeout(5000)` DSN pragma belongs to local modernc
+  SQLite connections and does not apply to Turso/libSQL.
+- **A lost write acknowledgement is _outcome-unknown_, not retried** (MQLITE-59). Any
+  other transport drop on a write/commit — the primary may have durably committed before
+  the ack was lost — surfaces as `ErrOutcomeUnknown` (HTTP `503 outcome_unknown`) instead
+  of being blindly replayed into a double-insert. The caller reconciles by
+  `message_id`/dedup before retrying; transparent recovery would need durable per-op
+  idempotency, which is deferred. **`errors.Is(err, mqlite.ErrOutcomeUnknown)` works in
+  both embedded and client mode.**
+- **Never retry a logical storage error.** A constraint violation or `no such table`
+  is final inside the engine. At the HTTP client boundary, lifecycle deletion is
+  more conservative: every HTTP 5xx is `ErrOutcomeUnknown`, because a gateway can
+  synthesize that response after the broker committed and its acknowledgement was
+  lost. Local stores never retry at all (a single conn is the single writer).
+
+> **Transport caveat.** The outcome-unknown guarantee holds for the documented remote
+> transport `libsql://` (Hrana-over-HTTP). The `ws://`/`wss://` transports can wrap a
+> response-read failure as `ErrBadConn`, under which a lost commit ack *would* be
+> replayed — prefer `libsql://` for at-least-once remote writes.
+
+The classifier that decides all this is unit-tested hermetically — see
+`TestIsConnErr` / `TestRetryableWrite` / `TestRetryableAndAttempts` in
+`engine/storage_test.go`, and the broker→SDK propagation in `TestFailOutcomeUnknown`
+(server) + `TestRemoteOutcomeUnknownPropagates` (root) — so the retry contract can't
+silently drift without creds.
+
+Ordinary and AttemptID `Receive` transactions issue their fenced
+`UPDATE messages ... RETURNING` before reading queue or receive-attempt metadata.
+This avoids upgrading a deferred read snapshot after another pooled connection has
+committed a write. The first update also verifies the queue lifecycle, absolute
+subscription expiry and claim-relevant cached configuration. If it returns no row,
+the same write transaction reads current metadata to distinguish an empty queue,
+deletion/expiry, stale configuration and an AttemptID replay. Batch continuation
+then uses the smaller indexed claim statement.
+
+This write-first shape addresses claim transactions in one broker or embedded
+`Engine`. Remote retries remain bounded, other operations may still surface
+`SQLITE_BUSY`, and the change does not make overlapping brokers against one database
+safe.
+
+## Embedded replicas — evaluated, not adopted
+
+Turso embedded replicas keep a **local libSQL file that syncs from the remote
+primary**: reads hit the local copy, writes go to the primary and sync back. They
+are a big win for read-heavy, geo-distributed *read* workloads. They are the wrong
+fit for MQLite, for two independent reasons:
+
+1. **Async sync breaks queue consistency.** A queue's reads (`claim`, `peek`) run
+   against the *same* rows it just wrote and need read-after-write consistency: a
+   claim must see its own state change atomically. A replica that lags the primary
+   by even a sync interval could re-hand-out an already-claimed message or hide a
+   just-enqueued one — exactly the correctness the Peek-Lock model exists to
+   prevent. The broker is the single logical owner, so it gains nothing from a read
+   replica of its own writes.
+2. **They require CGO.** Embedded replicas live in the native `go-libsql` binding,
+   not the pure-Go `libsql-client-go` Hrana client MQLite uses. Adopting them would
+   reintroduce CGO and cross-compilation pain — abandoning the CGO-free,
+   single-static-binary goal that defines this project.
+
+**For HA / geo-distribution:** co-locate the broker next to its Turso primary
+(low-latency Hrana), or run independent broker + DB pairs per region. Revisit this
+decision only if `libsql-client-go` ever ships pure-Go embedded replicas *and* a
+synchronous read-your-writes mode.
+
+## Validation status
+
+```
+hermetic (always, in CI)   engine/storage_test.go    conn-error retry classifier
+live  (creds-gated, nightly) engine/turso_test.go     full lifecycle vs real Turso
+```
+
+Run the live suite only against a dedicated, disposable test database. `TestMain`
+drops every MQLite-managed table before the selected tests begin, including when
+`-run` selects one test, so the reset requires an explicit confirmation:
+
+```sh
+MQLITE_TEST_DB=libsql://<db>.turso.io MQLITE_TEST_DB_AUTH_TOKEN=<jwt> \
+  MQLITE_TEST_DB_RESET_CONFIRM=1 \
+  go test ./engine -run TestTurso -v
+```
+
+Without `MQLITE_TEST_DB` the live tests skip; the hermetic classifier test always
+runs.
+
+
+<!-- ===== mqlite main · source v0.4.1; latest supported release v0.4.0 · docs/retention.md ===== -->
+
+# Retention, deletion, and storage reclamation
+
+This page follows current `main`, which reports v0.4.1 as an unreleased candidate.
+The latest supported release is v0.4.0; use that tag's documentation for deployed
+v0.4.0 brokers. v0.3.3 is withdrawn and unsupported; its public artifacts remain
+available for forensic or compatibility inspection and must not be deployed. The
+v0.4.1 candidate retains v0.4.0's retraction of v0.3.3. v0.3.2 has DLQ retention
+and automatic local reclamation, but the work budgets below describe current
+`main` unless a version difference is stated.
+v0.3.2 does not have the
+queue and subscription lifecycle APIs introduced in v0.4.0.
+
+## What removes retained messages
+
+Default Peek-Lock delivery is at-least-once. Receive-and-delete is the explicit
+at-most-once broker-removal alternative and removes a message before returning it;
+retrying the same receive attempt ID can replay its saved response. A durable
+message stays retained until a documented lifecycle action removes or moves it:
+
+| Stored state | Normal lifecycle | Other authorized removal |
+|---|---|---|
+| `active` | Receive, then Complete or receive-and-delete | message TTL with discard; forced queue/subscription deletion; subscription expiry |
+| `locked` | Complete, or lock expiry returns it to `active` / moves it to the DLQ at the delivery limit | message TTL with discard; forced queue/subscription deletion; subscription expiry |
+| `deferred` | ReceiveDeferred, then settle | message TTL with discard; forced queue/subscription deletion; subscription expiry |
+| `scheduled` | activation at its due time; Cancel only for a scheduled send that has never been delivered | message TTL with discard; forced queue/subscription deletion; subscription expiry |
+| `dead_lettered` | Redrive or Purge | configured DLQ retention; forced queue/subscription deletion; subscription expiry |
+
+Complete and receive-and-delete remove the row immediately. A message TTL either
+moves an expired message to the DLQ or discards it according to
+`dead_letter_on_expire`. The queue default is also a ceiling for an explicit Send
+TTL. Its clock starts at the message's initial visibility time, so scheduled waiting
+does not consume it; later delayed Abandon does not restart it. Expired locks are
+reclaimed by the reaper and can be delivered again, so consumers must be idempotent.
+
+Deduplication rows, settlement receipts, and receive-attempt records have their
+own expiry-based background cleanup. They are operational replay metadata, not a
+message archive; those expiry deletes are not row-budgeted per pass.
+
+## DLQ retention
+
+`mqlite serve` applies default retention targets to dead letters. Every 60 seconds
+the retention worker deletes the oldest matching dead letters in bounded batches.
+These are asynchronous cleanup targets, not admission limits: a queue can
+temporarily exceed its age, count, or byte target between passes or while cleanup
+catches up. The worker never deletes active, locked, deferred, or scheduled rows.
+
+| Setting | Broker default | Meaning |
+|---|---:|---|
+| `MQLITE_DLQ_MAX_AGE` | `336h` (14 days) | delete dead letters older than this, measured from original enqueue time |
+| `MQLITE_DLQ_MAX_COUNT` | `1000000` per queue | keep at most this many dead letters |
+| `MQLITE_DLQ_MAX_BYTES` | `0` | optional per-queue cap on dead-letter body bytes; zero disables this bound |
+| `MQLITE_DLQ_RETENTION` | enabled | set to `off` to disable all broker defaults |
+
+Embedded engines leave engine-wide DLQ retention defaults disabled unless the
+application passes `WithDLQRetention(maxAge, maxCount, maxBytes)`. A positive
+per-queue bound still enables that dimension for its queue.
+
+Each queue can override the engine or broker defaults through `QueueConfig`, the
+wire `config` object, or `mqlite create-queue`:
+
+| Per-queue value | Effective behavior |
+|---:|---|
+| `0` | inherit the engine or broker default |
+| positive | use this queue-specific bound |
+| negative | explicitly leave that dimension unbounded |
+
+The fields are `dlq_max_age_ms`, `dlq_max_count`, and `dlq_max_bytes`. Age uses
+`enqueued_at`, not the time at which the message entered the DLQ. Count and byte
+limits drop the oldest dead letters first.
+
+Monitor DLQ count, age, and storage size even when defaults are enabled. A growing
+active backlog is a consumer-capacity problem and is deliberately outside the DLQ
+retention policy.
+
+## Queue and subscription retirement
+
+On `main`, queue and subscription deletion is empty-only by default. `force=true`
+is durable authorization to discard all retained states, including locked work,
+plus resource-owned deduplication and replay metadata. A locked delivery may
+already have caused an external effect; deleting its row cannot undo that effect.
+
+A fixed subscription TTL grants the same discard authorization in advance. Its
+absolute deadline is saved on first creation and does not move when the filter is
+updated, a message is published or received, or creation is retried. At the
+deadline the subscription immediately leaves topic fan-out and its data plane.
+Physical cleanup follows in the background. Explicit deletion remains the normal
+completion path; TTL is a forgotten-cleanup backstop.
+
+The accepting transaction changes the resource to `deleting` and starts bounded
+cleanup. If that cleanup finishes, the same commit removes the resource and the
+call returns `deleted`; otherwise the committed `deleting` marker reserves the
+name while restart-safe cleanup removes its rows. The foreground request removes
+at most 1,000 rows and targets about 8 MiB. Each continuation pass removes
+at most 4,096 physical rows and targets about 8 MiB. Its ordinary per-resource
+path visits at most 32 local resources, or one such resource on remote Turso/libSQL.
+A separate set-based path can finalize up to 512 empty subscriptions
+without consuming that 32-or-1 resource-count allowance; their mapping and backing
+queue rows still consume the shared row budget. One oversized row may exceed the
+byte target so cleanup can still make progress.
+
+The default subscription capacity is 10,000 active plus deleting mappings. A
+mapping continues to occupy a slot until physical cleanup finishes. Large forced
+deletes or simultaneous expiry waves can therefore create cleanup backlog, grow
+the WAL, delay name reuse, and temporarily reject new subscription creation.
+
+For routine request/reply traffic, keep a stable reply subscription and dispatch
+with `correlation_id`. If a temporary subscription is necessary, use a globally
+unique one-use name, delete it explicitly when finished, add a fixed TTL as a
+backstop, and stagger deadlines. Drain before deletion when practical. Reserve
+force for intentional abandonment.
+
+One controller must serialize deletion and same-name recreation. After an
+uncertain response, use the read-only paged inventory with deleting entries
+included. Wait until the name is absent before recreating it, and do not replay an
+old delete after a replacement exists.
+
+## Local file reclamation
+
+Deleting a row makes SQLite pages reusable immediately; it does not promise that
+the database or WAL file will shrink at once. New local databases use
+`auto_vacuum=INCREMENTAL`.
+
+On `main`, the background reclaimer runs every 60 seconds. Once at least 256 pages
+are free, it checkpoints and returns at most 256 pages per pass to the operating
+system. One-off large deletions can therefore need several passes. v0.3.2 uses the
+same interval and threshold but attempts to drain the current freelist in one pass;
+it does not have `main`'s 256-page work cap. WAL size can also grow while a reader
+holds a snapshot, then shrink after checkpointing when that reader finishes.
+
+Operator commands provide explicit reclamation:
+
+- `mqlite vacuum` checkpoints and exhausts the current incremental-vacuum
+  freelist. It is the normal manual choice after a large purge.
+- `mqlite vacuum --full` rewrites the database and holds the global writer. Use it
+  only in a deliberate maintenance window.
+
+Remote Turso/libSQL manages its physical storage. The client does not expose its
+database or WAL file size, and local vacuum commands do not apply.
+
+Size local storage for the peak simultaneous backlog, WAL growth, backup space,
+and the time needed for bounded cleanup and reclamation. Alert on free disk,
+retained/deleting inventory, maintenance failures, and oldest message age rather
+than assuming file size will fall immediately after a delete.
+
+## Exporting dead letters before deletion
+
+MQLite has no built-in archive sink. An operator can use existing operations:
+
+1. Quiesce or otherwise coordinate changes to the selected DLQ range.
+2. Read dead letters with `Peek(state=dead_lettered)`, advancing `from` past the
+   last exported sequence number, and durably write them to external storage.
+3. Verify the external copy.
+4. After quiescing, purge only after the export covers the intended DLQ. Use
+   `max` or `older_than` bounds where appropriate. Alternatively, Redrive to a
+   queue whose consumer writes each message to the archive before completing it.
+
+Peek is non-destructive and does not make the export and purge one transaction.
+Redrive moves each selected internal batch atomically: source deletion and target
+insertion commit together. Delivery from the dedicated queue to an external
+archive remains at-least-once, so the archive consumer must be idempotent; Redrive
+does not make the external archival handoff one transaction.
+
+
+<!-- ===== mqlite main · source v0.4.1; latest supported release v0.4.0 · docs/benchmark.md ===== -->
+
+# mqlite benchmarks, sizing & tuning
+
+Measured, reproducible numbers for the mqlite engine across realistic workloads —
+**not** a single throughput figure — plus what they mean for **deployment sizing** and
+**tuning**. The suite exercises throughput, write amplification, **whole-process memory
++ reclamation**, **DB-file bloat vs reclamation**, **KV-property (enriched) messages**, a
+**body-size sweep**, and **load ramp / consumer churn**. Run **locally** (a fast
+multi-core box) and on a deliberately tiny **cloud** box so the two tell different truths.
+
+> Philosophy: measure before claiming. Each result below names its harness and
+> environment; committed harnesses include `test/bench/` and native Go benchmarks.
+> These are historical workload measurements, not capacity guarantees for any release.
+> Recheck the current binary
+> with your message sizes, concurrency, queue count and monitoring load before
+> selecting a memory or CPU limit.
+
+## Sizing & deployment (Fly.io)
+
+The historical sample below ran a single broker on a 256 MB Fly machine. Treat
+these measurements as starting points for a workload-specific sizing test; they
+do not establish a safe backlog threshold or the current release image size.
+
+```
+┌─────────────┬──────────────────────────┬──────────────────────────────────────┐
+│ resource    │ measured (1 broker)      │ Fly choice                            │
+├─────────────┼──────────────────────────┼──────────────────────────────────────┤
+│ memory      │ 19 MB idle               │ 256 MB used in the historical test   │
+│             │ 38 MB @ 50k msgs queued  │ validate current peak memory first   │
+│             │                          │ no universal backlog threshold        │
+│ disk        │ ~0.4 KB / 256 B message  │ 1 GB volume  (~1.1M planned msgs)     │
+│             │ + ~4 MB WAL in this run  │   size = backlog × 0.6 KB × 1.5       │
+│ vCPU        │ tiny/op; 1000s/s batched │ 1 shared vCPU in the measured setup   │
+│ image       │ 10.9 MiB static binary   │ distroless/scratch ≈ 15 MB image,     │
+│             │   (CGO-free)             │   cold start < 1 s (scale-to-zero ok) │
+└─────────────┴──────────────────────────┴──────────────────────────────────────┘
+```
+
+**Topology:** mqlite is **single-writer**: run one broker or embedded `Engine` per
+database. A local process holds a file lock, so run one machine per volume and do
+not horizontally scale several machines onto the same SQLite file. Turso/libSQL
+provides managed remote storage, but it does not make overlapping brokers safe; see
+[turso.md](https://github.com/mqlitehq/mqlite/blob/main/docs/turso.md).
+
+Peak backlog depth is a primary disk-sizing input, rather than lifetime throughput
+(`Complete`/`Purge` delete rows). Also budget for WAL growth, SQLite page and index
+overhead, reclamation lag, readers that delay checkpoints, and backups. Background
+`incremental_vacuum` returns freed pages to the OS over time (see §3), but does not
+make the backlog estimate a hard file-size ceiling:
+
+| backlog depth (256 B msgs) | DB on disk | Fly volume |
+|--------------:|-----------:|:-----------|
+| 100k          | ~40 MB     | 1 GB       |
+| 1M            | ~0.4 GB    | 1 GB       |
+| 5M            | ~2 GB      | 3 GB       |
+
+## Environments
+
+| | Local (baseline) | Cloud (constrained) |
+|---|---|---|
+| Where | Docker (`run-bench.sh`) on the dev machine | Fly.io app `mqlite-bench`, region `sin` |
+| CPU | 12 vCPU, arm64 (Apple Silicon, linuxkit VM) | **shared-cpu-1x → `GOMAXPROCS=1`** (a *fraction* of one amd64 core, CPU-steal) |
+| Memory | 8 GB | **256 MB** (≈207 MB usable) |
+| Disk | overlayfs in the Docker VM | machine rootfs **overlayfs** (no volume mounted for the bench) |
+| Probe | `/proc/self/{io,stat}` + 200 ms RSS/heap/file sampler | same binary, same matrix |
+
+Honesty notes: the local host is arm64 under Docker Desktop's linuxkit VM, so its
+12 cores flatter parallel scenarios and the disk is virtualised. The Fly box is the
+**single-fractional-core reality** of the cheapest deploy. Disk write-bytes are
+measured via `/proc/self/io` on both; absolute disk latency is not the point here —
+**relative** write amplification and the memory/file behaviour are, and those match
+across platforms.
+
+## How to reproduce
+
+```bash
+# local — builds the bench image, runs the matrix on the container's own fs
+BENCH_DUR=3s ./test/bench/run-bench.sh          # → test/bench/out/results.json
+
+# opt-in queue create/send/force-delete/converge churn
+BENCH_ONLY=lifecycle_churn BENCH_DUR=2s ./test/bench/run-bench.sh
+```
+
+The historical Fly run used an environment-specific deployment file that is not
+part of this repository. Reproduce cloud measurements by deploying the committed
+`test/bench/Dockerfile` with your own explicit machine, region, volume and cleanup
+configuration, and record those inputs with the result.
+
+Time-driven scenarios run for `dur` (3 seconds in the historical matrix); the
+fixed-volume drain and bloat scenarios instead run until their capped prefill is
+accounted for. Every scenario then enters an **idle + GC + FreeOSMemory** phase so
+we can measure what is *reclaimed*. A 200 ms background sampler records RSS + Go
+heap + DB/WAL file sizes throughout, and each scenario prints a `[done]` or `[fail]`
+line as it finishes (so a constrained box that stops early still leaves diagnostics
+for the scenarios already attempted).
+
+The runner fails closed on workload operation errors: fixed-volume drains must match
+their exact prefill, mixed workloads reconcile accepted messages with completed plus
+remaining messages, and result-file failures produce a nonzero exit. For remote `-db`
+runs, use a dedicated non-production database. Each process uses a unique queue
+namespace, force-deletes only that namespace after every scenario, and drives bounded
+cleanup; an interrupted process can still leave its private namespace behind.
+
+The opt-in `lifecycle_churn` scenario uses a fixed set of 64 queue names and never
+reuses a name until deletion has converged. Each cycle creates the queues, sends
+small batches, accepts forced deletion, and runs bounded maintenance until every
+name is absent. Four queues carry 1,024 messages so the test covers pending cleanup;
+the other 60 carry 16 messages. The live message-body payload stays below 1 MiB.
+Its result reports immediate and pending acknowledgements, maintenance passes,
+convergence latency, peak payload, and DB/WAL size. Here `ops/s` means fully
+converged queue lifecycles per second; the generic latency columns measure the
+initial delete acknowledgement.
+
+A final 2-second native force-deletion smoke run on an Apple M1 Pro completed
+640 queue lifecycles (10 cycles) at 289.17 lifecycles/s. All 640 deletions were
+accepted, 40 required background-style cleanup, convergence p99/max was
+67.519/85.309 ms, and the database peaked at 5.528 MiB before ending at
+0.480 MiB with a zero-byte WAL. This short run
+is a regression signal, not a deployment capacity claim; reproduce it on the target
+CPU, filesystem, durability mode, message sizes, and remote backend when applicable.
+
+Native Go benchmarks cover topic fan-out, subscription create/empty-delete churn,
+and exact-total subscription pagination:
+
+```bash
+go test ./engine -run '^$' \
+  -bench 'Benchmark(TopicFanout|SubscriptionCreateDelete|ListSubscriptionsPage)' \
+  -benchmem -count=5
+```
+
+On an Apple M1 Pro with Go 1.26.9, the final recorded medians were
+323.955 µs per create/delete lifecycle with 100 retained subscriptions and
+328.866 µs with 10,000 retained subscriptions (1.015×). A 100-item page with
+an exact total measured 0.652 ms at 1,000 subscriptions and 5.168 ms at 10,000.
+A smoke with 5,000 queued messages acknowledged force deletion in 3.203 ms and
+converged in one 29.367 ms maintenance pass. These control-plane measurements
+found no strong lifecycle regression, but the exact count scales with inventory;
+do not treat the 10,000-subscription safety ceiling as a low-latency guarantee.
+
+The native suite also covers fixed-lifetime fan-out and indexed subscription-expiry
+passes:
+
+```bash
+go test ./engine -run '^$' \
+  -bench 'Benchmark(TopicFanoutTTL32|SubscriptionExpiry)' \
+  -benchmem -count=5
+```
+
+On the same Apple M1 Pro with Go 1.26.9, seven alternating one-second rounds
+compared the fixed-lifetime implementation with the same suite before TTL support.
+Median latency changed by +2.50% for `SendOne`, -0.43% for `SendBatch64`, -3.32%
+for 32-way topic fan-out, -0.45% for 256-way fan-out, and +0.86% for receive plus
+complete. All remained below the 10% investigation threshold. In a separate
+same-binary comparison, 32-way fixed-lifetime fan-out had a 1.512 ms median,
+3.62% above permanent subscriptions by independent medians; it added 32
+allocations and 255 bytes per publish. Shared-host variation means neither the
+small gains nor this small cost is an optimization or SLA claim.
+
+An indexed expiry scan over 10,000 future deadlines took 56.808 µs per no-work
+pass (17,603 passes/s). Transitioning a full 1,000-subscription due batch took
+3.306 ms (302,459 subscriptions/s). A controlled burst created 10,000
+subscriptions with one 5,000-message backlog, then advanced them to one common
+deadline. Data-plane fencing was immediate; 19 manually driven bounded passes
+discarded the backlog and removed all metadata in 338 ms. With normal background
+workers, 10,000 empty subscriptions converged in 1.292 s. A permanent queue had
+no send errors during cleanup; its send p50 stayed near 0.1 ms, while p99 rose
+from 0.687 ms before expiry to 12.003 ms during the burst (34.499 ms maximum).
+This is the expected bounded tail-latency cost of many simultaneous expirations,
+not a capacity promise; stagger deadlines and load-test the target backend.
+
+Adding required lifecycle timestamps to 100-item subscription pages changed the
+1,000-item inventory median from 0.658 ms to 0.712 ms (+8.21%) and the 10,000-item
+median from 5.187 ms to 5.325 ms (+2.66%). Page memory fell from about 39 KB to
+30 KB after exact preallocation; allocation counts stayed effectively flat.
+
+## Observation cost under a deep current backlog
+
+The native observation benchmarks use 300 queues with 300,000 messages retained at
+the same time. This is current backlog, not cumulative broker throughput: completed
+messages normally leave the table when settled. Run the committed fixtures with:
+
+```bash
+go test ./engine -run '^$' \
+  -bench 'Benchmark(ObservationDeepBacklog|SendDuringDeepObservation)$' \
+  -benchmem -count=3
+```
+
+Per-queue `Stats` uses state-specific indexes. Global `Observe` must still scan the
+retained rows when its roughly 10-second shared cache needs a refresh; cache hits
+still allocate and serialize the full queue response. The deliberately hostile
+`continuous_observe` benchmark calls observation as fast as possible and is a
+stress case, not a recommended scrape interval.
+
+The final aggregate query replaced per-state `SUM` expressions with selective
+`COUNT ... FILTER` aggregates while keeping one grouped scan. On an Apple M1 Pro
+with Go 1.26.9, three measured refreshes in each of three runs produced:
+
+| Current retained distribution | Earlier `SUM` median | Current `FILTER` median | Median change |
+|---|---:|---:|---:|
+| 300,000 active | 248.369 ms | 210.754 ms | -15.14% |
+| 50,000 in each of six states | 244.973 ms | 210.518 ms | -14.06% |
+
+This isolates aggregate-expression cost; it is not a deployment capacity result.
+The refresh remains proportional to retained rows and competes for CPU, page cache,
+storage bandwidth, and WAL checkpoint headroom even though a local file uses a
+separate read-only observation connection.
+
+A five-pair local-file pressure run compared baseline and monitored 20-second
+phases at 1,000 scheduled sends/s. Each monitored phase made the expected global
+refreshes and per-queue calls; every admitted message completed and each phase
+ended with zero backlog. The preselected paired-median 10% investigation threshold
+failed for every foreground p99 measure:
+
+| Measure | Paired-median monitored change |
+|---|---:|
+| Throughput | -1.06% |
+| Dropped offered slots | +1.05 percentage points |
+| Send p99 | +18.50% |
+| Receive p99 | +14.80% |
+| Complete p99 | +53.03% |
+| End-to-end p99 | +154.12% |
+
+Host variation was material and individual pairs moved in both directions, so the
+run supports stable throughput and completed-work accounting at that offered load.
+It does **not** show that monitoring has no foreground tail-latency cost. A separate
+500 sends/s run also contained one severe adverse window, so it did not establish a
+tail-latency-safe operating point.
+
+Monitored WAL peaks were 4.32–5.34 times their paired baselines in the 1,000/s run.
+After each phase, a passive checkpoint reported no busy reader and all frames
+checkpointed; a following truncating checkpoint left a zero-byte WAL. Observation
+can therefore cause transient WAL growth even when the file is reclaimable after
+the reader finishes. Start production scraping at 15 seconds, then measure refresh
+duration, WAL growth, and foreground p99 with the target backlog and hardware.
+
+## Remote Turso trend soak
+
+The manually dispatched **Turso performance soak** Action exercises one
+package-internal Engine directly against the dedicated verification database.
+It is separate from the HTTP broker and uses four closed-loop lanes: two standard
+queues, one `group_fifo` queue and one `strict_fifo` queue. Each lane repeatedly
+sends one unique 256-byte body, receives and verifies that exact body, then
+completes it before starting the next cycle. This keeps the live message working
+set bounded while exercising normal background maintenance.
+
+The four logical lanes share a fixed admission limit of one harness database
+call in flight (`foreground_max_in_flight=1` in `metadata.json`). Their initial
+starts use nominal 0, 250, 500 and 750 ms offsets, recorded as a 250 ms lane-start
+stagger in the metadata. Against the four-connection remote pool, this avoids a
+synchronized startup burst and keeps foreground call demand below the pool limit,
+providing headroom for normal background maintenance. The profile is deliberately
+a sustainable stability and trend load. It is not a capacity test, and its
+throughput must not be read as the backend's maximum.
+
+The admission limit applies only to calls made by the harness. Engine background
+workers bypass it, and it does not reserve the Turso primary's serialized write
+lock.
+
+Choose 2, 10 or 30 minutes when dispatching the workflow. Start with 2 minutes to
+verify credentials, cleanup and evidence collection; use 30 minutes for the
+intended sustained trend check. The workflow and the existing Turso nightly suite
+share one repository-wide concurrency lock because both use `TestMain` to reset
+the same database. Both workflows have a fail-closed allowlist for the
+verification host before tests can reset it. Never point either workflow at a
+production database.
+
+Each minute, and once more for a final partial window, the artifact records
+per-lane and overall cycles/s; Send, Receive, Complete and end-to-end p50/p95/p99
+and maximum latency; empty/error counts; queue backlog; settlement-receipt
+counts; storage outcomes and retries; pool waits; background-maintenance pass
+state; Go heap, RSS, goroutines, GC and process CPU where the runner exposes them.
+The maintenance snapshot is copied from process memory and does not issue an
+additional remote database query. `metadata.json`, `windows.jsonl`,
+`summary.json`, `summary.md` and the test log are retained for 14 days. Errors,
+body mismatches, accounting failures, final backlog or exact cleanup failures
+fail the run, while the evidence written before a failure remains uploadable.
+
+A single non-final `Stats` or settlement-receipt-count sample that fails with the
+`connection` category is recorded as a gap and may recover at the next scheduled
+sample; the harness does not issue an extra query to force recovery. During that
+gap, the overall and per-lane backlog and settlement-receipt fields are `null`,
+and older values are not presented as final state. A second monitoring failure
+anywhere in the run, any other operation or error category (including a
+working-set invariant), or a failed final sample fails the soak. Each window
+records structured monitoring status, and the summary records the failed-sample
+count and recovery status.
+
+A single failed maintenance pass may recover on that task's next complete pass.
+Two consecutive failed passes, or one still unrecovered at the end of the run,
+fail the soak. Recovered failures remain visible in the cumulative maintenance
+counters and bounded diagnostic history. The final maintenance judgement is a
+process-memory snapshot taken after `Engine.Close` has stopped and joined the
+background workers; the harness does not trigger an extra maintenance pass to
+change the result. Thus the last `windows.jsonl` entry is the pre-cleanup workload
+sample, while `summary.json.final_maintenance` is the post-close terminal state.
+A runner cancellation or outer test timeout can interrupt final cleanup; the
+next run's `TestMain` reset and namespaced startup cleanup remove that residue.
+
+The first-to-last window change is descriptive and has no performance threshold
+because GitHub-hosted runner placement, shared CPU and network path add noise.
+Turso does not expose physical database or WAL file sizes through this client;
+those JSON fields are `null`, never a misleading zero. Settlement receipts have
+30-minute retention, so a 30-minute run's final receipt count is a current
+retention snapshot rather than a lifetime completion total.
+
+## 1 · Throughput & write amplification
+
+256 B bodies unless noted. `wB/op` = bytes physically written to disk per op (write
+amplification). **The local box is 12 fast cores; the cloud box is one fraction of a
+throttled core** — read the two columns as "engine character" vs "cheapest real box".
+
+| scenario | sync | local ops/s | cloud ops/s | local wB/op | cloud wB/op |
+|---|---|---:|---:|---:|---:|
+| produce_p1 | NORMAL | 15,926 | **4,000** | 9,740 | 9,696 |
+| produce_p4 | NORMAL | 17,449 | **567** | 9,744 | 9,667 |
+| produce_p8 | NORMAL | 17,963 | **322** | 9,745 | 9,635 |
+| batch_16_p4 | NORMAL | 30,748 | 1,600 | 1,979 | 1,928 |
+| batch_64_p4 | NORMAL | 35,146 | **6,000** | 1,090 | 1,045 |
+| e2e_4x4 | NORMAL | 4,413 | 197 | 58,539 | 55,809 |
+| sessions_64g | NORMAL | 3,789 | 164 | 71,016 | 67,794 |
+| produce_p4_FULL | **FULL** | 1,556 | 468 | 13,743 | 13,682 |
+| props_p4 | NORMAL | 15,909 | 1,000 | 10,577 | 10,493 |
+| props_batch64 | NORMAL | 24,161 | **6,700** | 1,641 | 1,622 |
+
+**Write amplification was similar in these two runs** — every cloud `wB/op` is
+within 5% of its local counterpart. The samples suggest that SQLite + WAL dominate
+this cost (a 256 B message was about 9.7 KB written singly and 1.1 KB batched), but
+two environments do not establish a platform-independent constant. Measure the
+target filesystem and workload before capacity planning.
+
+**On a single fractional core, concurrency *hurts*** — `produce_p1` 4.0k >
+`produce_p4` 567 > `produce_p8` 322. With `GOMAXPROCS=1` there's no parallelism to
+exploit, so more producers just add lock contention + scheduler/GC thrash on the one
+writer. On the cheap box the right pattern is **one producer that batches**, not many
+concurrent single-sends.
+
+**Batching is the great equaliser** — `batch_64` does 6.0k/s on the *same* throttled
+core that only manages 567/s of single `produce_p4` (≈10×), at ~1/9 the write
+amplification. Enriched batched sends (`props_batch64`) hold 6.7k/s.
+
+**FULL durability** costs ~11× locally; on the already-CPU-bound cloud box the gap
+narrows (468 vs 567) because fsync isn't the bottleneck there — the core is.
+
+## 2 · Memory footprint after a short idle
+
+Whole-process **RSS** (not just Go heap), peak during load vs after the harness's
+short 1.9-second idle and forced GC. This end snapshot describes immediate process
+state; it does not imply that the 60-second storage janitor has run.
+
+| scenario | local peak → short idle | cloud peak → short idle |
+|---|---:|---:|
+| produce_p8 | 34 → 27 MB | 27 → 20 MB |
+| batch_64_p4 | 32 → 27 MB | 28 → 23 MB |
+| props_batch64 | 33 → 29 MB | 29 → 25 MB |
+| size_16KB | 33 → 29 MB | 27 → 23 MB |
+| drain_4c (200k msgs) | 33 → 28 MB | — (see §7) |
+
+**Peak RSS was 27–34 MB across the scenarios listed above.** The local 200k-message
+drain and 16 KB body scenarios stayed within that measured range. SQLite stores
+the backlog on disk, but this does not bound all broker memory. RSS declined after
+load stopped; no sustained growth was observed in these runs. Larger messages,
+more concurrent requests or queues, and monitoring can change the footprint.
+Measure the current workload before choosing a memory limit.
+
+## 3 · DB-file footprint and reclamation
+
+`bloat_50k` now inserts exactly 50,000 messages once, samples the full backlog,
+drains exactly that count with `Complete`, and rejects any send, receive, settle,
+or accounting error. `file_bytes_per_msg` uses the count actually accepted during
+prefill. Older results from this scenario are not comparable: the previous harness
+prefilled twice, rounded each tail batch up, and still divided file size by 50,000.
+
+The scenario's `db_final_mb` is the immediate state after the same 1.9-second idle
+used by the other scenarios. It is useful for comparing the peak with the drained
+file, but it does not verify background page reclamation. Local file databases use
+`auto_vacuum=INCREMENTAL`; the background janitor checks every 60 seconds and
+reclaims a bounded number of pages once its freelist threshold is met. Use a run
+that spans that interval, or measure an explicit `Compact(false)`, when evaluating
+reclamation. Remote Turso manages its own storage.
+
+## 4 · Enriched messages — KV properties
+
+`props_*` send a realistic message: a `Properties` map (tenant / trace_id /
+event_type / priority / source / schema_ver) plus CorrelationID, Subject,
+ContentType — "normal usage", vs a bare body.
+
+| scenario | local ops/s | fileB/msg | vs bare |
+|---|---:|---:|---|
+| produce_p4 (bare) | 17,449 | 415 | — |
+| props_p4 | 15,909 | 693 | +280 B/msg on disk, ~9 % slower |
+| batch_64_p4 (bare) | 35,146 | 373 | — |
+| props_batch64 | 24,161 | 664 | +291 B/msg, ~31 % slower batched |
+
+Properties are cheap on a single send (~9 % throughput, +280 B/msg) but cost more when
+batched (~31 %): once commit overhead is amortised away, the per-message JSON-encode of
+the KV map becomes the dominant work.
+
+## 5 · Body-size sweep
+
+4 producers, NORMAL, body 64 B → 16 KB:
+
+| body | local ops/s | cloud ops/s | wB/op (≈both) | fileB/msg |
+|---|---:|---:|---:|---:|
+| 64 B | 17,205 | 1,200 | 9,122 | 217 |
+| 256 B | 17,449 | 567 | 9,744 | 415 |
+| 1 KB | 13,991 | 912 | 12,980 | 1,489 |
+| 4 KB | 12,547 | 454 | 22,205 | 4,740 |
+| 16 KB | 7,988 | 259 | 46,939 | 17,091 |
+
+On-disk storage was roughly linear with body size in this sweep. The measured
+difference between body size and `fileB/msg` ranged from 153 to 707 bytes, so the
+table does not support one fixed row/index-overhead constant. Throughput was
+commit-bound up to about 256 B and then increasingly byte-bound. Default body cap
+is 1 MiB (`MaxMessageBytes`).
+
+## 6 · Load ramp & consumer churn (local)
+
+- **rampdown_4x4**: produce hard, then stop producing while consumers drain to idle.
+  RSS peak 31 MB → 27 MB after the load goes away — memory tracks the workload *down*,
+  not a one-way ratchet.
+- **churn_consumers**: producers steady while consumer cohorts repeatedly go
+  **online/offline**. RSS stays ~28–34 MB across cycles with **no stair-step growth** —
+  connect/disconnect doesn't leak.
+
+## 7 · Cloud reality — what a 256 MB fractional core changes
+
+The Fly `shared-cpu-1x` is `GOMAXPROCS=1` with CPU-steal. Versus the 12-core local box:
+
+1. **Memory stayed low in the measured scenarios.** Peak RSS was 27–29 MB for
+   the cloud scenarios in §2, with reclamation after load. This does not establish
+   the memory required by other workloads or current releases.
+2. **Write amplification was close in these two runs.** Cloud values were within
+   5% of local; validate that relationship on the target storage stack.
+3. **Throughput: core-bound, and concurrency backfires.** Single-send multi-producer
+   collapses (567/s at p4, 322/s at p8) because there's no second core. **Batch, and
+   throughput recovers to thousands/s** (6.0–6.7k).
+4. **Tail latency: throttling shows up.** p99 hits the 100 ms histogram ceiling on most
+   multi-goroutine scenarios (CPU-steal stalls); single-producer scenarios keep p99
+   under ~5 ms.
+
+In this short historical sample, batching reached about 6k msg/s on a
+shared-cpu-1x, while concurrent single sends reached only hundreds/s. These are
+workload observations, not a sustained-capacity or SLA claim.
+
+## Tuning knobs
+
+mqlite ships sensible defaults; most deployments change nothing. In rough order of impact:
+
+| knob | default | when to change |
+|---|---|---|
+| **batch size** (`messages:[…]`) | — | the biggest lever — ~9× less write amplification, ~2× throughput. Batch whenever you can. |
+| **`MQLITE_SYNC`** | `NORMAL` | `FULL` only if a power cut losing the last few commits is unacceptable; it costs ~11–18× on single sends, so pair it with batching. |
+| `wal_autocheckpoint` | 1000 pages (~4 MB) | matched the no-long-reader historical baseline; observation snapshots and other readers can cause a larger transient WAL. Raise only after measuring the checkpoint and recovery trade-off. |
+| `cache_size` | ~2 MB | the working set (queue heads + indexes) is small; raise only after profiling shows cache pressure under deep backlogs — it costs RAM on a 256 MB machine. |
+| `mmap_size` | off | `modernc.org/sqlite` is pure-Go; don't assume C-SQLite mmap gains — measure first. |
+| writer/provider pool | local writer 1 / remote provider 4 | **don't change** — the local writer pool stays at one for atomic claims; local files also have one read-only observation connection. The remote pool is scoped to one broker and Turso serializes commits. |
+
+`busy_timeout=5000` and `temp_store=MEMORY` are set on local modernc SQLite
+connections. They do not apply to remote Turso/libSQL connections, whose transient
+contention uses the bounded retry policy described in [turso.md](https://github.com/mqlitehq/mqlite/blob/main/docs/turso.md).
+
+## Findings summary
+
+1. **Low measured memory with reclamation** — peak RSS was 27–34 MB in the
+   scenarios in §2. No sustained growth was observed during the recorded churn
+   and ramp-down tests; validate the current workload separately.
+2. **Batch to go fast** — ~9× less write amplification, and on a single core the
+   difference between *hundreds/s* and *thousands/s*.
+3. **Write amplification was similar in two historical environments** (~9.7 KB/op
+   single, ~1.1 KB batched, with local/cloud pairs within 5%); it is not a universal
+   platform constant.
+4. **Single-writer model**: more producers ≠ more write throughput; on one core they
+   make it *worse*. Prefer one batching producer.
+5. **Peak backlog is a primary sizing input.** Add headroom for WAL, page/index
+   overhead, fragmentation, reclamation lag, long readers and backups; background
+   `incremental_vacuum` returns eligible free pages over time.
+6. **NORMAL vs FULL** is an ~11× durability dial (local); pick per host failure model.
+7. **Properties are affordable**; large bodies are byte-bound and storage-linear.
+
+The historical source artifacts were captured in `test/bench/out/results.json`
+and the `mqlite-bench` Fly logs; they are not shipped in this repository. Treat
+the table as historical evidence and rerun the commands above before using the
+numbers for a current deployment decision.
+
+
+<!-- ===== mqlite main · source v0.4.1; latest supported release v0.4.0 · docs/conformance.md ===== -->
+
+# Conformance — correct mqlite behavior (TCK)
+
+This is the normative spec of how mqlite **must** behave — the invariants that define
+"correct," independent of any one implementation detail. Each is enforced by a
+hermetic test (cross-referenced); together these are mqlite's TCK. If a change would
+break a **MUST** here, it is a behavior change, not a refactor.
+
+Default Peek-Lock delivery is **at-least-once**: redelivery is possible, so
+handlers must be idempotent. Receive-and-delete is the caller's explicit
+at-most-once broker-removal path and removes a message before returning it; the
+same receive attempt ID can replay its saved response. Other documented
+discard paths include message TTL configured to discard, DLQ retention, forced
+resource deletion, and fixed subscription expiry. (§1.7, §3, §8, §14)
+
+## 1 · Peek-Lock lifecycle
+
+- **1.1** `Receive` claims an `active` message, moving it to `locked` for the queue's
+  lock duration, and returns a `lock_token`. *(engine/functional_test.go)*
+- **1.2** A `locked` message MUST be invisible to other `Receive` calls until it is
+  settled or its lock expires — no message is delivered to two consumers at once.
+  *(engine/functional_test.go `TestCompetingConsumersNoDouble`)*
+- **1.3** Each newly granted `Receive` or `ReceiveDeferred` claim increments
+  `delivery_count` exactly once. Renewal, settlement, lock reaping, scheduled
+  activation and replay of a live receive attempt MUST NOT increment it.
+  *(engine/engine_test.go, engine/ga_fixes_test.go, engine/functional_test.go)*
+- **1.4** When a lock expires, the reaper returns the message to `active` (redelivery)
+  — or to `dead_lettered` once `delivery_count >= max_delivery_count`. *(engine/engine_test.go)*
+- **1.5** Claims are O(log n) on a deep backlog (a partial index on `active` rows; the
+  reaper, not the claim path, reclaims expired locks). *(engine/claim_plan_test.go)*
+- **1.6 Claim time.** `Receive` (with or without an `AttemptID`, including receive-and-delete)
+  and `ReceiveDeferred` MUST evaluate TTL eligibility and lease deadlines using fresh broker time
+  after writer admission, for each claimed item and each remote retry. A message whose TTL has
+  expired at that check MUST NOT be claimed. Waiting for the writer or processing an earlier batch
+  item MUST NOT consume a later item's lease before its claim begins.
+  *(engine/functional_test.go: TestClaimTimeAfterWriterAdmission, TestClaimBatchUsesEachItemsTime,
+  TestClaimBatchTTLBetweenItems, TestReceiveDeferredMixedItemsAndCommittedPrefix;
+  engine/storage_test.go: TestClaimTimeRefreshesOnRemoteRetry)*
+
+- **1.7 Receive-and-delete** removes each returned row and grants no lease: its
+  lock token is empty and deadline is zero, including a cached attempt replay.
+  Peek-lock retains its token and lease deadline. *(sdk_test.go: TestSDKReceiveDeleteLeaseShape)*
+
+## 2 · Settlement (fenced on `lock_token`)
+
+Exactly one verb per outcome; new effects require the `lock_token` from `Receive`
+and an unexpired lease, with the exact-request replay exception in §2.6.
+
+- **2.1 Complete** removes the message. *(engine/functional_test.go)*
+- **2.2 Abandon** returns it to `active` for redelivery (or `dead_lettered` at/above
+  max). With `delay_ms > 0` it parks in `scheduled` until the backoff lapses
+  (scheduler re-activates it); on an **ordered** queue the parked head holds
+  head-of-line exactly like a scheduled send — successors cannot overtake it
+  (§5.5). Neither Abandon nor scheduled activation increments `delivery_count`;
+  the next claim does. *(engine/engine_test.go; engine/functional_test.go:
+  TestAbandonDelayHoldsGroupOrder)*
+- **2.3 Reject** moves it to `dead_lettered` with a reason. *(engine/functional_test.go)*
+- **2.4 Defer** sets it aside; it is retrieved later by seq via `ReceiveDeferred`.
+  Normal `Receive` never returns a deferred message. In an **ordered** queue a deferred
+  message **holds the head-of-line** — later messages in its group (or the whole queue
+  under `strict_fifo`) are not claimable until it is retrieved and settled; other groups
+  proceed. There is no automatic recovery without a TTL (the reaper never reclaims
+  deferred rows); recover a lost seq via `Peek state=deferred`. A successful
+  `ReceiveDeferred` increments `delivery_count` but does not gate that explicit
+  by-sequence claim on `max_delivery_count`; it can therefore return a count above
+  the ordinary delivery budget. Subsequent settlement follows the usual rules.
+  *(engine/functional_test.go: TestDeferHoldsHeadOfLine)*
+- **2.5 Renew** MUST preserve the same state, token, and `delivery_count`. For a
+  queue or subscription without a fixed expiry it sets the deadline to
+  `max(old locked_until, broker now + lock_duration)`; a fixed subscription
+  lifetime caps the candidate deadline. It MUST NOT shorten a lease or revive one
+  whose current deadline has passed. *(engine/ga_fixes_test.go)*
+- **2.6** Settling with a wrong/expired token MUST fail with `ErrLockLost` (HTTP 409)
+  — **except** an idempotent replay with a live receipt for the exact request (§3.2) returns
+  success. Matching the token alone is insufficient: new settlement and renewal effects
+  require a locked row with `locked_until_ms > now`, including before the reaper runs.
+  The equality boundary is expired. Time is sampled after local writer admission and
+  afresh for each settlement statement and remote retry; waiting cannot preserve an
+  expired lease or receipt. A live exact-request receipt can still replay a previously
+  committed effect after the original lease expires.
+  *(engine/ga_fixes_test.go; engine/complete_batch_test.go:
+  TestSettlementLeaseDeadline, TestSettlementReceiptIdentityMatrix,
+  TestSettlementReceiptTimeAfterWriterAdmission, TestCompleteBatchRefreshesTimeBetweenChunks;
+  engine/storage_test.go: TestSettlementTimeRefreshesOnRemoteRetry;
+  sdk_test.go: TestSDKSettlementDeadline)*
+- **2.7 CompleteBatch** settles many messages in one transaction with the same per-item
+  fencing + idempotency; a stale token without an exact-request receipt yields `ok=false`,
+  never failing the batch. Single `Complete` and a `CompleteBatch` item share the completed
+  operation identity, so the same successful request can replay in either direction.
+  *(engine/complete_batch_test.go: TestCompleteBatch, TestSettlementReceiptIdentityMatrix)*
+- **2.8 RenewBatch** extends a whole batch's leases in ONE statement, fenced per item on its own
+  `lock_token`, and reports the deadline it committed. `ok=true` means the lease was live when the
+  broker's STATEMENT finished — the answer still has to travel, so `locked_until_ms` is the
+  authoritative fact and the caller compares it against its own clock. A renewal whose write
+  outlived the lock reports `ok=false` rather than handing back a lock the caller never held, and a
+  renewal never *shortens* a lease. Each successful item uses the same deadline rule
+  as §2.5 and preserves state, token, and `delivery_count`. Capped at 512 messages —
+  a claim about a live lease is only keepable within a single statement.
+  *(engine/complete_batch_test.go)*
+
+## 3 · Idempotency & at-least-once
+
+- **3.1** On `Open`, every orphaned `locked` row (a crash leftover) MUST be
+  reclaimed under the same rule as the reaper: back to `active`, or to
+  `dead_lettered` (`MaxDeliveryCountExceeded`) once `delivery_count >=
+  max_delivery_count` — a crash never buys an extra delivery.
+  *(engine/engine_test.go: TestCrashRecoveryRespectsMaxDelivery)*
+- **3.2** While its exact-request receipt is live, a settle whose response was lost MUST
+  replay as success, not `ErrLockLost` — and ONLY when it is the same request.
+  A `settlement_receipt` identifies
+  `queue + seq_number + lock_token + operation + effect-bearing arguments`; a call that
+  differs in ANY of them is not a replay and MUST return `ErrLockLost`, never a success
+  that silently keeps the first call's effect.
+  *(engine/ga_fixes_test.go; engine/complete_batch_test.go: TestReceiptsAreBoundToTheirMessage,
+  TestReceiptsAreBoundToTheirArguments, TestSettlementReceiptsAreVerbSpecific,
+  TestSettlementReceiptIdentityMatrix;
+  engine/model_test.go: TestEngineMatchesTheModel, TestModelRejectReceiptArguments)*
+- **3.3** A `Receive` retried with the same `AttemptID` MUST replay the same batch /
+  same lock tokens while its attempt record is live. Record expiry MUST be checked against
+  fresh time after writer admission; a record that expires during the wait MUST NOT replay.
+  *(engine/ga_fixes_test.go; engine/functional_test.go: TestReceiveAttemptExpiryAfterWriterWait)*
+- **3.4** No message loss + no content corruption: a contiguous `1..N` sequence with
+  random bodies (hashed into a property), consumed concurrently with redelivery, is
+  delivered completely (every value once) and intact (each body matches its hash).
+  *(engine/integrity_test.go `TestMessageIntegrity`)*
+
+## 4 · Deduplication
+
+- **4.1** Within a queue's `dedup_window`, a repeat `message_id` (empty → body SHA-256)
+  MUST collapse to a single enqueue. *(engine/functional_test.go, engine/turso_test.go)*
+- **4.2** A *single* `Send` whose `message_id` conflicts with a different body MUST
+  return `ErrDedupConflict` (HTTP 409). *(server/send_dedup_test.go)*
+- **4.3** In a *multi-message* `Send`, a conflicting slot comes back as seq `0`
+  (skipped) while the rest of the batch commits. *(wire `SendResponse`; server/send_dedup_test.go)*
+
+## 5 · Ordering modes
+
+- **5.1 `standard`** — per-`GroupID` FIFO with cross-group parallelism; messages with no
+  `GroupID` are unordered. Claim eligibility is identical to `group_fifo` — the only
+  difference is `group_fifo` additionally requires a `GroupID` at send time. *(engine/functional_test.go)*
+- **5.2 `group_fifo`** — strict FIFO per `GroupID` (head-of-line per group); a send
+  without a `GroupID` MUST be rejected with `ErrGroupRequired`. *(engine/functional_test.go)*
+- **5.3 `strict_fifo`** — global FIFO: at most one message in flight for the queue at a
+  time. *(engine/functional_test.go, engine/claim_plan_test.go)*
+- **5.4** Head-of-line MUST survive lock expiry: an expired-but-not-yet-reaped lock
+  still blocks its group (`strict_fifo`: the whole queue) — successors are never
+  delivered ahead of the expired head, and once the reaper resettles it the head is
+  redelivered first, in id order (or dead-lettered at `count ≥ max`, which unblocks
+  the group). The accepted cost is a group stall of up to one reaper interval on a
+  consumer timeout. *(engine/functional_test.go: TestFIFOHoldsAcrossLockExpiry)*
+- **5.5** Head-of-line MUST survive an explicit backoff: `Abandon` with `delay_ms > 0`
+  parks the head in `scheduled` — a state the head-of-line probe covers — so
+  successors are never delivered ahead of a backing-off head; when the backoff lapses
+  the scheduler re-activates it and it is redelivered first. Other groups (other
+  queues' worth of work under `standard`/`group_fifo`) proceed during the backoff.
+  *(engine/functional_test.go: TestAbandonDelayHoldsGroupOrder)*
+
+## 6 · Dead-letter queue
+
+- **6.1** Reaching `max_delivery_count` on an ordinary Peek-Lock `Receive` MUST NOT itself
+  dead-letter the message: the Nth ordinary Peek-Lock claim is a full final attempt and may
+  be renewed and completed. If that locked attempt is Abandoned, its lease expires,
+  or it is recovered at startup with `delivery_count >= max_delivery_count`, it MUST be
+  dead-lettered with reason `MaxDeliveryCountExceeded` instead of becoming active
+  for an ordinary Peek-Lock N+1 claim. This ordinary retry bound does not override the
+  explicit `ReceiveDeferred` behavior in §2.4. *(engine/engine_test.go)*
+- **6.2** `Redrive` moves dead letters back to `active` (or to a target queue); `Purge`
+  permanently deletes them (scoped by `Max`/`OlderThanMs`). *(engine/redrive — functional tests)*
+
+## 7 · Scheduling, deferral & TTL
+
+- **7.1 Schedule** keeps a message hidden (`scheduled`, `visible_at` in the future)
+  until its time, then the scheduler activates it; `Cancel` deletes a scheduled
+  message that has never been delivered (`delivery_count=0`) — a backoff-parked
+  redelivery (§2.2) is NOT cancellable and stays under the retry/DLQ discipline.
+  Scheduler activation MUST NOT increment `delivery_count`.
+  *(engine/functional_test.go: TestAbandonDelayHoldsGroupOrder)*
+- **7.2 TTL** — an expired message (`expires_at`) MUST move to the DLQ when the queue
+  has `dead_letter_on_expire`, else be discarded. The two branches cover the **same
+  state set** — every non-terminal state including `scheduled`. The TTL sweep can
+  expire a scheduled row directly. If the scheduler observes an overdue row first,
+  it may change that row to `active`, but claim eligibility still excludes it at
+  `now >= expires_at`; the TTL sweep then terminates it without delivery. The queue
+  default is both the default and ceiling for an explicit message TTL. Expiry is
+  anchored at the message's initial `visible_at`, so for scheduled messages the
+  clock starts at their delivery time; later delayed Abandon and scheduler
+  activation MUST NOT recompute it. Message TTL is independent of the lock lease:
+  it may expire a locked row, and Renew MUST NOT extend it. Embedded and remote
+  batch Send MUST preserve each item's requested TTL; a uniform HTTP batch may use
+  the batch-wide field, while a mixed batch uses per-message fields. A request that
+  combines a positive batch-wide TTL with positive per-message TTLs, or supplies a
+  negative TTL in either location, MUST fail as invalid. The Go SDK MUST also reject
+  a positive message TTL below the wire's 1 ms precision before sending or writing,
+  and an effective deadline that overflows epoch milliseconds MUST fail without
+  committing any item in the batch.
+  *(engine/functional_test.go: TestTTLScheduledToDeadLetter,
+  TestTTLCapAtQueueDefault, TestNegativeMessageTTLRejectedBeforeWrite,
+  TestMessageTTLExpiryOverflowRejectedAtomically,
+  TestMessageTTLDeadlineSurvivesRenewAndDelayedRetry; sdk_test.go:
+  TestBatchTTLRemoteEmbeddedParity, TestNegativeMessageTTLSDKParity,
+  TestRemoteBatchTTLWireCompatibility; server/send_dedup_test.go:
+  TestServerSendPerMessageTTL; engine/turso_test.go:
+  TestTursoMessageTTLParity; test/api_tests.py: t_message_ttl_contract)*
+
+## 8 · DLQ retention
+
+- **8.1** With a bound set, `reapDLQ` MUST drop **oldest-first** dead letters past the
+  max age, per-queue count, or per-queue body bytes — and MUST touch **only**
+  `state='dead_lettered'` (never undelivered/in-flight/scheduled work). These are
+  asynchronous retention targets rather than admission limits; a DLQ MAY exceed
+  them temporarily between bounded worker passes.
+  *(engine/retention_dlq_test.go)*
+- **8.2** With no bound (the engine default), the DLQ is unbounded — no auto-deletion.
+  *(engine/retention_dlq_test.go `TestDLQRetentionDisabledByDefault`)*
+- **8.3** Each queue's effective bound is its own override resolved against the engine
+  default (`effectiveBound`): `0` inherits the default, `>0` overrides it, `<0` is
+  explicitly unbounded. *(engine/retention_dlq_test.go `TestEffectiveBound`,
+  `TestDLQRetentionPerQueueOverride`, `TestDLQRetentionPerQueueInheritAndOptOut`)*
+
+## 9 · Auth & errors (broker)
+
+- **9.1** When `MQLITE_TOKENS` is set, every endpoint MUST require a valid
+  `Authorization: Bearer` token **except** the open `/` (discovery), `/healthz`, and
+  the static admin console under `/ui` (when enabled — its own API calls still carry a
+  token); a missing/invalid/expired/revoked token → 401 `unauthenticated`.
+  *(server/errors_test.go, server/index_test.go, server/console_test.go)*
+- **9.2** Errors use a JSON envelope `{code,message}` with the documented HTTP status:
+  400 `invalid_argument`/`group_required` · 401 `unauthenticated` · 403
+  `permission_denied` · 404 `not_found` · 409
+  `already_exists`/`lock_lost`/`name_conflict`/`key_conflict`/
+  `queue_not_empty`/`subscription_not_empty` · 413 `message_too_large` ·
+  429 `resource_exhausted` · 500 `internal` · 503 `outcome_unknown`.
+  *(server/errors_test.go; see [api-reference.md](https://github.com/mqlitehq/mqlite/blob/main/docs/api-reference.md))*
+- **9.3** Every registered RPC MUST bind a permission in the route registration.
+  Send/Schedule/Cancel require send; all other QueueService methods require listen;
+  AdminService and AuthService require manage, except Observe and the opt-in
+  `/metrics` endpoint also accept configured read-only monitor credentials. Metrics
+  MUST be disabled by default, return 404 while disabled, and appear as `/metrics`
+  in discovery only while enabled. Enabling metrics MUST require administrator
+  auth. Manage includes both data permissions. Configured and managed
+  administrators MUST have identical operation rights, including issuing manage
+  keys. Insufficient permission MUST
+  fail before the handler can read or change protected data.
+  *(server/errors_test.go: TestAccessKeyCompletePermissionMatrix;
+  server/metrics_test.go: TestMetricsDefaultOffAndAnonymousObserveDenied,
+  TestMetricsEnabledRequiresAdministratorAuthentication, TestMetricsPermissionMatrix,
+  TestMetricsDisabledSkipsDatabaseAuthentication)*
+- Configured monitor credentials MUST NOT grant message access or administration,
+  MUST be distinct from administrators, and MUST remain usable for fault telemetry
+  without database-backed authentication. Failed collection MUST omit queue gauges
+  and explicitly report unavailable data, preserving real in-memory counters.
+  *(server/metrics_test.go: TestMonitorConfigurationFailsClosed,
+  TestObserveStorageFailureAvailability, TestObserveAuthOutcomesAndWholeRequestCoverage)*
+- **9.4** Managed keys MUST survive restart and store only a SHA-256 digest of
+  their token. New tokens MUST be `mqk_` plus 64 lowercase hex characters from
+  a secure random source. Existing configured tokens remain accepted exactly.
+  Only the successful creation response returns a secret; list, errors and logs
+  MUST NOT return tokens or digests. A duplicate public ID MUST NOT mint a second
+  credential. Auth-off mode MUST refuse key management.
+  *(engine/storage_test.go: TestAccessKeyLifecycle, TestAccessKeyValidation;
+  server/errors_test.go: TestAccessKeyManagementLifecycleAndSecrecy,
+  TestAccessKeyErrorsDoNotEchoSecrets; token_test.go)*
+- **9.5** Successful revocation MUST reject subsequent authentication; already
+  authorized requests may finish. Static configuration takes precedence over a
+  matching database record. The SDK MUST treat permission denial as permanent in
+  receive, settlement and renewal paths, without unauthorized batch fallback.
+  *(server/errors_test.go: TestAccessKeyRevocationAndExpiryBoundaries;
+  sdk_test.go: TestManagedKeySDKAuthorization; receiver_internal_test.go;
+  cmd/mqlite/safety_test.go)*
+- **9.6** Access-key lists MUST retain ID-ascending order by default. Explicit
+  `created_desc` MUST order the complete result by creation time descending, then
+  ID descending, with stable cursor pagination. Revocation MUST NOT move a key;
+  insertion ahead of a cursor MUST NOT repeat or skip existing keys on later
+  pages. Unknown sort values and unknown creation-order cursors MUST fail with
+  `invalid_argument`. SDKs and tools MUST reject incorrectly ordered responses.
+  *(engine/storage_test.go: TestAccessKeyCreationOrderPagination,
+  TestAccessKeySortValidationAndIndex; server/errors_test.go:
+  TestAccessKeyCreationOrderHTTP; wire/wire_test.go:
+  TestAccessKeyCreationOrderResponseValidation; test/api_tests.py)*
+
+## 10 · Storage & schema invariants
+
+- **10.1** Local file / `:memory:` use a single writer (`SetMaxOpenConns(1)`); a second
+  process / second `OpenEmbedded` on the same file MUST fail fast with `ErrDBLocked`.
+  A local file MAY use one separate `mode=ro` plus `query_only` WAL connection
+  for observation reads; it MUST reject writes and checkpoints and share the
+  engine close gate. The global queue snapshot MAY be reused for about 10
+  seconds, MUST preserve its original
+  `sampled_at_ms` and internal topology fence as one cache entry, MUST coalesce
+  concurrent refreshes, and MUST NOT cache a failed refresh. Observe
+  `server_time_ms` MUST be read separately from the same injectable lifecycle
+  clock and MUST NOT be retained in that queue snapshot cache. Per-queue `Stats`
+  remains a fresh indexed read.
+  *(engine/storage_test.go, engine/observability_performance_test.go)*
+- **10.2** `Open` MUST refuse a DB whose recorded `schemaVersion` differs from the
+  binary's (`ErrSchemaVersionMismatch`) rather than running mismatched DDL against it.
+  *(engine/storage_test.go)*
+- **10.3** All times are epoch-ms (UTC); the clock is injectable for deterministic
+  tests. The remote (Turso) path retries transient errors with backoff; the local
+  path never retries. *(engine/storage_test.go, engine/turso_test.go)*
+- **10.4** Access-key table and index additions remain independently additive
+  inside the canonical schema. Verify complete backup/restore content,
+  including active, expired and revoked credentials.
+  An incompatible existing object named `access_keys` or
+  `idx_access_keys_created` MUST fail rather than be overwritten or silently trusted.
+  *(engine/storage_test.go: TestAccessKeySchemaAdditiveCompatibility,
+  TestAccessKeySchemaConflict, TestAccessKeyCreationIndexUpgradeAndConflicts;
+  test/production/restore/run.py, compat.py)*
+- **10.5** Durable resource lifecycle and fixed subscription-expiry columns and
+  indexes make the v0.4.0 schema token 7 incompatible with the older schema-5
+  layout and intermediate schema-6 layout. Each binary MUST refuse the other's
+  database rather than adding columns, restamping the token or partially opening
+  it. Operators must create a fresh database and preserve the matching old
+  binary/backup pair. *(engine/storage_test.go:
+  TestSchemaVersionGuard, TestSchemaContentPinnedToVersionToken)*
+- **10.6 Backend parity.** Given the same committed state, broker time and request,
+  local SQLite and remote Turso/libSQL MUST produce the same successful result,
+  validation outcome, state transition and logical sentinel error. Latency,
+  temporary availability, remote transport failures (including
+  `ErrOutcomeUnknown`), remote transaction-callback replay and explicitly
+  operational deployment, maintenance and observation behavior MAY differ; they
+  MUST NOT silently change deterministic queue semantics.
+  *(engine/turso_test.go: TestTursoIntegration, TestTursoExtended,
+  TestTursoMessageTTLParity, TestTursoConcurrent, TestTursoBatchSettle;
+  engine/storage_test.go; server/errors_test.go; sdk_test.go)*
+
+## 11 · Subscription filters
+
+- **11.1** A subscription filter is one `expr` boolean predicate over the message; an
+  empty filter matches every message. It is compiled + type-checked at `Subscribe`,
+  and a malformed / unknown-field / non-boolean expression MUST be rejected with
+  `ErrInvalidFilter` (HTTP 400 `invalid_argument`) and **not** stored — no backing
+  queue is created. *(engine/filter_test.go, server/errors_test.go)*
+- **11.2** The filter is evaluated at **publish** against the message env (core fields,
+  `enqueued_at`/`visible_at`, the derived `subject_parts`/`body_size`/`property_keys`,
+  and the body fields `body_text`/`body_json` — projected only when referenced, with
+  `body_json` decoded only for a JSON content type, else `{}`); a message is routed to
+  a subscription if and only if its filter returns true.
+  `enqueued_at` is the publish time and `visible_at` is the delivery time (equal for an
+  immediate send, the scheduled time for a delayed one), so a delay is
+  `visible_at - enqueued_at`. *(engine/filter_test.go `TestFilterFanoutConditions`,
+  `TestFilterScheduledMessageDelay`)*
+- **11.3** Evaluation is **fail-closed**: a filter that errors or panics at runtime MUST
+  leave the message unrouted to that subscription (logged) — never crashing the broker
+  and never matching by default. *(engine/filter_test.go `TestEvalFilterFailClosed`)*
+- **11.4** Publishing to a topic that **no** subscription filter accepts is a valid
+  no-op (`SendOne`/`Schedule` return `0, nil`), not an `ErrDedupConflict`.
+  *(engine/filter_test.go `TestFilterReSubscribeRecompiles`)*
+
+## 12 · Topics & naming
+
+- **12.1** Plain-queue names, subscription names (their backing queues) and topic
+  names are **one disjoint namespace**. Every collision MUST be rejected with
+  `ErrNameConflict` (HTTP 409) at creation time, in both directions: `Subscribe`
+  rejects a topic naming any existing queues row (plain or backing), a subscription
+  name that is a plain queue / another topic's subscription / a live topic, and
+  `topic == name`; `CreateQueue` rejects a name that is live as a topic and any
+  cross-kind upsert. Same-kind upserts (queue reconfig, `(topic,name)` re-subscribe)
+  stay open. A failed creation MUST leave nothing behind (guards + inserts are one
+  transaction).
+  *(engine/functional_test.go: TestTopicQueueNamespaceDisjoint,
+  TestTopicSubscriptionIsolation)*
+- **12.2** Because names are disjoint, send/publish resolution is **unambiguous**:
+  an active plain-queue or backing-queue name addresses that queue; an implicit
+  topic name addresses its active subscription rows; any other name returns
+  `ErrQueueNotFound`. Behavior after directly altering internal tables to create a
+  queue/topic collision is outside the public contract.
+  *(engine/functional_test.go: TestTopicQueueNamespaceDisjoint)*
+- **12.3 Subscription lifecycle.** Deletion MUST select the exact `(topic,name)`
+  pair. By default it MUST reject every retained message state with
+  `ErrSubscriptionNotEmpty`; force is durable authorization to discard all states.
+  Acceptance MUST atomically exclude the backing queue from fan-out and the data
+  plane and start bounded cleanup. If that cleanup finishes in the accepting
+  transaction, it MUST remove the queue and mapping and return `deleted`. Otherwise
+  it MUST commit a `deleting` marker that preserves the mapping and name until a
+  later transaction removes both. Restart MUST resume accepted pending cleanup
+  without another force authorization. The last active subscription's retirement
+  makes its implicit topic unavailable immediately.
+- **12.4 Bounded inventory.** The compatibility `ListSubscriptions` operation MUST
+  return every active subscription in `(topic,name)` order. The paged operation
+  MUST use the same order, default to 100, reject limits above 1,000, return an
+  exact total for the request's scope and optionally include deleting entries.
+  Every paged row MUST carry required non-negative `created_at_ms` and
+  `expires_at_ms`; zero expiry means permanent and a positive expiry MUST be
+  greater than creation. An expired retained row is logically deleting.
+  Its opaque cursor MUST be bound to the topic and include-deleting scope. One
+  request is a consistent snapshot; pages issued as separate requests do not
+  promise a frozen snapshot under concurrent changes.
+- **12.5 Capacity.** The engine MUST bound active plus deleting subscriptions
+  (default 10,000). Creating a new mapping at the bound returns
+  `ErrSubscriptionLimit` (HTTP 429 `resource_exhausted`); re-subscribing an active
+  exact pair may update its filter. A deleting entry MUST retain its slot until
+  final physical cleanup. Public `CreateQueue(kind=subscription)` MUST NOT create
+  a backing queue without a subscription mapping.
+- **12.6 Fixed subscription lifetime.** A positive creation TTL MUST store one
+  absolute deadline from the first successful transaction. Omitted/zero TTL on a
+  new subscription makes it permanent; on an existing subscription it preserves
+  the original lifetime. The same positive TTL is idempotent, while a different
+  positive TTL MUST return `ErrNameConflict` before changing the filter. Retry,
+  filter update, message activity and restart MUST NOT extend the deadline. At
+  `now >= expires_at` fan-out and every direct data-plane effect MUST reject the
+  subscription, cached metadata included. Locks and long polls MUST end no later
+  than the deadline; Renew MUST NOT extend it, and idempotency records MUST NOT
+  authorize work after it.
+  *(engine/functional_test.go, engine/engine_test.go,
+  engine/complete_batch_test.go; sdk_test.go; server/subscriptions_test.go)*
+- **12.7 Expiry cleanup.** Expiry is durable advance authorization to discard all
+  retained message states. The indexed scanner MUST transition due subscriptions
+  to the existing restart-safe deletion lifecycle, while correctness remains
+  independent of scan timing. Empty subscriptions MAY use set-based cleanup only
+  when mapping and backing rows are removed in one transaction with exact row
+  counts, including when foreign keys are off. Nonempty subscriptions remain
+  subject to the global row/byte/fairness bounds, and every retained row keeps its
+  capacity slot until physical removal. *(engine/lifecycle_test.go,
+  engine/storage_test.go)*
+
+## 13 · Cancellation (context deadlines)
+
+Cancelling a call is not a way to *undo* it, and on a local store it is not a latency knob
+either. The rules below are the whole contract; they are stated here, and not only in the
+changelog, because a caller can observe every one of them.
+
+- **13.1** A mqlite operation whose context is already cancelled MUST NOT execute anything. This holds
+  at both boundaries — before the wait for the writer, and again after the connection is in
+  hand — and before entering a local `Tx` callback.
+  *(engine/cancel_test.go: TestPreCancelledNeverExecutes,
+  TestCancelInTheHandoffWindowStartsNothing, TestNothingBeginsInTheLastWindowBeforeAStatement;
+  sdk_test.go: TestEmbeddedTxCancellation)*
+- **13.2** A caller waiting for the single writer keeps its own deadline: cancelling while
+  queued MUST return promptly and MUST mutate nothing.
+  *(engine/cancel_test.go: TestCancelWhileWaitingWritesNothing)*
+- **13.3** On a **local** store (file or `:memory:`), a statement that has already begun
+  executing MUST be allowed to finish. It is not interrupted, and **there is no upper bound on
+  how long it takes** — `EngineTx.SQL()` runs arbitrary user SQL, a full `VACUUM` rewrites the
+  file, a large `Purge` is a big `DELETE`. A write can therefore commit *after* its caller has
+  given up. This is deliberate: interrupting a local statement leaks the driver connection,
+  which leaves a file DB locked (`SQLITE_BUSY`, permanently) or destroys a `:memory:` DB
+  outright. *(engine/cancel_test.go: TestCancelStormLeavesTheDatabaseUsable,
+  TestCancelledSettleWritesLeaveTheDatabaseUsable)*
+- **13.4** Inside a local transaction, **mqlite-owned statements** (including `EngineTx.SendOne`)
+  check the caller's context before each statement: one already running finishes, and a statement
+  whose check observes cancellation MUST NOT begin. `EngineTx.SQL()` exposes a raw `*sql.Tx`
+  outside those guards for caller-owned tables; directly modifying mqlite-owned tables is outside
+  the supported contract. Its statements MUST use `tx.Context()` to avoid interrupting local SQLite;
+  that context is deliberately not cancellable, so raw SQL can still execute after the caller
+  cancels. Callers MUST check the original context between their own statements and return promptly.
+  Mqlite cannot interrupt the callback or release the single writer before it returns. Cancellation
+  observed after the callback and before commit MUST roll back the whole transaction, including raw
+  SQL writes, even if the callback returned nil.
+  *(engine/cancel_test.go: TestCancelledTransactionStopsIssuingStatements,
+  TestTxCancelledBetweenStatementsRollsBack; sdk_test.go: TestEmbeddedTxCancellation)*
+- **13.5** On a **remote** (Turso/libSQL) store, statement cancellation is real and unchanged:
+  those statements can genuinely block on the network, and a discarded connection there holds
+  no local lock.
+- **13.6** Follows from 13.3: a lost response never means "it did not happen". Cancellation
+  does not change the at-least-once contract — reconcile, do not assume.
+
+## 14 · Concurrency invariants
+
+The properties a user cannot work around, asserted under real parallelism rather than by asking the
+engine to grade itself — an engine with a bug reports that everything is fine.
+
+- **14.1 Exclusive delivery.** While a consumer holds a **live** lock on a message, that message
+  MUST NOT be delivered to anyone else. Exclusivity *is* the lease: past `locked_until` the holder
+  owns nothing, and a redelivery then is the at-least-once contract working, not a violation.
+  *(engine/concurrency_test.go: TestConcurrentConsumersNeverShareAMessage)*
+- **14.2 The fence must fence.** When a lock expires and the message is reassigned, a settle from
+  the OLD holder MUST be refused (`ErrLockLost`) and the new holder's MUST succeed. "Exactly one
+  winner" is not sufficient — the winner must be the holder of the live lock.
+  *(engine/concurrency_test.go: TestConcurrentSettlementPicksExactlyOneWinner)*
+- **14.3 No zombie delivery.** A completed message MUST NOT be delivered again.
+  *(engine/concurrency_test.go)*
+- **14.4 No loss.** Every message sent is eventually completed — not most of them.
+  *(engine/concurrency_test.go)*
+- **14.5 Shutdown fences the store.** `Close` closes admission before anything else: DB work
+  that begins after shutdown starts MUST fail fast with `ErrClosed`; work already admitted —
+  a statement, row scan, transaction callback, or commit in flight — MUST complete before the
+  file lock is released, and a second `Open` on the same file during that window MUST be
+  refused (`ErrDBLocked`); an empty long-poll `Receive` MUST be woken with `ErrClosed` rather
+  than sleeping out its poll window against a closed engine. `Close` MUST NOT be called from
+  inside a `Tx` callback — it waits for the callback, so that deadlocks.
+  *(sdk_test.go: TestEmbeddedCloseWaitsForPublicTx · engine/storage_test.go:
+  TestCloseWaitsForInFlightWritesBeforeReleasingTheLock, TestCloseWakesLongPollWaiters)*
+
+## 15 · Crash recovery (process death)
+
+Asserted by killing a real process hard (SIGKILL / TerminateProcess — no cleanup, no flush) while it
+is mid-transaction, restarting, and checking what survived. This covers process death, NOT power
+loss: a hard kill does not lose data the OS already accepted, so it exercises application-level
+recovery, not filesystem durability.
+
+- **15.1 Outbox atomicity across a crash.** A transaction that writes a business row AND enqueues a
+  message commits both or neither. After recovery the set of business rows equals the set of
+  messages exactly: never an order without its message, never a message without its order.
+  What each crash mode establishes, stated exactly:
+  - *Coordinated mode (deterministic):* every run crashes the producer with a transaction held open
+    **between its two writes**, so a torn callback — or an outbox split into two transactions — is
+    caught on every run.
+  - *Random mode (activity deterministic, placement probabilistic):* each kill is **gated** on
+    stream-order evidence — two post-challenge ACKs, one discounted as a possible pre-challenge
+    straggler — so **every** kill window provably contains a commit made after the liveness
+    challenge, on any host: the evidence is a wait condition on the kill, not a throughput floor a
+    slow runner could trip (per-window counts are logged). On a normally loaded host the evidence
+    exists long before the kill timer expires, so the kill stays purely timer-driven. A frozen work
+    loop never produces the evidence and fails deterministically. **Where** each kill lands within
+    that live stream is probabilistic, so a crash falling exactly inside a hypothetical
+    two-*commit* gap is supplementary coverage, not a per-run guarantee.
+
+  *(test/crash/crash_test.go: TestCrashOutboxAtomicity)*
+- **15.2 Orphaned locks reset on restart.** After a crash while messages are `locked`, `Open` reclaims
+  every orphaned lock — to `active`, or to `dead_lettered` with `MaxDeliveryCountExceeded` if the
+  message was already on its last permitted delivery (the same rule the reaper applies, §3.1). Either
+  way nothing is stranded `locked`. The last-delivery case preserves the message body and delivery
+  count, clears the lock, and excludes it from normal receive.
+  *(test/crash/crash_test.go: TestCrashRecoveryResetsOrphanedLocks,
+  TestCrashRecoveryDeadLettersLastDelivery)*
+- **15.3 Acknowledged commits survive recovery.** Every producer commit acknowledged to and
+  observed by the harness before a kill MUST still be present after recovery. The harness checks
+  those acknowledged transaction identities against both recovered business rows and messages.
+  Commits whose acknowledgements were not observed remain subject to the all-or-nothing check
+  in §15.1. *(test/crash/crash_test.go: TestCrashOutboxAtomicity)*
+
+Run: `make crash` (race-instrumented, tag-gated; a separate Linux CI job, excluded from the default
+package matrix).
+
+---
+
+*This spec is the contract a non-SQLite storage backend (see the Store-interface
+research) would have to satisfy to be a conformant mqlite. Hermetic package tests run with `-race`
+in the OS/Go matrix; tagged crash tests run with `-race` in their own Linux job. Live Turso tests
+run separately without `-race`; the large no-loss sweep also runs weekly without `-race`.*
+
+
+<!-- ===== mqlite main · source v0.4.1; latest supported release v0.4.0 · docs/dependencies.md ===== -->
+
+# Dependency policy & the go 1.21 floor
+
+MQLite pins its `go.mod` floor at **`go 1.21`** so the SDK stays drop-in
+embeddable in projects that haven't moved to a newer toolchain (MQLITE-1). That
+single decision freezes two dependencies — this note records why, what it costs,
+and how the freeze is enforced so it can't be lifted by accident.
+
+## What the floor freezes
+
+| dependency | pinned | next release | why frozen |
+|---|---|---|---|
+| `modernc.org/sqlite` | **v1.36.1** | v1.36.2 → `go 1.23` | the pure-Go SQLite engine; **1.36.1 is the last release that builds on go 1.21** — even the next *patch* bumped the floor to 1.23 |
+| `golang.org/x/sys` | **v0.30.0** | v0.31.0 → `go 1.23` | transitive (file locking); v0.31.0+ all require go ≥ 1.23 |
+
+There is **no go-1.21-compatible upgrade** for either — the very next version of
+each already requires go ≥ 1.23. So Dependabot bumps like `sqlite → 1.52.0` or
+`x/sys → 0.46.0` are not "upgrades we're behind on"; they are mutually exclusive
+with the go 1.21 floor and fail the `go 1.21.x` CI matrix by construction.
+
+`github.com/tursodatabase/libsql-client-go` (the pure-Go Hrana client) is subject
+to the same floor; the CI matrix is the backstop if a future version raises it.
+
+## Security posture
+
+Freezing requires checking upstream defects as well as running scanners. CI runs
+`govulncheck` on source and uses the GoReleaser release matrix to scan both actual
+binaries on all six OS/architecture pairs. Release hooks repeat those binary scans;
+Docker scans its actual output too. Artifacts retain symbols so the scanner can
+identify linked code instead of falling back to module-level matches. No advisory
+is excluded. A reachable vulnerability requires a fix or a deliberate change to
+the compatibility floor; the floor does not override security.
+
+For example, [GO-2026-5024](https://pkg.go.dev/vuln/GO-2026-5024) affects an
+`x/sys/windows` function that the current MQLite binaries do not call. Both Windows
+source analysis and symbol-preserving binary scans confirm that boundary. The
+binary gates must continue to pass if a later code/dependency change adds a call.
+
+Go vulnerability scanning does not cover every native SQLite defect. SQLite's
+[WAL-reset issue](https://www.sqlite.org/wal.html#the_wal_reset_bug) affects older
+SQLite versions when multiple connections concurrently write/checkpoint one WAL
+database. MQLite serializes local writes and checkpoints on one SQL connection.
+A second local connection serves observation reads with SQLite `mode=ro` and
+`query_only`, so it cannot write or checkpoint. Keep external backup connections
+read-only and never run another writer/checkpointer against the live file. The
+[operations runbook](https://github.com/mqlitehq/mqlite/blob/main/docs/operations.md#consistent-backups) preserves that restriction.
+Review native engine advisories before changing this connection model.
+
+Container OS packages have a separate security boundary from Go dependencies.
+The runtime image upgrades installed APKs within the supported Alpine branch
+before adding certificates and time-zone data. A supported base tag can still
+contain older packages: Alpine 3.24.1 included OpenSSL 3.5.7, while its repository
+provides the 3.5.8 patch for [CVE-2026-14456](https://openssl-library.org/news/secadv/20260813.txt).
+The existing Docker CI job scans its actual image's OS packages independently
+of `govulncheck`, using a checksum-verified Trivy release and a fresh vulnerability
+database. HIGH/CRITICAL findings fail the job without advisory exclusions; its
+JSON report is retained as an artifact. Update the scanner version and checksum
+together after reviewing the official release. CI and release image builds bypass
+the runtime stage's cache so the APK upgrade runs even when the base tag is unchanged.
+The exact final release candidate image must also pass an OS scan before promotion.
+MQLite's static Go binary does not link these system OpenSSL libraries; that does not justify
+shipping avoidable vulnerable runtime packages.
+
+## How the freeze is enforced
+
+1. **`.github/dependabot.yml`** ignores `modernc.org/sqlite >=1.36.2` and
+   `golang.org/x/sys >=0.31.0`, so Dependabot stops opening PRs that can't merge.
+2. **`go 1.21.x` CI matrix** — a dependency (or a `go.mod` edit) that needs a newer
+   toolchain fails to build there.
+3. **`TestGoModFloorStaysAt121`** (`sdk_test.go`) asserts the floor is exactly
+   `go 1.21`, failing with a clear message if it's bumped — so unfreezing the
+   dependencies is always a conscious edit, never a side effect.
+
+## `expr-lang/expr` — the topic-filter dependency (MQLITE-17)
+
+Subscription filters are an [`expr-lang/expr`](https://github.com/expr-lang/expr)
+boolean predicate (see [concepts.md § filters](https://github.com/mqlitehq/mqlite/blob/main/docs/concepts.md#subscription-filters-expr)),
+a **direct core dependency** pinned at **v1.17.8**. It's a deliberate long-term choice:
+maintained by the `expr-lang` org (not a single author), **zero transitive
+dependencies**, MIT, and "memory-safe, side-effect-free, always-terminating" by
+construction — a sandboxed predicate evaluator. Its `go.mod` floor is only go 1.18, so
+it puts no pressure on the freeze above.
+
+**Security.** The one relevant advisory, **CVE-2025-29786** (parser memory exhaustion
+from an unbounded AST), is fixed in the v1.17.x line we pin. Defense in depth in
+`engine/filter.go`: a source-length cap + `expr.MaxNodes`, plus a fail-closed `recover`
+so a hostile or buggy filter can never crash the broker or silently match. (The CVSS-9.8
+RCE search engines surface for "expr" is the **JavaScript** `expr-eval` library — a
+different project.) All filter use funnels through one wrapper, so an upstream change or
+evaluator swap touches one file; `govulncheck` (CI) covers expr at the pin.
+
+## When the freeze lifts
+
+When the project intentionally raises the go floor (e.g. the embedding-compat
+requirement is dropped, or a security CVE forces it): bump `go.mod`, update
+`TestGoModFloorStaysAt121` and this table, remove the Dependabot ignore rules, and
+let the held bumps (`modernc.org/sqlite`, `golang.org/x/sys`) flow in together.
+
+
 <!-- ===== mqlite main · source v0.4.1; latest supported release v0.4.0 · docs/mcp.md ===== -->
 
 # MCP server (`mqlite-mcp`)
