@@ -29,7 +29,7 @@
   </div>
 </div></nav>
 <div class="wrap">
-  <div class="stamp">Source: <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/deployment.md">mqlite main · docs/deployment.md</a> — source v0.4.1. Latest supported release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.1">v0.4.1</a>.
+  <div class="stamp">Source: <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/deployment.md">mqlite main · docs/deployment.md</a> — unreleased v0.4.1 candidate. Latest supported release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.0">v0.4.0</a>.
   These docs track main; use the linked release for published artifacts.</div>
   <main class="prose">
 <h1 id="deploying-mqlite">Deploying mqlite</h1>
@@ -115,40 +115,42 @@ and error reference: <a href="api.html">api-reference.md</a>.</p>
 <h2 id="docker--ghcr">Docker / GHCR</h2>
 <blockquote>
 <p><strong>Version and upgrade compatibility.</strong>
-The latest supported release is <strong>v0.4.1</strong>, with default port <strong>6754</strong> and
-schema token <strong>7</strong>. Pin the exact v0.4.1 binary or image rather than relying on
+The latest supported release is <strong>v0.4.0</strong>, with default port <strong>6754</strong> and
+schema token <strong>7</strong>. Pin the exact v0.4.0 binary or image rather than relying on
 a moving image alias. v0.3.3 is withdrawn, unsupported, and retracted by
 v0.4.0 and later; its public assets and exact image remain available for
 forensic or compatibility inspection and must not be deployed.</p>
 <p>v0.4.x cannot open a v0.3.x schema-5 database and no in-place migration exists.
 Schema 6 was used only by intermediate untagged lifecycle builds and is also
 refused. Preserve the matching schema-5 binary/database pair, take a consistent
-backup, account for retained work, and start v0.4.1 with a fresh database.
+backup, account for retained work, and start v0.4.0 with a fresh database.
 v0.4.0 also removes the deprecated Prometheus aliases described in
 <a href="observability.html#compatibility-and-v040-migration">observability</a>.
 <strong>v0.2.0 uses port 8080 and schema token 2.</strong> Follow the
 <a href="operations.html#upgrade-and-rollback">upgrade and rollback procedure</a> before
 replacing it.</p>
 </blockquote>
-<p>v0.4.0 → v0.4.1 is a same-schema replacement. It fixes console, CLI and Go SDK
-observation validation after deleting a resource with process-lifetime message
-effects, exposes the broker lifecycle clock and makes subscription deadlines
-visible in the console. It also preserves each message TTL in a remote mixed-TTL
-batch; upgrade the v0.4.0 broker and Go client together before relying on that
-additive input shape. It does not require a database rebuild.</p>
+<p>Current <code>main</code> reports v0.4.1 as an unreleased same-schema candidate. It fixes
+observation validation in the console, CLI and Go SDK after deleting a resource
+with process-lifetime message effects; it also exposes the broker lifecycle clock
+and makes subscription deadlines visible in the console. The candidate preserves
+each message TTL in a remote mixed-TTL batch as well. Upgrade the v0.4.0 broker and
+Go client together before relying on that additive input shape once the patch is
+released. No v0.4.1 tag or image exists yet; production deployments must remain
+pinned to v0.4.0. The candidate does not require a database rebuild.</p>
 <p>The exact supported image is multi-arch (amd64 + arm64):</p>
-<pre><code class="language-bash"># v0.4.1, default port 6754
+<pre><code class="language-bash"># v0.4.0, default port 6754
 docker run -d --name mqlite -p 6754:6754 \
   -v mqlite-data:/data \
   -e MQLITE_DB=file:/data/mq.db \
   -e MQLITE_TOKENS=mqk_prod_CHANGEME \
   -e MQLITE_MONITOR_TOKENS=mqk_monitor_CHANGEME \
   -e MQLITE_SYNC=FULL \
-  ghcr.io/mqlitehq/mqlite:0.4.1
+  ghcr.io/mqlitehq/mqlite:0.4.0
 </code></pre>
 <ul>
 <li>The named volume <code>mqlite-data</code> persists the SQLite file across restarts.</li>
-<li>Pin exact <code>0.4.1</code> in production. Images <code>&gt;= 0.3.0</code> listen on <code>6754</code>;
+<li>Pin exact <code>0.4.0</code> in production. Images <code>&gt;= 0.3.0</code> listen on <code>6754</code>;
 <strong><code>0.2.x</code> and earlier listen on <code>8080</code></strong>.</li>
 <li>Verify: <code>curl http://localhost:6754/</code> (discovery card) and <code>/healthz</code>. Metrics is
 disabled by default. For a private broker or an ingress that blocks public
@@ -162,7 +164,7 @@ Scraping uses the same API port; enabled discovery includes <code>&quot;metrics&
 primary_region = &quot;sin&quot;            # pick a region near you
 
 [build]
-  image = &quot;ghcr.io/mqlitehq/mqlite:0.4.1&quot;   # latest supported exact image
+  image = &quot;ghcr.io/mqlitehq/mqlite:0.4.0&quot;   # latest supported exact image
 
 [env]
   MQLITE_DB = &quot;file:/data/mq.db&quot;            # SQLite on the persistent volume
