@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
-import { PAGES, BUNDLE_FILES, GENERATED_FILES, sourceMetadata, renderSite, checkOutputs, checkClaims, checkLinks, rewriteLinks, rewriteMdLinks } from './build.mjs';
+import { PAGES, BUNDLE_FILES, GENERATED_FILES, HANDWRITTEN_RELEASE_FILES, sourceMetadata, renderSite, checkOutputs, checkClaims, checkLinks, rewriteLinks, rewriteMdLinks } from './build.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const site = resolve(here, '..');
@@ -28,11 +28,19 @@ function fixture(t) {
   return root;
 }
 
-function materialize(t, outputs) {
+function handWrittenFacts(metadata) {
+  const source = `v${metadata.sourceVersion}`;
+  const status = metadata.latestRelease === source ? `source ${source}` : `unreleased source ${source} candidate`;
+  return `latest supported release ${metadata.latestRelease}; ${status}.`;
+}
+
+function materialize(t, outputs, metadata) {
   const root = mkdtempSync(resolve(tmpdir(), 'mqlite-site-output-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   for (const [file, content] of outputs) put(root, file, content);
-  put(root, 'index.html', 'latest release v0.2.0; 5 routes, 5 tools, 5 commands.');
+  const facts = handWrittenFacts(metadata);
+  for (const file of HANDWRITTEN_RELEASE_FILES) put(root, file, facts);
+  put(root, 'index.html', `${facts} 5 routes, 5 tools, 5 commands.`);
   return root;
 }
 
@@ -48,6 +56,7 @@ test('the complete generated output and source inventories are explicit', () => 
     'turso.md', 'retention.md', 'benchmark.md', 'conformance.md', 'dependencies.md',
     'mcp.md', 'examples.md',
   ]);
+  assert.deepEqual(HANDWRITTEN_RELEASE_FILES, ['index.html', 'agents.html', 'llms.txt']);
   const summary = readFileSync(resolve(site, 'llms.txt'), 'utf8');
   assert.ok(summary.includes(`the ${BUNDLE_FILES.length - 2} canonical source documents linked above`));
   assert.ok(summary.includes('The hand-written agent guide remains a separate page.'));
@@ -135,8 +144,8 @@ test('canonical diagram changes remain visible in every generated page and the b
 });
 
 test('every generated file rejects missing or changed content, including metadata and assets', (t) => {
-  const { outputs } = renderSite(fixture(t));
-  const root = materialize(t, outputs);
+  const { outputs, metadata } = renderSite(fixture(t));
+  const root = materialize(t, outputs, metadata);
   checkOutputs(outputs, root);
   for (const [file, content] of outputs) {
     rmSync(resolve(root, file));
@@ -151,31 +160,61 @@ test('every generated file rejects missing or changed content, including metadat
 
 test('all numerical claims are checked, so one correct count cannot hide another stale count', (t) => {
   const { outputs, metadata } = renderSite(fixture(t));
-  const root = materialize(t, outputs);
+  const root = materialize(t, outputs, metadata);
   checkClaims(metadata, root);
+  const agentFacts = readFileSync(resolve(root, 'agents.html'), 'utf8');
   for (const kind of ['routes', 'tools', 'commands']) {
     for (const claim of [`4 ${kind}`, `<strong>4</strong> ${kind}`, `**4** ${kind}`, `4 CLI ${kind}`]) {
-      put(root, 'agents.html', `5 ${kind}; ${claim}`);
+      put(root, 'agents.html', `${agentFacts} 5 ${kind}; ${claim}`);
       assert.throws(() => checkClaims(metadata, root), new RegExp(`stale ${kind}`));
     }
-    rmSync(resolve(root, 'agents.html'));
+    put(root, 'agents.html', agentFacts);
   }
-  put(root, 'index.html', 'No published API counts.');
+  put(root, 'index.html', `${handWrittenFacts(metadata)} No published API counts.`);
   assert.throws(() => checkClaims(metadata, root), /missing a source-derived/);
 });
 
 test('latest-release, legacy-port and source links cannot silently drift', (t) => {
   const { outputs, metadata } = renderSite(fixture(t));
-  const root = materialize(t, outputs);
+  const root = materialize(t, outputs, metadata);
+  const agentFacts = readFileSync(resolve(root, 'agents.html'), 'utf8');
   for (const content of ['latest release v0.3.0', 'latest published release is v0.3.0', 'latest supported release is v0.3.0', 'latest <b>release</b>\nis v0.3.0', 'latest release: <a href="#">v0.3.0</a>', 'newest RELEASE is v0.3.0',
     'Use port 8080', 'https://github.com/mqlitehq.github.io/blob/main/api.html']) {
-    put(root, 'agents.html', content);
+    put(root, 'agents.html', `${agentFacts}\n${content}`);
     assert.throws(() => checkClaims(metadata, root), undefined, content);
   }
-  put(root, 'agents.html', 'The 0.2.0 release listens on 8080.');
+  put(root, 'agents.html', `${agentFacts}\nThe 0.2.0 release listens on 8080.`);
   checkClaims(metadata, root);
   put(root, 'llms-full.txt', '[bad](operations.md)');
   assert.throws(() => checkClaims(metadata, root), /relative source links/);
+});
+
+test('every hand-written entry point rejects source, release and publication-state drift', (t) => {
+  const { outputs, metadata } = renderSite(fixture(t));
+  const root = materialize(t, outputs, metadata);
+  for (const file of HANDWRITTEN_RELEASE_FILES) {
+    const original = readFileSync(resolve(root, file), 'utf8');
+    for (const [from, to, error] of [
+      ['source v0.3.0', 'source v9.9.9', /incorrect source version v9\.9\.9/],
+      ['latest supported release v0.2.0', 'latest supported release v0.1.0', /incorrect latest release|missing latest supported release v0\.2\.0/],
+      ['unreleased source v0.3.0 candidate', 'source v0.3.0', /must be described as unreleased/],
+    ]) {
+      put(root, file, original.replace(from, to));
+      assert.throws(() => checkClaims(metadata, root), error, `${file}: ${from}`);
+    }
+    put(root, file, original);
+  }
+
+  const releasedSource = fixture(t);
+  put(releasedSource, 'CHANGELOG.md', '## Unreleased\n\n## v0.3.0 — 2026-09-06\n');
+  const released = renderSite(releasedSource);
+  const releasedRoot = materialize(t, released.outputs, released.metadata);
+  put(
+    releasedRoot,
+    'llms.txt',
+    readFileSync(resolve(releasedRoot, 'llms.txt'), 'utf8').replace('source v0.3.0', 'unreleased source v0.3.0 candidate'),
+  );
+  assert.throws(() => checkClaims(released.metadata, releasedRoot), /must be described as released/);
 });
 
 test('all generated pages and bundle links resolve to the correct source or preview page', () => {
