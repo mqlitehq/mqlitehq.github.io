@@ -29,7 +29,7 @@
   </div>
 </div></nav>
 <div class="wrap">
-  <div class="stamp">Source: <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/cli.md">mqlite main · docs/cli.md</a> — source v0.4.0. Latest supported release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.0">v0.4.0</a>.
+  <div class="stamp">Source: <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/cli.md">mqlite main · docs/cli.md</a> — unreleased v0.4.1 candidate. Latest supported release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.0">v0.4.0</a>.
   These docs track main; use the linked release for published artifacts.</div>
   <main class="prose">
 <h1 id="cli-reference-mqlite">CLI reference (<code>mqlite</code>)</h1>
@@ -279,12 +279,12 @@ token, then revoke the old ID. No broker restart is needed. See
 <tr>
 <td><code>--max-delivery</code></td>
 <td>0 → 10</td>
-<td>deliveries before a message goes to the DLQ (<code>0</code> inherits 10)</td>
+<td>ordinary Peek-Lock claim budget: the Nth claim is a usable final attempt; only failure of that locked attempt sends it to the DLQ (<code>0</code> inherits 10)</td>
 </tr>
 <tr>
 <td><code>--ttl</code></td>
 <td>0 (unlimited)</td>
-<td>default message TTL</td>
+<td>default <strong>and ceiling</strong> for message TTL; a shorter Send TTL is honored, a longer one is capped</td>
 </tr>
 <tr>
 <td><code>--dedup</code></td>
@@ -425,7 +425,7 @@ echo &#39;{&quot;id&quot;:2}&#39; | mqlite send orders -
 </tr>
 <tr>
 <td><code>--ttl</code></td>
-<td>per-message TTL</td>
+<td>per-message TTL; starts at initial visibility and is capped by a positive queue default</td>
 <td></td>
 </tr>
 </tbody></table>
@@ -583,11 +583,13 @@ MQLITE_DB=file:/data/mq.db mqlite vacuum --full   # full rewrite
 <code>lock-token</code>). Positional args are always <code>&lt;queue&gt; &lt;seq&gt; &lt;lock-token&gt;</code>. Client mode only
 in practice (a broker holds the lock between calls — see the note under Global flags).</p>
 <pre><code class="language-bash">mqlite complete orders 42 lt_9f3a…                 # done
-mqlite abandon  orders 42 lt_9f3a… --delay 60s     # release for retry, after a backoff
+mqlite abandon  orders 42 lt_9f3a… --delay 60s     # retry after backoff, or DLQ at the limit
 mqlite reject   orders 42 lt_9f3a… --reason bad    # dead-letter it (--detail …)
 mqlite defer    orders 42 lt_9f3a…                 # set aside for receive-deferred
-mqlite renew    orders 42 lt_9f3a…                 # extend the lock lease
+mqlite renew    orders 42 lt_9f3a…                 # extend the same live delivery&#39;s lease
 </code></pre>
+<p><code>renew</code> does not create another delivery attempt or increase <code>delivery_count</code>, and
+it cannot revive a lease after it expires.</p>
 <h3 id="schedule-queue-body--enqueue-for-future-delivery"><code>schedule &lt;queue&gt; &lt;body&gt;</code> — enqueue for future delivery</h3>
 <pre><code class="language-bash">mqlite schedule orders &#39;{&quot;id&quot;:1}&#39; --at 30m                     # a duration from now
 mqlite schedule orders &#39;{&quot;id&quot;:1}&#39; --at 2027-01-02T15:04:05Z    # or an absolute RFC3339 time (must be future)
@@ -611,7 +613,9 @@ mqlite schedule orders &#39;{&quot;id&quot;:1}&#39; --at 2027-01-02T15:04:05Z   
 <td>same as <code>send</code></td>
 </tr>
 </tbody></table>
-<p>Cancel a scheduled message before it activates with <strong><code>cancel &lt;queue&gt; &lt;seq&gt;</code></strong>.</p>
+<p>Cancel a never-delivered scheduled Send (<code>delivery_count=0</code>) before it activates
+with <strong><code>cancel &lt;queue&gt; &lt;seq&gt;</code></strong>. A retry parked in <code>scheduled</code> by delayed
+<code>Abandon</code> has already been delivered and cannot be cancelled this way.</p>
 <h3 id="receive-deferred-queue---seq---fetch-deferred-messages-by-seq"><code>receive-deferred &lt;queue&gt; --seq …</code> — fetch deferred messages by seq</h3>
 <pre><code class="language-bash">mqlite receive-deferred orders --seq 42,57      # re-locks them and prints tokens to settle
 </code></pre>
@@ -637,8 +641,12 @@ It also opens the console&#39;s read-only overview/metrics views. <code>manage</
 observation; managed <code>send</code>/<code>listen</code> keys do not gain broker-wide monitoring. Monitor
 credentials are configured at startup and cannot be created through <code>key create</code>.</p>
 <h3 id="status--backend-snapshot"><code>status</code> — backend snapshot</h3>
-<pre><code class="language-bash">mqlite status                 # backend, location, schema, ping, size, queue/subscription counts
+<pre><code class="language-bash">mqlite status                 # backend, broker UTC clock, schema, ping, size, queue/subscription counts
 </code></pre>
+<p>Current brokers print the lifecycle clock as <code>broker time</code>; JSON output exposes
+the same value as <code>server_time_ms</code>. It is the clock used for TTL, scheduling and
+lease deadlines. Older compatible brokers omit it, which means unavailable rather
+than Unix epoch zero.</p>
 <h3 id="list-subscriptions--subscriptions-with-topic--filter"><code>list-subscriptions</code> — subscriptions with topic + filter</h3>
 <pre><code class="language-bash">mqlite list-subscriptions                                      # all active (legacy-compatible)
 mqlite list-subscriptions --topic orders --limit 100

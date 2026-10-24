@@ -10,29 +10,35 @@ Relative links below resolve against this website.
 NOTE ON VERSIONS: the latest supported release is v0.4.0 (default port 6754,
 schema token 7). v0.3.3 is withdrawn, unsupported and retracted by v0.4.0; its
 public artifacts remain only for forensic or compatibility inspection and must not
-be deployed. This website tracks main, currently source v0.4.0. Runtime access keys
-and key-management tools require v0.3.1 or later. Unified Observe, configured monitor
+be deployed. This website tracks main, currently the unreleased source v0.4.1
+candidate. Runtime access keys and key-management tools require v0.3.1 or later.
+Unified Observe, configured monitor
 credentials and the monitoring starter require v0.3.2 or later. Installation commands
 below pin v0.4.0. Use the
 [v0.4.0 documentation](https://github.com/mqlitehq/mqlite/tree/v0.4.0/docs)
-for the supported release's exact API. v0.4.0 does not migrate schema-5 databases
-from v0.3.x in place; preserve the matching old binary/database pair and start
-v0.4.0 with a fresh database.
+for the supported release's exact API. The v0.4.1 candidate is a planned
+same-schema patch from v0.4.0; no v0.4.1 tag, module, image or Release exists yet.
+Schema-5 databases from v0.3.x still require preserving the matching old
+binary/database pair and starting v0.4.0 with a fresh database.
 
 - One engine, two front-ends: `mqlite.OpenEmbedded` (in-process, one SQLite file)
   and `mqlite serve` (HTTP broker, default :6754, Bearer-token auth, secure by
   default — a token is auto-generated if none is set).
 - Storage: local SQLite (pure-Go driver) or remote Turso/libSQL. A historical
   co-located Turso workload measured about 45 ms per durable commit; remeasure
-  the current version, database and region before sizing.
-- Wire protocol: JSON over HTTP, one POST per operation, 29 routes in source v0.4.0 under
+  the current version, database and region before sizing. Both backends share
+  successful queue semantics, validation, state transitions and logical errors;
+  latency, availability, remote outcome_unknown failures and storage operations
+  have different envelopes.
+- Wire protocol: JSON over HTTP, one POST per operation, 29 routes in source v0.4.1 under
   /mqlite.v1.QueueService/*, /mqlite.v1.AdminService/* and /mqlite.v1.AuthService/*. Message bodies are
   base64 in JSON. GET / is an open discovery card listing every endpoint.
 - Delivery: Peek-Lock (receive → work → settle with a lock_token) or
   receive-and-delete. Exactly one settlement verb per outcome:
-  Complete / Abandon / Reject / Defer. Locks renewable (Renew); a 1 s reaper returns
-  expired locks to active or to DLQ at the delivery limit. Peek-Lock is at-least-once;
-  handlers must be idempotent.
+  Complete / Abandon / Reject / Defer. Each newly granted claim increments
+  delivery_count; Renew extends the same live claim without incrementing it. A 1 s
+  reaper returns expired locks to active or to DLQ at the delivery limit. Peek-Lock
+  is at-least-once; handlers must be idempotent.
 - Lease boundary: new settlements and Renew require the current lock_token and
   locked_until_ms > now; equality is expired, even before the reaper runs. Renew
   before expiry. An unexpired exact-request receipt can replay an already committed
@@ -42,9 +48,12 @@ v0.4.0 with a fresh database.
   before returning it and grants no lease:
   empty lock_token and zero locked_until_ms (omitted in JSON), including receive
   attempt replays. The SDK exposes a zero LockedUntil time.
-- Retries: delivery_count per message; at max_delivery_count on retry → dead-letter
-  queue (state, not a separate queue). Redrive moves dead letters back. DLQ
-  age/count/byte settings are asynchronous retention targets, so retained state
+- Retries: the Nth ordinary Peek-Lock claim at max_delivery_count remains a usable
+  final attempt and may be renewed or completed. Abandon, lock expiry or startup
+  recovery after that failed attempt moves it to the dead-letter state (not a
+  separate queue) instead of an ordinary N+1 claim. ReceiveDeferred increments the
+  count but currently has no max admission check. Redrive moves dead letters back.
+  DLQ age/count/byte settings are asynchronous retention targets, so retained state
   may temporarily exceed them between bounded cleanup passes.
 - Ordering: standard (per-group_id FIFO, cross-group parallel), group_fifo
   (group_id required), strict_fifo (whole-queue serial). Order holds across
@@ -74,23 +83,38 @@ v0.4.0 with a fresh database.
   preauthorizes forced cleanup. Names remain reserved and count against capacity until
   cleanup completes. Use explicit deletion for normal completion, globally unique
   one-use names for truly temporary subscriptions, and a stable per-instance reply
-  subscription plus `correlation_id` for high-rate request/reply traffic.
+  subscription plus `correlation_id` for high-rate request/reply traffic. The
+  v0.4.1 candidate adds Status and Observe `server_time_ms` for comparing absolute deadlines;
+  `sampled_at_ms` may be cached and a browser clock is not authoritative. The bundled
+  console groups subscriptions by topic and shows creation, deadline or permanent
+  lifetime, and broker-relative remaining lifetime. On current brokers its five-second
+  loop calls only Observe; connection, explicit refresh and configuration changes load
+  lifecycle inventory, while message operations do not. Older brokers cache the legacy
+  fallback instead of repeatedly probing the paged route. This console behavior changes
+  neither the schema nor the HTTP/wire API; it uses ListSubscriptionsPage and
+  `server_time_ms` present in the v0.4.1 candidate.
 - Maintenance diagnostics (v0.4.0 and later): Observe exposes bounded failure
   details and recovery status. Optional private diagnostic logs retain redacted
   details across restarts; cumulative error counts are not current health.
 - Scheduling: deliver at a time (Schedule). Cancel only removes never-delivered
-  scheduled messages (delivery_count = 0), not delayed retries. Per-message TTL is
-  capped by the queue default. Duplicate detection by message_id within a window.
+  scheduled messages (delivery_count = 0), not delayed retries. Message TTL starts
+  at initial visibility, ends normal delivery and then dead-letters or discards by
+  queue policy. A positive queue default is both the default and ceiling; Renew,
+  delayed Abandon and scheduler activation never move the fixed deadline. Mixed
+  HTTP batches use messages[].ttl_ms; a uniform batch may use the top-level field.
+  Duplicate detection is by message_id within a window.
 - Transactional outbox (embedded-only): business write + enqueue commit in ONE
   SQLite transaction via mq.Tx.
 - Ops: /ui embedded admin console, opt-in authenticated /metrics Prometheus
-  (incl. per-RPC latency histograms), /healthz, CLI (26 commands, including the key subcommand group), MCP server (mqlite-mcp, 22 tools in source v0.4.0). The local production
+  (incl. per-RPC latency histograms), /healthz, CLI (26 commands, including the key subcommand group), MCP server (mqlite-mcp, 22 tools in source v0.4.1). The local production
   boundary is one broker per persistent SQLite file; backups and recovery must be
   rehearsed. Use TLS and Bearer authentication for network access.
 - Unified observation (v0.3.2 and later): AdminService/Observe, SDK, CLI observe,
   MCP observe, console and Prometheus share one metric contract. Track collection
   success and freshness independently of scrape availability; unavailable values
-  are not zero. Process counters reset on restart. Use MQLITE_MONITOR_TOKENS for a
+  are not zero. The v0.4.1 candidate adds `server_time_ms`, sampled near response assembly from
+  the broker lifecycle clock; queue gauges retain their possibly older
+  `sampled_at_ms`. Process counters reset on restart. Use MQLITE_MONITOR_TOKENS for a
   separate read-only collector credential; it permits only Observe and /metrics,
   not payload access, consumption, administration or key issuance. Grafana queries
   Prometheus and does not need the MQLite token. Reuse the supplied dashboard and

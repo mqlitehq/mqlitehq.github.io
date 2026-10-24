@@ -108,16 +108,17 @@
   <strong>tiny HTTP broker</strong>. Same engine, same file, your choice.</p>
   <div class="chips">
     <a class="chip v" href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.0">latest supported release v0.4.0</a>
-    <span class="chip">main docs · source v0.4.0</span>
+    <span class="chip">main docs · unreleased source v0.4.1</span>
     <span class="chip">pure Go · no CGO</span>
     <span class="chip">one binary · one file</span>
     <span class="chip">JSON over HTTP · curl-able</span>
     <span class="chip">local SQLite or remote Turso</span>
     <span class="chip">MIT</span>
   </div>
-  <p class="sub">This site follows source v0.4.0 on <code>main</code>.
-  Use <a href="https://github.com/mqlitehq/mqlite/tree/v0.4.0/docs">the v0.4.0 documentation</a>
-  with supported release artifacts. v0.3.3 is withdrawn, unsupported and retracted by
+  <p class="sub">This site follows the unreleased source v0.4.1 candidate on
+  <code>main</code>. The latest supported release is v0.4.0; use
+  <a href="https://github.com/mqlitehq/mqlite/tree/v0.4.0/docs">the v0.4.0 documentation</a>
+  with published artifacts. v0.3.3 is withdrawn, unsupported and retracted by
   v0.4.0; its public artifacts remain only for forensic or compatibility inspection
   and must not be deployed.</p>
   <div class="cta">
@@ -172,15 +173,15 @@
       send/receive/settle, single-broker crash recovery, and O(log n) claims on a deep backlog.
       FIFO groups stay ordered even across consumer crashes and lock expiry.</p></div>
     <div class="why"><h3><em>3</em>Simple, unambiguous interface</h3>
-      <p>Every operation is <strong>one HTTP POST with a JSON body</strong> — 29 routes in source v0.4.0, curl-able by
+      <p>Every operation is <strong>one HTTP POST with a JSON body</strong> — 29 routes in source v0.4.1, curl-able by
       construction, exactly one settlement verb per outcome (<code>Complete</code> /
       <code>Abandon</code> / <code>Reject</code> / <code>Defer</code>), no aliases. Easy for people; easy for
       <a href="agents.html">agents</a>.</p></div>
     <div class="why"><h3><em>4</em>Service Bus flavor, not a clone</h3>
       <p>Peek-Lock, <code>group_id</code> sessions, DLQ + redrive, scheduling and duplicate detection feel
       familiar from Azure Service Bus — in an idiomatic-Go shape, with the
-      <a href="concepts.html">whole model documented</a> and every claim pinned by a
-      <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/conformance.md">conformance suite</a>.</p></div>
+      <a href="concepts.html">whole model documented</a> and its public compatibility
+      invariants pinned by a <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/conformance.md">conformance suite</a>.</p></div>
   </div>
 </section>
 
@@ -191,9 +192,9 @@
       <p>Because the queue <em>is</em> your SQLite database, a business write and its event
       commit in <strong>one transaction</strong>. The message exists if and only if the order does —
       no dual-write race, no CDC pipeline, no poller.</p>
-      <div class="quote"><b>Embedded-only, and nothing else gives you this shape:</b>
-      external brokers can't join your DB transaction, and Postgres-based queues need a
-      Postgres. Here it's one file.</div>
+      <div class="quote"><b>Embedded-only: this shape avoids a separate broker or Postgres dependency.</b>
+      External brokers can't join your SQLite transaction, and Postgres-based queues need a
+      Postgres. Here the business data and queue share one file.</div>
     </div>
     <pre><code class="language-go">package main
 
@@ -239,12 +240,12 @@ func main() {
   <figure class="fig"><img src="assets/fig-overview.svg" alt="mqlite model: send straight to a queue (active → locked → consumer, with a DLQ side-loop), or publish to a topic that fans out to per-subscription backing queues; a message matching no subscription is dropped." style="width:100%;display:block"></figure>
   <h3 class="subh">the source version described here is covered by the conformance TCK — details in <a href="concepts.html">Concepts</a>; the full construction story (schema, locks, fencing, recovery) is in <a href="internals.html">Internals</a></h3>
   <div class="sem">
-    <a href="concepts.html"><b>Peek-Lock delivery</b>receive → work → settle; renew before expiry; expired locks auto-redeliver</a>
-    <a href="concepts.html"><b>Retries → DLQ</b>max_delivery_count then dead-letter; redrive back; bounded retention</a>
+    <a href="concepts.html"><b>Peek-Lock delivery</b>receive increments the count; renew extends the same attempt; settle before expiry</a>
+    <a href="concepts.html"><b>Retries → DLQ</b>the final ordinary Peek-Lock attempt remains usable; dead-letter only if that attempt fails</a>
     <a href="concepts.html"><b>FIFO groups</b>standard / group_fifo / strict_fifo; order holds across crashes, lock expiry &amp; delayed retries</a>
     <a href="concepts.html"><b>Topics + subscription lifecycle</b>filtered fan-out · paged inventory · empty-only or explicit force delete · fixed TTL backstop</a>
     <a href="api.html#deletequeue"><b>Safe resource deletion</b>queues and subscriptions default to empty-only; explicit force discards retained states; names stay reserved during cleanup</a>
-    <a href="concepts.html"><b>Scheduling &amp; TTL</b>deliver later; cancel a never-delivered scheduled message; per-message TTL capped by the queue</a>
+    <a href="concepts.html"><b>Scheduling &amp; TTL</b>deliver later; cancel a never-delivered scheduled message; TTL starts at initial visibility and is capped by the queue</a>
     <a href="concepts.html"><b>Duplicate detection</b>message_id window collapses repeats; conflicts fail loud (409)</a>
     <a href="concepts.html"><b>Defer</b>set a message aside, fetch it back by sequence number</a>
     <a href="observability.html"><b>Ops built in</b>/ui console · unified Observe and /metrics · 26 CLI commands · 22 MCP tools · Grafana starter</a>
@@ -253,18 +254,18 @@ func main() {
 
 <section class="land" id="honest">
   <h2># the honest part</h2>
-  <p class="lede">Published historical measurements from specific workloads; remeasure the current release with your payloads, concurrency and monitoring enabled before sizing production. Full method: <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/benchmark.md">docs/benchmark.md</a>.</p>
+  <p class="lede">Published historical measurements from specific workloads; remeasure the current release with your payloads, concurrency and monitoring enabled before sizing production. Methods and limits: <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/benchmark.md">docs/benchmark.md</a>. Historical Turso environment and comparison: <a href="https://github.com/mqlitehq/mqlite/pull/67">PR #67</a>.</p>
   <div class="numbers"><table>
     <tr><th>Setup</th><th>Measured</th><th>Read this as</th></tr>
     <tr><td>Local file DB, 12-core machine</td>
         <td class="num">15,926–17,963 msg/s single · 35,146 batched</td>
         <td>historical local results; rerun the workload before sizing</td></tr>
     <tr><td>1-vCPU / 256 MB cloud box, embedded engine</td>
-        <td class="num">6.0–6.7k msg/s batched · 1,507 msg/s drain</td>
+        <td class="num">6.0–6.7k msg/s batched</td>
         <td>batching amortized commit cost in this measured setup</td></tr>
     <tr><td>Remote Turso (co-located)</td>
-        <td class="num">~45 ms per durable commit</td>
-        <td>commit latency dominated this measured remote path</td></tr>
+        <td class="num">~45 ms p50 per single durable send</td>
+        <td>historical co-located run; remote commit latency dominated this path</td></tr>
     <tr><td>Memory / disk</td>
         <td class="num">27–34 MB peak RSS · freed DB pages are reusable</td>
         <td>file reclamation is gradual; size disk for peak backlog and measure your workload</td></tr>
@@ -329,7 +330,8 @@ func main() {
     }
     for _, m := range msgs {
         fmt.Printf("got: %s\n", m.Body)
-        if err := m.Complete(ctx); err != nil { // or m.Abandon(ctx) to retry, m.Reject(ctx) -> DLQ
+        // Abandon retries below max (DLQ at max); Reject sends directly to DLQ.
+        if err := m.Complete(ctx); err != nil {
             log.Fatal(err)
         }
     }
@@ -337,7 +339,7 @@ func main() {
     </div>
     <div class="tabpane" data-t="broker">
       <p>One tiny process, secure by default: it generates a <code>mqk_…</code> token and prints it if you don't set one. Every operation is one POST.</p>
-      <p>The supported v0.4.0 release uses port 6754 and schema token 7. It does not migrate schema-5 databases from v0.3.x in place: preserve the matching old binary/database pair and start v0.4.0 with a fresh database. v0.3.3 is withdrawn and unsupported; its public artifacts remain only for forensic or compatibility inspection and must not be deployed.</p>
+      <p>The supported v0.4.0 release uses port 6754 and schema token 7. Schema-5 databases from v0.3.x require preserving the matching old binary/database pair and starting v0.4.0 with a fresh database. v0.3.3 is withdrawn and unsupported; its public artifacts remain only for forensic or compatibility inspection and must not be deployed.</p>
       <pre><code class="language-bash">go install github.com/mqlitehq/mqlite/cmd/mqlite@v0.4.0   # default port 6754
 
 # start the broker on :6754 with a known token, in the background
@@ -358,7 +360,7 @@ curl -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
      localhost:6754/mqlite.v1.QueueService/Receive</code></pre>
     </div>
     <div class="tabpane" data-t="docker">
-      <p>A named volume keeps queue data across container replacement. The admin console is available at <code>/ui</code>.</p>
+      <p>A named volume keeps queue data across container replacement. The admin console is available at <code>/ui</code>. The unreleased v0.4.1 candidate on <code>main</code> additionally groups subscriptions by topic and shows permanent or fixed lifetimes against the broker clock; its five-second loop calls only <code>Observe</code>, while lifecycle inventory refreshes on connection, explicit refresh and configuration changes.</p>
       <p>This example pins the supported v0.4.0 image. For production configuration and recovery, follow <a href="deployment.html">Deployment</a> and the <a href="operations.html">operations runbook</a>.</p>
       <pre><code class="language-bash">docker run -d --name mqlite -p 127.0.0.1:6754:6754 \
   -e MQLITE_TOKENS=mqk_dev \

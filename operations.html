@@ -29,21 +29,32 @@
   </div>
 </div></nav>
 <div class="wrap">
-  <div class="stamp">Source: <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/operations.md">mqlite main · docs/operations.md</a> — source v0.4.0. Latest supported release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.0">v0.4.0</a>.
+  <div class="stamp">Source: <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/operations.md">mqlite main · docs/operations.md</a> — unreleased v0.4.1 candidate. Latest supported release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.0">v0.4.0</a>.
   These docs track main; use the linked release for published artifacts.</div>
   <main class="prose">
 <h1 id="production-operations">Production operations</h1>
-<p>This runbook covers the latest supported release, v0.4.0 (port 6754, schema
-token 7). v0.3.3 is withdrawn and unsupported; its public assets and exact image
-remain available for forensic or compatibility inspection and must not be
-deployed. The v0.4.0 module retracts v0.3.3. Upgrading from v0.3.2 or another
-schema-5 release requires a fresh database as described below.
+<p>This runbook follows current <code>main</code>, which reports v0.4.1 as an unreleased
+candidate (port 6754, schema token 7). The latest supported release is v0.4.0;
+use that tag&#39;s runbook for deployed v0.4.0 brokers. v0.3.3 is withdrawn and
+unsupported; its public assets and exact image remain available for forensic or
+compatibility inspection and must not be deployed. The candidate retains
+v0.4.0&#39;s retraction of v0.3.3. Upgrading from v0.3.2 or another schema-5 release
+requires a fresh database as described below.
 Runtime-managed access keys require v0.3.1; v0.3.0 supports configured tokens only.
 Unified <code>Observe</code> and configured monitor credentials require v0.3.2.
 Upgrading from v0.2.0 changes both its default port (8080) and schema token (2);
 follow <a href="#upgrade-and-rollback">upgrade and rollback</a> before replacing the broker.
 See <a href="deployment.html">deployment</a> for installation and <a href="observability.html">observability</a>
 for metric definitions and alerts.</p>
+<p>The v0.4.1 candidate is a same-schema patch over v0.4.0. It fixes strict Observe
+clients and the console rejecting the documented retired message aggregate after
+a message-bearing queue or subscription is deleted, exposes the lifecycle clock,
+and makes fixed subscription deadlines visible in the console. It also preserves
+per-message TTLs in remote mixed-TTL batches; upgrade broker and Go client
+together before relying on that additive input shape. No database rebuild or
+metric migration is planned. No v0.4.1 tag or image exists yet; keep production
+on v0.4.0. Once the patch is released, still quiesce clients and avoid overlapping
+brokers during the binary replacement.</p>
 <h2 id="operating-boundaries">Operating boundaries</h2>
 <ul>
 <li>Run one active broker per database. A local file has one MQLite owner and one
@@ -98,7 +109,9 @@ time in capacity planning.</li>
 <li>Keep the broker host&#39;s UTC clock synchronized and alert on large time steps.
 Subscription deadlines, scheduled delivery, message TTL and lock expiry all use
 that clock. A forward step can make deadlines arrive early; a backward step can
-delay a subscription expiry that has not yet been durably marked <code>deleting</code>.</li>
+delay a subscription expiry that has not yet been durably marked <code>deleting</code>.
+Compare absolute deadlines with Status or Observe <code>server_time_ms</code>; do not use
+the browser clock or cached <code>sampled_at_ms</code> as the lifecycle reference.</li>
 <li>Treat global queue gauges as sampled monitoring data. Within one broker process,
 <code>Observe</code>, <code>/metrics</code> and the console share them for about 10 seconds and expose
 the original <code>sampled_at_ms</code>; use fresh per-queue <code>Stats</code> when an operation needs
@@ -117,8 +130,9 @@ restore test.</p>
 MQLite version and schema token. Use the same configuration when rehearsing and
 running the service, especially durability, message limits and DLQ retention.</p>
 <p><code>GET /healthz</code> is a process liveness check; its handler does not query storage.
-Use authenticated <code>AdminService/Status</code> to inspect the backend (<code>ping_ms &gt;= 0</code>),
-then a dedicated canary queue to verify a complete write/consume/settle cycle.
+Use authenticated <code>AdminService/Status</code> to inspect the backend (<code>ping_ms &gt;= 0</code>)
+and its lifecycle clock (<code>server_time_ms</code>), then a dedicated canary queue to
+verify a complete write/consume/settle cycle.
 A successful read does not prove that disk space remains for a write.</p>
 <pre><code class="language-bash">export MQLITE_ENDPOINT=http://127.0.0.1:6754
 # Set MQLITE_TOKEN from your secret manager; do not paste it into shell history.

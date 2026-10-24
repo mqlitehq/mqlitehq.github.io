@@ -29,7 +29,7 @@
   </div>
 </div></nav>
 <div class="wrap">
-  <div class="stamp">Source: <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/deployment.md">mqlite main · docs/deployment.md</a> — source v0.4.0. Latest supported release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.0">v0.4.0</a>.
+  <div class="stamp">Source: <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/deployment.md">mqlite main · docs/deployment.md</a> — unreleased v0.4.1 candidate. Latest supported release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.0">v0.4.0</a>.
   These docs track main; use the linked release for published artifacts.</div>
   <main class="prose">
 <h1 id="deploying-mqlite">Deploying mqlite</h1>
@@ -118,9 +118,9 @@ and error reference: <a href="api.html">api-reference.md</a>.</p>
 The latest supported release is <strong>v0.4.0</strong>, with default port <strong>6754</strong> and
 schema token <strong>7</strong>. Pin the exact v0.4.0 binary or image rather than relying on
 a moving image alias. v0.3.3 is withdrawn, unsupported, and retracted by
-v0.4.0; its public assets and exact image remain available for forensic or
-compatibility inspection and must not be deployed.</p>
-<p>v0.4.0 cannot open a v0.3.x schema-5 database and no in-place migration exists.
+v0.4.0 and later; its public assets and exact image remain available for
+forensic or compatibility inspection and must not be deployed.</p>
+<p>v0.4.x cannot open a v0.3.x schema-5 database and no in-place migration exists.
 Schema 6 was used only by intermediate untagged lifecycle builds and is also
 refused. Preserve the matching schema-5 binary/database pair, take a consistent
 backup, account for retained work, and start v0.4.0 with a fresh database.
@@ -130,6 +130,14 @@ v0.4.0 also removes the deprecated Prometheus aliases described in
 <a href="operations.html#upgrade-and-rollback">upgrade and rollback procedure</a> before
 replacing it.</p>
 </blockquote>
+<p>Current <code>main</code> reports v0.4.1 as an unreleased same-schema candidate. It fixes
+observation validation in the console, CLI and Go SDK after deleting a resource
+with process-lifetime message effects; it also exposes the broker lifecycle clock
+and makes subscription deadlines visible in the console. The candidate preserves
+each message TTL in a remote mixed-TTL batch as well. Upgrade the v0.4.0 broker and
+Go client together before relying on that additive input shape once the patch is
+released. No v0.4.1 tag or image exists yet; production deployments must remain
+pinned to v0.4.0. The candidate does not require a database rebuild.</p>
 <p>The exact supported image is multi-arch (amd64 + arm64):</p>
 <pre><code class="language-bash"># v0.4.0, default port 6754
 docker run -d --name mqlite -p 6754:6754 \
@@ -250,15 +258,15 @@ See <a href="cli.html#key-createlistrevoke--manage-persistent-access-keys">key c
 online snapshots, offline directory copies, isolated restore validation and rollback.
 Use a fresh restore directory so an old WAL/SHM cannot attach to the snapshot.</p>
 <p><strong>v0.2.0 databases use schema 2; v0.3.0/v0.3.1/v0.3.2 and withdrawn
-v0.3.3 use schema 5; v0.4.0 uses schema 7.</strong>
+v0.3.3 use schema 5; v0.4.0 and v0.4.1 use schema 7.</strong>
 Intermediate untagged lifecycle builds used schema 6. There is no in-place
 migration between these tokens. Before testing a different token, account for
 retained work in every state, keep the old binary/database pair and a consistent
-backup, and create the v0.4.0 database separately. Do not restamp an old file.
+backup, and create the v0.4.x database separately. Do not restamp an old file.
 Within the tagged schema-5 line, v0.3.0 → v0.3.1 adds compatible managed-key
 storage and v0.3.1 → v0.3.2 leaves the schema unchanged. <code>Observe</code> and configured
 monitor credentials require v0.3.2; restore compatible monitoring configuration
-when rolling back. Follow the runbook before a v0.4.0 fresh-database cutover
+when rolling back. Follow the runbook before a v0.4.x fresh-database cutover
 and metric-name migration.
 See <a href="operations.html#upgrade-and-rollback">upgrade and rollback</a>.</p>
 <h2 id="turso-remote-libsql">Turso (remote libSQL)</h2>

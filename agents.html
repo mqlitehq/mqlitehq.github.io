@@ -56,8 +56,9 @@
 
 <div class="wrap">
 
-<div class="stamp">These docs track <a href="https://github.com/mqlitehq/mqlite/tree/main">main · source v0.4.0</a>.
-  The latest supported release is <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.0">v0.4.0</a>
+<div class="stamp">These docs track <a href="https://github.com/mqlitehq/mqlite/tree/main">main · source v0.4.1</a>.
+  That source is an unreleased candidate. The latest supported release is
+  <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.0">v0.4.0</a>
   (default port 6754, schema token 7); installation examples pin that release. Use the
   <a href="https://github.com/mqlitehq/mqlite/tree/v0.4.0/docs">v0.4.0 docs</a>
   for its exact API. v0.3.3 is withdrawn, unsupported and retracted by v0.4.0; its
@@ -101,19 +102,19 @@
     <tr><td><code>delete_subscription</code></td><td>delete one exact topic/name pair; optional <code>force</code> discards retained work</td></tr>
     <tr><td><code>send</code></td><td>send a message (<code>queue</code>, <code>body</code>, optional <code>message_id</code> / <code>group_id</code>)</td></tr>
     <tr><td><code>receive</code></td><td>peek-lock messages → returns <code>seq_number</code> + <code>lock_token</code></td></tr>
-    <tr><td><code>complete</code> / <code>abandon</code> / <code>reject</code></td><td>settle: done / retry / dead-letter</td></tr>
-    <tr><td><code>renew</code></td><td>extend a held lock before it expires — hold a message across long work</td></tr>
-    <tr><td><code>defer</code> / <code>receive_deferred</code></td><td>set a locked message aside by <code>seq_number</code>, then fetch deferred messages back by seq</td></tr>
+    <tr><td><code>complete</code> / <code>abandon</code> / <code>reject</code></td><td>settle: done / retry below the limit (DLQ at the limit) / immediate dead-letter</td></tr>
+    <tr><td><code>renew</code></td><td>extend the same live claim before expiry; <code>delivery_count</code> is unchanged</td></tr>
+    <tr><td><code>defer</code> / <code>receive_deferred</code></td><td>set aside, then claim by seq; the claim increments <code>delivery_count</code> and currently has no max admission check</td></tr>
     <tr><td><code>peek</code></td><td>browse without locking (optionally by state)</td></tr>
     <tr><td><code>stats</code></td><td>queue depth by state</td></tr>
-    <tr><td><code>observe</code></td><td>broker health, queue snapshots, message effects, storage and request measurements (since v0.3.2)</td></tr>
+    <tr><td><code>observe</code></td><td>broker health and lifecycle clock, queue snapshots, message effects, storage and request measurements (since v0.3.2)</td></tr>
     <tr><td><code>redrive</code> / <code>purge</code></td><td>move dead letters back / delete them</td></tr>
     <tr><td><code>create_key</code></td><td>issue a key with <code>id</code>, <code>name</code>, <code>permissions</code> and optional <code>expires_at_ms</code>; token returned once</td></tr>
     <tr><td><code>list_keys</code></td><td>list public metadata with <code>after_id</code> / <code>limit</code> / <code>sort</code>, including revoked and expired keys</td></tr>
     <tr><td><code>revoke_key</code></td><td>revoke by public <code>id</code>; repeated revocation is safe</td></tr>
   </table></div>
   <p>Key tools require <code>manage</code>; both configured administrators and managed <code>manage</code> keys may issue new administrator keys. Give message producers <code>send</code> and consumers <code>listen</code>. A consumer may settle or delete messages; <code>listen</code> is not an audit-only role.</p>
-  <p>For a monitoring-only MCP connection, put a configured <code>MQLITE_MONITOR_TOKENS</code> credential into the client's <code>MQLITE_TOKEN</code>. It can call <code>observe</code>, but cannot read message bodies, consume messages, change queues or issue keys. Use the returned collection status and availability fields; unavailable measurements are not healthy zeroes. See <a href="observability.html">Observability</a>. The <code>observe</code> tool works independently of the optional Prometheus switch; <code>--metrics</code> only enables authenticated <code>/metrics</code> on the API port. v0.4.0 removes the deprecated <code>mqlite_queue_total</code> and <code>mqlite_queue_oldest_message_age_ms</code> aliases; use <code>mqlite_queue_retained_messages</code> and <code>mqlite_queue_oldest_message_age_seconds</code>.</p>
+  <p>For a monitoring-only MCP connection, put a configured <code>MQLITE_MONITOR_TOKENS</code> credential into the client's <code>MQLITE_TOKEN</code>. It can call <code>observe</code>, but cannot read message bodies, consume messages, change queues or issue keys. Use the returned collection status and availability fields; unavailable measurements are not healthy zeroes. The unreleased v0.4.1 candidate adds <code>server_time_ms</code> for comparing lifecycle deadlines; do not substitute the cached queue <code>sampled_at_ms</code>. See <a href="observability.html">Observability</a>. The <code>observe</code> tool works independently of the optional Prometheus switch; <code>--metrics</code> only enables authenticated <code>/metrics</code> on the API port. v0.4.0 removes the deprecated <code>mqlite_queue_total</code> and <code>mqlite_queue_oldest_message_age_ms</code> aliases; use <code>mqlite_queue_retained_messages</code> and <code>mqlite_queue_oldest_message_age_seconds</code>.</p>
   <h3 class="sub">Create a producer key</h3>
   <p>Choose and retain a unique 32-character lowercase hex public ID before calling the tool:</p>
 <pre><code class="language-json">{
@@ -131,7 +132,7 @@
 
 <section class="blk">
   <h2># 2 · raw HTTP — a prompt you can paste</h2>
-  <p class="lede">For any agent that can run <code>curl</code> or make HTTP calls. This prompt describes the v0.4.0 API, including its lifecycle operations; use it with a v0.4.0 broker and the matching versioned docs. Fill in the two placeholders and paste the matching instructions into your agent's system prompt or task context:</p>
+  <p class="lede">For any agent that can run <code>curl</code> or make HTTP calls. This prompt describes the unreleased v0.4.1 candidate on <code>main</code>, including its lifecycle operations; use it only with a broker built from matching source. For a supported v0.4.0 broker, follow the tagged v0.4.0 API documentation instead. Fill in the two placeholders and paste the matching instructions into your agent's system prompt or task context:</p>
   <div class="prompt">
 <pre id="p1"><code>You have access to a message queue (an mqlite broker).
 
@@ -169,13 +170,15 @@ Rules:
   include_deleting=true; an absent name confirms completion under the one-owner rule.
 - Consume with Peek-Lock:
     QueueService/Receive  {"queue":"jobs","max_messages":1,"wait_time_ms":5000}
-  Each returned message has seq_number + lock_token. You MUST settle every
-  message you receive, using its lock_token:
+  Each newly granted Peek-Lock claim increments delivery_count. Each returned
+  message has seq_number + lock_token. You MUST settle every message you receive,
+  using its lock_token:
     QueueService/Complete {"queue":"jobs","seq_number":N,"lock_token":"..."}  done
-    QueueService/Abandon  {...,"delay_ms":60000}   retry later (optional backoff)
+    QueueService/Abandon  {...,"delay_ms":60000}   retry below limit; at limit -> DLQ
     QueueService/Reject   {...}                    give up -> dead-letter queue
   If you settle nothing, the lock expires (default 30s). Recovery returns the
-  message to active, or sends it to the DLQ at its delivery limit.
+  message to active, or sends a failed final attempt to the DLQ. Reaching the
+  limit does not interrupt that final claim: it may still be renewed or completed.
   New settlements and Renew require locked_until_ms &gt; now: the exact deadline
   is already expired, even before the reaper runs. An unexpired receipt only lets
   the exact request replay a previously committed settlement after expiry.
@@ -185,8 +188,9 @@ Rules:
 - Default Peek-Lock delivery is AT-LEAST-ONCE: you may see a message twice.
   Make your handling idempotent (set message_id on send; check your own state
   before acting).
-- Long-running work: call QueueService/Renew with the lock_token to extend the
-  lock before it expires.
+- Long-running work: call QueueService/Renew with the lock_token before expiry.
+  It extends the same claim without increasing delivery_count, does not stack
+  durations, and cannot revive an expired lease.
 - Pub/sub: AdminService/Subscribe {"topic":"events","name":"my-sub",
   "filter":{"expr":"subject == \"order\""},"ttl_ms":900000} — then Send to
   "events" fans out; Receive from "my-sub". Filter may be omitted; omitted or zero
@@ -200,6 +204,12 @@ Rules:
   parks the message in scheduled and keeps blocking its ordered group until due
   (strict_fifo: the whole queue). Cancel only removes never-delivered scheduled
   messages, with delivery_count = 0.
+- Message TTL: use top-level ttl_ms for a uniform Send batch or messages[].ttl_ms
+  when item lifetimes differ. A positive queue default is both the default and
+  ceiling. The fixed expires_at_ms is initial visible_at_ms + effective TTL, so a
+  scheduled message starts its TTL when first due. Renew, delayed Abandon and
+  scheduler activation never extend it. Expiry ends normal delivery and then
+  dead-letters or discards according to queue policy.
 - Errors are JSON {"code","message"}: 400 invalid_argument · 401 unauthenticated ·
   403 permission_denied · 404 not_found ·
   409 name_conflict / already_exists / lock_lost / key_conflict /
