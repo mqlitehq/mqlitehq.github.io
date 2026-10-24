@@ -23,7 +23,16 @@ export const PAGES = [
   ['observability-cloud.md', 'observability-cloud.html', 'Cloud monitoring', 'Connect authenticated broker metrics to existing collectors on Fly.io, Alibaba Cloud, Azure, or Kubernetes.'],
   ['operations.md', 'operations.html', 'Operations', 'Back up, restore, upgrade, and operate a single-broker deployment.'],
 ];
-export const BUNDLE_FILES = [...PAGES.map(([src]) => src), 'mcp.md', 'examples.md'];
+export const BUNDLE_FILES = [
+  ...PAGES.map(([src]) => src),
+  'turso.md',
+  'retention.md',
+  'benchmark.md',
+  'conformance.md',
+  'dependencies.md',
+  'mcp.md',
+  'examples.md',
+];
 export const GENERATED_FILES = [...PAGES.map(([, out]) => out), 'llms-full.txt', 'site-metadata.json', 'assets/highlight.min.js'];
 
 const read = (root, path) => readFileSync(resolve(root, path), 'utf8');
