@@ -2729,10 +2729,12 @@ Current `main` reports v0.4.1 as an unreleased same-schema candidate. It fixes
 observation validation in the console, CLI and Go SDK after deleting a resource
 with process-lifetime message effects; it also exposes the broker lifecycle clock
 and makes subscription deadlines visible in the console. The candidate preserves
-each message TTL in a remote mixed-TTL batch as well. Upgrade the v0.4.0 broker and
-Go client together before relying on that additive input shape once the patch is
-released. No v0.4.1 tag or image exists yet; production deployments must remain
-pinned to v0.4.0. The candidate does not require a database rebuild.
+each message TTL in a remote mixed-TTL batch and prevents closed logical Hrana
+streams from being reused on `libsql://`, while physical HTTP/TLS keep-alive reuse
+continues. Upgrade the v0.4.0 broker and Go client together before relying on the
+additive mixed-TTL input shape once the patch is released. No v0.4.1 tag or image
+exists yet; production deployments must remain pinned to v0.4.0. The candidate
+does not require a database rebuild.
 
 The exact supported image is multi-arch (amd64 + arm64):
 
@@ -3662,11 +3664,13 @@ The v0.4.1 candidate is a same-schema patch over v0.4.0. It fixes strict Observe
 clients and the console rejecting the documented retired message aggregate after
 a message-bearing queue or subscription is deleted, exposes the lifecycle clock,
 and makes fixed subscription deadlines visible in the console. It also preserves
-per-message TTLs in remote mixed-TTL batches; upgrade broker and Go client
-together before relying on that additive input shape. No database rebuild or
-metric migration is planned. No v0.4.1 tag or image exists yet; keep production
-on v0.4.0. Once the patch is released, still quiesce clients and avoid overlapping
-brokers during the binary replacement.
+per-message TTLs in remote mixed-TTL batches and prevents closed logical Hrana
+streams from being reused on `libsql://`, without giving up physical HTTP/TLS
+keep-alive reuse. Upgrade broker and Go client together before relying on the
+additive mixed-TTL input shape. No database rebuild or metric migration is planned.
+No v0.4.1 tag or image exists yet; keep production on v0.4.0. Once the patch is
+released, still quiesce clients and avoid overlapping brokers during the binary
+replacement.
 
 ## Operating boundaries
 
@@ -5408,9 +5412,13 @@ unmaintained dependency is ideal. The upstream-recommended
 publishes native libraries for only four Linux/macOS targets, while the newer
 [`tursogo`](https://github.com/tursodatabase/turso/tree/main/bindings/go) module
 requires Go 1.24 and implements a local database plus remote synchronization
-rather than MQLite's current direct-primary Hrana path. Neither currently
-satisfies the combined Go 1.21, CGO-free, six-target and storage-semantics
-contract.
+rather than MQLite's current direct-primary Hrana path. The new official
+[`tursogo-serverless`](https://github.com/tursodatabase/turso/tree/main/serverless/go)
+module is a pure-Go `database/sql` driver that connects directly to Turso Cloud
+over HTTP, but its module also requires Go 1.24 and it has not passed MQLite's
+local/remote parity, live lifecycle, sustained-load or six-target release gates.
+None currently satisfies the complete Go 1.21, CGO-free, six-target and
+storage-semantics contract.
 
 MQLite contains the known HTTP logical-stream lifecycle defect behind a narrow
 single-lease adapter: a `libsql://` driver connection is discarded when its
