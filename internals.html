@@ -168,7 +168,11 @@ server owns durability).</li>
 <li><strong>Remote Turso/libSQL</strong> relaxes the pool to 4 connections because the Turso
 primary serializes writes server-side; it is also the only path that retries
 transient errors — locally a failed statement never ran, so there is nothing
-to retry.</li>
+to retry. For HTTP Hrana (<code>libsql://</code>), one logical driver connection lasts for
+one <code>database/sql</code> lease (or one whole transaction) and is then discarded;
+Go&#39;s shared HTTP transport still reuses the underlying TCP/TLS connections.
+WebSocket transports retain their bounded connection pooling, and the local
+SQLite path is unchanged.</li>
 </ul>
 <p>The punchline: mqlite doesn&#39;t <em>implement</em> mutual exclusion between consumers —
 it <strong>arranges to never need it</strong>. Concurrency control by subtraction.</p>
