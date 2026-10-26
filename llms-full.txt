@@ -1,9 +1,9 @@
 mqlite main — full documentation bundle.
-Source version: v0.4.1. Latest supported release: [v0.4.0](https://github.com/mqlitehq/mqlite/releases/tag/v0.4.0).
+Source version: v0.4.1. Latest supported release: [v0.4.1](https://github.com/mqlitehq/mqlite/releases/tag/v0.4.1).
 These docs track main; consult release notes for published artifacts and upgrade requirements.
 Source of truth: https://github.com/mqlitehq/mqlite/tree/main/docs
 
-<!-- ===== mqlite main · source v0.4.1; latest supported release v0.4.0 · docs/concepts.md ===== -->
+<!-- ===== mqlite main · source v0.4.1; latest supported release v0.4.1 · docs/concepts.md ===== -->
 
 # Core concepts & subscription filters
 
@@ -576,7 +576,7 @@ network I/O APIs are exposed; `now()` can read the wall clock:
   for the filter rules MQLite guarantees.
 
 
-<!-- ===== mqlite main · source v0.4.1; latest supported release v0.4.0 · docs/internals.md ===== -->
+<!-- ===== mqlite main · source v0.4.1; latest supported release v0.4.1 · docs/internals.md ===== -->
 
 # How mqlite works — building a reliable queue on one SQLite file
 
@@ -1099,7 +1099,7 @@ with the conformance suite as the judge.
 [benchmark.md](https://github.com/mqlitehq/mqlite/blob/main/docs/benchmark.md).*
 
 
-<!-- ===== mqlite main · source v0.4.1; latest supported release v0.4.0 · docs/api-reference.md ===== -->
+<!-- ===== mqlite main · source v0.4.1; latest supported release v0.4.1 · docs/api-reference.md ===== -->
 
 # mqlite HTTP API reference
 
@@ -1109,10 +1109,9 @@ construction. This document is generated from the wire contract in
 [`wire/wire.go`](https://github.com/mqlitehq/mqlite/blob/main/wire/wire.go) (the single source of truth shared by the broker
 and the Go SDK, so the two can't drift) and the server's error mapping.
 
-This reference follows current `main`, which reports v0.4.1 as an unreleased
-candidate. The latest supported release is v0.4.0; use that tag's documentation
-for deployed v0.4.0 brokers. v0.3.3 is withdrawn and unsupported; use the
-documentation in the v0.3.2 tag when working with its smaller management surface.
+This reference describes v0.4.1, the latest supported release. v0.3.3 is
+withdrawn and unsupported; use the documentation in the v0.3.2 tag when working
+with its smaller management surface.
 
 Every RPC body must be exactly one non-null JSON object, including operations
 whose request is otherwise empty (`{}`). Unknown fields and data after that object
@@ -2020,7 +2019,7 @@ deletion is a successful operation even when its typed HTTP result is
 `state:"deleting"`.
 
 
-<!-- ===== mqlite main · source v0.4.1; latest supported release v0.4.0 · docs/cli.md ===== -->
+<!-- ===== mqlite main · source v0.4.1; latest supported release v0.4.1 · docs/cli.md ===== -->
 
 # CLI reference (`mqlite`)
 
@@ -2488,7 +2487,7 @@ See also: [api-reference.md](https://github.com/mqlitehq/mqlite/blob/main/docs/a
 [examples.md](https://github.com/mqlitehq/mqlite/blob/main/docs/examples.md) (Go SDK).
 
 
-<!-- ===== mqlite main · source v0.4.1; latest supported release v0.4.0 · docs/access-keys.md ===== -->
+<!-- ===== mqlite main · source v0.4.1; latest supported release v0.4.1 · docs/access-keys.md ===== -->
 
 # Access keys
 
@@ -2657,7 +2656,7 @@ revocation state or discard newer credentials. Review keys using a configured
 administrator before reopening traffic. See [backup and upgrade procedures](https://github.com/mqlitehq/mqlite/blob/main/docs/operations.md).
 
 
-<!-- ===== mqlite main · source v0.4.1; latest supported release v0.4.0 · docs/deployment.md ===== -->
+<!-- ===== mqlite main · source v0.4.1; latest supported release v0.4.1 · docs/deployment.md ===== -->
 
 # Deploying mqlite
 
@@ -2709,8 +2708,8 @@ and error reference: [api-reference.md](https://github.com/mqlitehq/mqlite/blob/
 ## Docker / GHCR
 
 > **Version and upgrade compatibility.**
-> The latest supported release is **v0.4.0**, with default port **6754** and
-> schema token **7**. Pin the exact v0.4.0 binary or image rather than relying on
+> The latest supported release is **v0.4.1**, with default port **6754** and
+> schema token **7**. Pin the exact v0.4.1 binary or image rather than relying on
 > a moving image alias. v0.3.3 is withdrawn, unsupported, and retracted by
 > v0.4.0 and later; its public assets and exact image remain available for
 > forensic or compatibility inspection and must not be deployed.
@@ -2725,32 +2724,30 @@ and error reference: [api-reference.md](https://github.com/mqlitehq/mqlite/blob/
 > [upgrade and rollback procedure](https://github.com/mqlitehq/mqlite/blob/main/docs/operations.md#upgrade-and-rollback) before
 > replacing it.
 
-Current `main` reports v0.4.1 as an unreleased same-schema candidate. It fixes
+v0.4.1 is a same-schema patch over v0.4.0. It fixes
 observation validation in the console, CLI and Go SDK after deleting a resource
 with process-lifetime message effects; it also exposes the broker lifecycle clock
-and makes subscription deadlines visible in the console. The candidate preserves
+and makes subscription deadlines visible in the console. It preserves
 each message TTL in a remote mixed-TTL batch and prevents closed logical Hrana
 streams from being reused on `libsql://`, while physical HTTP/TLS keep-alive reuse
 continues. Upgrade the v0.4.0 broker and Go client together before relying on the
-additive mixed-TTL input shape once the patch is released. No v0.4.1 tag or image
-exists yet; production deployments must remain pinned to v0.4.0. The candidate
-does not require a database rebuild.
+additive mixed-TTL input shape. The patch does not require a database rebuild.
 
 The exact supported image is multi-arch (amd64 + arm64):
 
 ```bash
-# v0.4.0, default port 6754
+# v0.4.1, default port 6754
 docker run -d --name mqlite -p 6754:6754 \
   -v mqlite-data:/data \
   -e MQLITE_DB=file:/data/mq.db \
   -e MQLITE_TOKENS=mqk_prod_CHANGEME \
   -e MQLITE_MONITOR_TOKENS=mqk_monitor_CHANGEME \
   -e MQLITE_SYNC=FULL \
-  ghcr.io/mqlitehq/mqlite:0.4.0
+  ghcr.io/mqlitehq/mqlite:0.4.1
 ```
 
 - The named volume `mqlite-data` persists the SQLite file across restarts.
-- Pin exact `0.4.0` in production. Images `>= 0.3.0` listen on `6754`;
+- Pin exact `0.4.1` in production. Images `>= 0.3.0` listen on `6754`;
   **`0.2.x` and earlier listen on `8080`**.
 - Verify: `curl http://localhost:6754/` (discovery card) and `/healthz`. Metrics is
   disabled by default. For a private broker or an ingress that blocks public
@@ -2767,7 +2764,7 @@ app            = "your-mqlite"
 primary_region = "sin"            # pick a region near you
 
 [build]
-  image = "ghcr.io/mqlitehq/mqlite:0.4.0"   # latest supported exact image
+  image = "ghcr.io/mqlitehq/mqlite:0.4.1"   # latest supported exact image
 
 [env]
   MQLITE_DB = "file:/data/mq.db"            # SQLite on the persistent volume
@@ -2945,7 +2942,7 @@ curl -H "Authorization: Bearer $T" -H 'Content-Type: application/json' \
 - [ ] Enable `MQLITE_METRICS=on` for authenticated Prometheus scraping on the API port; use private routing or public-ingress path filtering to keep `/metrics` private — see [observability.md](https://github.com/mqlitehq/mqlite/blob/main/docs/observability.md).
 
 
-<!-- ===== mqlite main · source v0.4.1; latest supported release v0.4.0 · docs/observability.md ===== -->
+<!-- ===== mqlite main · source v0.4.1; latest supported release v0.4.1 · docs/observability.md ===== -->
 
 # Observability
 
@@ -3493,7 +3490,7 @@ An occupied-resource or capacity rejection is an application outcome, not a
 storage failure.
 
 
-<!-- ===== mqlite main · source v0.4.1; latest supported release v0.4.0 · docs/observability-cloud.md ===== -->
+<!-- ===== mqlite main · source v0.4.1; latest supported release v0.4.1 · docs/observability-cloud.md ===== -->
 
 # Cloud and Kubernetes monitoring
 
@@ -3642,16 +3639,15 @@ validation steps. Local integration evidence must not be presented as a managed-
 deployment test.
 
 
-<!-- ===== mqlite main · source v0.4.1; latest supported release v0.4.0 · docs/operations.md ===== -->
+<!-- ===== mqlite main · source v0.4.1; latest supported release v0.4.1 · docs/operations.md ===== -->
 
 # Production operations
 
-This runbook follows current `main`, which reports v0.4.1 as an unreleased
-candidate (port 6754, schema token 7). The latest supported release is v0.4.0;
-use that tag's runbook for deployed v0.4.0 brokers. v0.3.3 is withdrawn and
+This runbook describes v0.4.1, the latest supported release (port 6754, schema
+token 7). v0.3.3 is withdrawn and
 unsupported; its public assets and exact image remain available for forensic or
-compatibility inspection and must not be deployed. The candidate retains
-v0.4.0's retraction of v0.3.3. Upgrading from v0.3.2 or another schema-5 release
+compatibility inspection and must not be deployed. v0.4.1 retains v0.4.0's
+retraction of v0.3.3. Upgrading from v0.3.2 or another schema-5 release
 requires a fresh database as described below.
 Runtime-managed access keys require v0.3.1; v0.3.0 supports configured tokens only.
 Unified `Observe` and configured monitor credentials require v0.3.2.
@@ -3660,16 +3656,15 @@ follow [upgrade and rollback](#upgrade-and-rollback) before replacing the broker
 See [deployment](https://github.com/mqlitehq/mqlite/blob/main/docs/deployment.md) for installation and [observability](https://github.com/mqlitehq/mqlite/blob/main/docs/observability.md)
 for metric definitions and alerts.
 
-The v0.4.1 candidate is a same-schema patch over v0.4.0. It fixes strict Observe
+v0.4.1 is a same-schema patch over v0.4.0. It fixes strict Observe
 clients and the console rejecting the documented retired message aggregate after
 a message-bearing queue or subscription is deleted, exposes the lifecycle clock,
 and makes fixed subscription deadlines visible in the console. It also preserves
 per-message TTLs in remote mixed-TTL batches and prevents closed logical Hrana
 streams from being reused on `libsql://`, without giving up physical HTTP/TLS
 keep-alive reuse. Upgrade broker and Go client together before relying on the
-additive mixed-TTL input shape. No database rebuild or metric migration is planned.
-No v0.4.1 tag or image exists yet; keep production on v0.4.0. Once the patch is
-released, still quiesce clients and avoid overlapping brokers during the binary
+additive mixed-TTL input shape. No database rebuild or metric migration is
+required. Still quiesce clients and avoid overlapping brokers during the binary
 replacement.
 
 ## Operating boundaries
@@ -4000,7 +3995,7 @@ in this release, so do not improvise a direct SQL table copy between schemas.
 rules behind these procedures.
 
 
-<!-- ===== mqlite main · source v0.4.1; latest supported release v0.4.0 · docs/turso.md ===== -->
+<!-- ===== mqlite main · source v0.4.1; latest supported release v0.4.1 · docs/turso.md ===== -->
 
 # Turso / libSQL: concurrency & embedded replicas (MQLITE-4)
 
@@ -4186,17 +4181,16 @@ Without `MQLITE_TEST_DB` the live tests skip; the hermetic classifier test alway
 runs.
 
 
-<!-- ===== mqlite main · source v0.4.1; latest supported release v0.4.0 · docs/retention.md ===== -->
+<!-- ===== mqlite main · source v0.4.1; latest supported release v0.4.1 · docs/retention.md ===== -->
 
 # Retention, deletion, and storage reclamation
 
-This page follows current `main`, which reports v0.4.1 as an unreleased candidate.
-The latest supported release is v0.4.0; use that tag's documentation for deployed
-v0.4.0 brokers. v0.3.3 is withdrawn and unsupported; its public artifacts remain
-available for forensic or compatibility inspection and must not be deployed. The
-v0.4.1 candidate retains v0.4.0's retraction of v0.3.3. v0.3.2 has DLQ retention
-and automatic local reclamation, but the work budgets below describe current
-`main` unless a version difference is stated.
+This page describes v0.4.1, the latest supported release. v0.3.3 is withdrawn and
+unsupported; its public artifacts remain available for forensic or compatibility
+inspection and must not be deployed. v0.4.1 retains v0.4.0's retraction of
+v0.3.3. v0.3.2 has DLQ retention
+and automatic local reclamation, but the work budgets below describe v0.4.1
+unless a version difference is stated.
 v0.3.2 does not have the
 queue and subscription lifecycle APIs introduced in v0.4.0.
 
@@ -4351,7 +4345,7 @@ archive remains at-least-once, so the archive consumer must be idempotent; Redri
 does not make the external archival handoff one transaction.
 
 
-<!-- ===== mqlite main · source v0.4.1; latest supported release v0.4.0 · docs/benchmark.md ===== -->
+<!-- ===== mqlite main · source v0.4.1; latest supported release v0.4.1 · docs/benchmark.md ===== -->
 
 # mqlite benchmarks, sizing & tuning
 
@@ -4840,7 +4834,7 @@ the table as historical evidence and rerun the commands above before using the
 numbers for a current deployment decision.
 
 
-<!-- ===== mqlite main · source v0.4.1; latest supported release v0.4.0 · docs/conformance.md ===== -->
+<!-- ===== mqlite main · source v0.4.1; latest supported release v0.4.1 · docs/conformance.md ===== -->
 
 # Conformance — correct mqlite behavior (TCK)
 
@@ -5381,7 +5375,7 @@ in the OS/Go matrix; tagged crash tests run with `-race` in their own Linux job.
 run separately without `-race`; the large no-loss sweep also runs weekly without `-race`.*
 
 
-<!-- ===== mqlite main · source v0.4.1; latest supported release v0.4.0 · docs/dependencies.md ===== -->
+<!-- ===== mqlite main · source v0.4.1; latest supported release v0.4.1 · docs/dependencies.md ===== -->
 
 # Dependency policy & the go 1.21 floor
 
@@ -5504,7 +5498,7 @@ requirement is dropped, or a security CVE forces it): bump `go.mod`, update
 let the held bumps (`modernc.org/sqlite`, `golang.org/x/sys`) flow in together.
 
 
-<!-- ===== mqlite main · source v0.4.1; latest supported release v0.4.0 · docs/mcp.md ===== -->
+<!-- ===== mqlite main · source v0.4.1; latest supported release v0.4.1 · docs/mcp.md ===== -->
 
 # MCP server (`mqlite-mcp`)
 
@@ -5703,7 +5697,7 @@ Environment tokens are not listed or revocable through these tools. Key tools ar
 unavailable when broker authentication is explicitly disabled.
 
 
-<!-- ===== mqlite main · source v0.4.1; latest supported release v0.4.0 · docs/examples.md ===== -->
+<!-- ===== mqlite main · source v0.4.1; latest supported release v0.4.1 · docs/examples.md ===== -->
 
 # Examples
 
