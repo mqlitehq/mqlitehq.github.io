@@ -1214,12 +1214,15 @@ receiving, settling and renewing change message state.
 | Required permission | Operations |
 |---|---|
 | `send` | `QueueService/Send`, `Schedule`, `Cancel` |
-| `listen` | `QueueService/Receive`, `ReceiveDeferred`, `Peek`, `Stats`, `Complete`, `CompleteBatch`, `Abandon`, `Reject`, `Defer`, `Renew`, `RenewBatch` |
-| `manage` | All `AdminService` methods, all `AuthService` methods, and `/metrics` |
+| `listen` | `QueueService/Receive`, `ReceiveDeferred`, `Peek`, `Stats`, `Complete`, `CompleteBatch`, `Abandon`, `Reject`, `Defer`, `Renew`, `RenewBatch`; `AdminService/Subscribe`, `TestFilter` |
+| `manage` | All other `AdminService` methods, all `AuthService` methods, and `/metrics` |
 | configured monitor | `AdminService/Observe` and `/metrics` only |
 
 Both receive modes require `listen`, including receive-and-delete. Batch and
 idempotent replay paths use the same permission checks as the original operation.
+Subscription inventory and deletion require `manage`; `force` changes the deletion
+precondition, not its permission. A fixed TTL is creation-time advance authorization
+for automatic cleanup and cannot be added to or changed on an existing subscription.
 The console's administration views require `manage`. A configured monitor token
 opens only its observability views. The public static page alone grants no API access.
 
@@ -1712,6 +1715,9 @@ Deletes one exact topic/subscription pair. It uses the same durable, bounded
 lifecycle as `DeleteQueue`, but owns both the topic roster mapping and the
 subscription's backing queue.
 
+Requires `manage` for both empty-only and forced deletion. The `force` field is
+explicit discard authorization, not a separate permission tier.
+
 - POST `/mqlite.v1.AdminService/DeleteSubscription`
 - Request: `{"topic":"events","name":"worker"}` or the same object with
   `"force":true`. A wrong topic for a globally unique subscription name is
@@ -1787,7 +1793,15 @@ curl -H "Authorization: Bearer $T" -H 'Content-Type: application/json' \
 
 ### Subscribe
 
-Register subscription `name` under `topic` (creates its backing queue).
+Register subscription `name` under `topic` (creates its backing queue). Requires
+`listen`; `manage` includes `listen`.
+
+This is a broker-wide upsert, not create-only ownership. A listener that knows an
+existing `(topic,name)` can update its filter, and a new permanent or temporary
+subscription consumes the shared capacity and adds publish fan-out. Subscription
+inventory and explicit deletion remain `manage` operations. Listen-only clients
+should set a fixed TTL on temporary subscriptions and leave early retirement to a
+manager.
 
 - **Request** `SubscribeRequest`: `topic`, `name`, `filter` (optional —
   `{"expr": "<predicate>"}`, an [expr boolean over the message](https://github.com/mqlitehq/mqlite/blob/main/docs/concepts.md#subscription-filters-expr); empty/omitted
@@ -1855,6 +1869,7 @@ The `state` field and deleting-resource visibility below are available in v0.4.0
 
 ### ListSubscriptions
 
+- Requires `manage` because the result inventories broker-wide names and filters.
 - **Request** `{}`. **Response** `{subscriptions: [{topic, name, expr}]}` — every
   active subscription with its topic and [filter expression](https://github.com/mqlitehq/mqlite/blob/main/docs/concepts.md#subscription-filters-expr) (`expr` empty = match
   all). This compatibility-only route is active/unexpired-only and intentionally
@@ -1867,6 +1882,7 @@ The `state` field and deleting-resource visibility below are available in v0.4.0
 
 Available in v0.4.0.
 
+- Requires `manage`, including when it is used to reconcile deletion or expiry.
 - POST `/mqlite.v1.AdminService/ListSubscriptionsPage`.
 - Request fields: `topic` (optional exact topic), `after` (an opaque cursor from
   the previous response), `limit` (`0` or omitted = 100, maximum 1,000), and
@@ -1897,6 +1913,8 @@ Available in v0.4.0.
 
 ### TestFilter
 
+- Requires `listen`; it evaluates only the caller-provided expression and sample
+  and does not read or mutate broker data.
 - **Request** `{expr, message?}` — dry-run a [filter expression](https://github.com/mqlitehq/mqlite/blob/main/docs/concepts.md#subscription-filters-expr): it
   compiles `expr` and, if `message` (a sample, body base64) is given, evaluates it
   exactly as publish-time fan-out would (nothing is enqueued).
@@ -2176,9 +2194,10 @@ expired keys remain valid cursors). ID order also accepts absent predecessor IDs
 for reconciling a lost create response.
 
 `send` permits sending, scheduling and cancelling scheduled messages; `listen`
-permits consumption, settlement, renewal, peek and queue stats; `manage` includes
-both and all administration, including issuing other `manage` keys. Permissions
-apply to the whole broker. A 403 is a permission failure, not an invalid token;
+permits consumption, settlement, renewal, peek, queue stats, subscription upsert,
+and filter testing; `manage` includes both and the remaining administrative
+operations, including subscription inventory/deletion and issuing other `manage`
+keys. Permissions apply to the whole broker. A 403 is a permission failure, not an invalid token;
 ordinary send/listen keys cannot use `key`, `list`, `status` or the admin console.
 Existing configured administrator tokens retain their original format and rights.
 
@@ -2231,6 +2250,9 @@ list.
 
 ### `subscribe <topic> <name>` — create a subscription
 *(alias: `create-subscription`)*
+
+Requires `listen`. This is a broker-wide upsert: the same `(topic,name)` updates
+its filter, rather than creating a caller-owned resource.
 ```bash
 mqlite subscribe orders eu-orders --expr 'subject_parts[0]=="orders" && properties["region"]=="eu"'
 mqlite subscribe replies instance-7 --ttl 15m
@@ -2243,10 +2265,13 @@ mqlite subscribe replies instance-7 --ttl 15m
 On an existing subscription, omitting `--ttl` or passing zero preserves its lifetime. Repeating
 the original positive value is idempotent; a different positive value returns a
 name conflict before changing the filter. Expiry is advance authorization to
-discard retained messages during bounded cleanup. Explicit deletion remains the
-normal completion path.
+discard retained messages during bounded cleanup. It is the cleanup path for a
+listen-only temporary client; a manager may explicitly retire the subscription
+earlier after normal success.
 
 ### `delete-subscription <topic> <name>` — retire a subscription
+
+Requires `manage` with or without `--force`.
 
 ```bash
 mqlite delete-subscription orders eu-orders
@@ -2435,6 +2460,8 @@ lease deadlines. Older compatible brokers omit it, which means unavailable rathe
 than Unix epoch zero.
 
 ### `list-subscriptions` — subscriptions with topic + filter
+
+Requires `manage`; it exposes broker-wide subscription names, filters and lifecycle.
 ```bash
 mqlite list-subscriptions                                      # all active (legacy-compatible)
 mqlite list-subscriptions --topic orders --limit 100
@@ -2452,6 +2479,8 @@ fields; zero expiry means permanent. With `--include-deleting`, an expired row i
 visible as `deleting` even before physical cleanup removes it.
 
 ### `test-filter <expr>` — dry-run a subscription filter
+Requires `listen`; it reads no broker data and makes no persistent change.
+
 Compiles the expression and, with a sample, reports whether it would match (nothing is
 enqueued).
 ```bash
@@ -2499,14 +2528,23 @@ Version v0.3.0 supports configured administrator tokens only.
 | Permission | Operations |
 |---|---|
 | `send` | Send, schedule and cancel scheduled messages |
-| `listen` | Receive, settle, renew, peek and read queue statistics |
+| `listen` | Receive, settle, renew, peek, read queue statistics, and create/update subscriptions and test their filters |
 | `send` + `listen` | Both application roles |
-| `manage` | Both application roles, queue/topic administration, console, metrics, and issuing/revoking keys, including other `manage` keys |
+| `manage` | Both application roles, queue administration, subscription inventory/deletion, console, metrics, and issuing/revoking keys, including other `manage` keys |
 
 Permissions apply across the broker, not to individual queues. A `listen` key can
 delete consumed messages through completion or receive-and-delete; it is not a
 read-only auditing role. A `send` key can cancel scheduled messages from other
 producers. Use separate brokers when applications need a stronger isolation boundary.
+
+`Subscribe` is a broker-wide upsert, not ownership-scoped creation. A `listen` key
+can create a permanent or fixed-lifetime subscription and update the filter of any
+known existing `(topic,name)` pair. It can therefore reserve subscription capacity
+and increase publish fan-out. It cannot enumerate or explicitly delete subscriptions;
+both empty-only and forced deletion require `manage`. Give listen-only temporary
+subscriptions a fixed TTL as a cleanup backstop, and use a manager for early
+retirement. A subscription's TTL is fixed at creation, so a listener cannot add or
+change expiry on an existing subscription.
 
 The keys in `MQLITE_TOKENS` remain administrators. Keep one configured administrator
 available for recovery. Existing configured token strings remain valid; every newly
@@ -5070,15 +5108,18 @@ and an unexpired lease, with the exact-request replay exception in §2.6.
   *(server/errors_test.go; see [api-reference.md](https://github.com/mqlitehq/mqlite/blob/main/docs/api-reference.md))*
 - **9.3** Every registered RPC MUST bind a permission in the route registration.
   Send/Schedule/Cancel require send; all other QueueService methods require listen;
-  AdminService and AuthService require manage, except Observe and the opt-in
-  `/metrics` endpoint also accept configured read-only monitor credentials. Metrics
+  subscription upserts and filter dry-runs require listen; all other AdminService
+  and all AuthService methods require manage, except Observe and the opt-in `/metrics` endpoint also
+  accept configured read-only monitor credentials. Both empty-only and forced
+  subscription deletion require manage. Metrics
   MUST be disabled by default, return 404 while disabled, and appear as `/metrics`
   in discovery only while enabled. Enabling metrics MUST require administrator
   auth. Manage includes both data permissions. Configured and managed
   administrators MUST have identical operation rights, including issuing manage
   keys. Insufficient permission MUST
   fail before the handler can read or change protected data.
-  *(server/errors_test.go: TestAccessKeyCompletePermissionMatrix;
+  *(server/errors_test.go: TestAccessKeyCompletePermissionMatrix,
+  TestListenSubscriptionProvisioningBoundary;
   server/metrics_test.go: TestMetricsDefaultOffAndAnonymousObserveDenied,
   TestMetricsEnabledRequiresAdministratorAuthentication, TestMetricsPermissionMatrix,
   TestMetricsDisabledSkipsDatabaseAuthentication)*
@@ -5384,6 +5425,18 @@ embeddable in projects that haven't moved to a newer toolchain (MQLITE-1). That
 single decision freezes two dependencies — this note records why, what it costs,
 and how the freeze is enforced so it can't be lifted by accident.
 
+## Remote-only companion module
+
+Applications that only call a broker can instead import the official
+[`github.com/mqlitehq/mqlite-go`](https://github.com/mqlitehq/mqlite-go) module.
+Its `v0.1.0` release has a Go 1.13 source floor and uses only the standard
+library; it does not link the embedded engine, SQLite, libSQL/Turso, or CGO.
+The low floor is a compatibility promise, not a recommendation to run an
+end-of-life toolchain in production: build with a supported Go release whenever
+possible. Use this main module when an application needs embedded mode,
+transactional outbox, canonical observation decoding, or managed access-key
+administration.
+
 ## What the floor freezes
 
 | dependency | pinned | next release | why frozen |
@@ -5548,15 +5601,19 @@ The agent then sees the tools below and can drive the broker directly.
 Minimal — selected core routes map 1:1 (kept small on purpose — over-specified tools make
 models misuse them):
 
+Permissions follow the HTTP API: producers use `send`, consumers and subscription
+provisioners use `listen`, and broker-wide inventory, lifecycle and key management
+use `manage`. `observe` also accepts a configured monitor credential.
+
 | Tool | Does |
 |---|---|
 | `observe` | complete canonical observation; takes no arguments; requires monitor or manage |
 | `list_queues` | list queues/subscriptions |
 | `create_queue` | create/update a queue by name |
 | `delete_queue` | delete a plain queue; optional `force` explicitly discards retained work |
-| `subscribe` | create a topic subscription or update its filter; optional `ttl_ms` sets a fixed lifetime |
-| `list_subscriptions` | page subscriptions by topic, with total/count and optional deleting entries |
-| `delete_subscription` | delete one exact topic/subscription pair; optional `force` discards retained work |
+| `subscribe` | create a topic subscription or update its filter (`listen`); optional `ttl_ms` sets a fixed lifetime |
+| `list_subscriptions` | page subscriptions by topic, with total/count and optional deleting entries (`manage`) |
+| `delete_subscription` | delete one exact topic/subscription pair (`manage`); optional `force` discards retained work |
 | `send` | send a message (`queue`, `body`, optional `message_id`/`group_id`) |
 | `receive` | peek-lock messages → returns `seq_number` + `lock_token` |
 | `complete` | acknowledge a message (`queue`, `seq_number`, `lock_token`) |
@@ -5602,6 +5659,8 @@ Configure intermediaries not to retry lifecycle-delete routes.
 the default. An accepted delete removes the subscription from fan-out immediately
 and returns the same `deleted` / `deleting` result as queue deletion. The exact
 topic/name pair is required even though subscription names are globally unique.
+Both deletion modes require `manage`; `force` changes the non-empty precondition,
+not the permission.
 
 Use `list_subscriptions` for bounded inventory and reconciliation. Its optional
 arguments are `topic`, `after`, `limit` (default 100, maximum 1,000), and
@@ -5626,6 +5685,11 @@ tool rejects an explicit zero. Repeating the original positive TTL is idempotent
 supplying a different positive TTL for the same subscription returns a conflict
 before changing its filter. Updates, retries, traffic, and receives never extend
 the deadline.
+
+`subscribe` requires `listen` and is a broker-wide upsert: a caller can update the
+filter of any known existing `(topic,name)` pair. It does not grant inventory or
+deletion rights. A listen-only agent creating temporary subscriptions should always
+set `ttl_ms`; a manager performs any early retirement and reconciliation.
 
 At the deadline, the broker makes the subscription unavailable and treats the TTL
 as advance authorization to discard its retained messages. Physical cleanup is
@@ -5821,6 +5885,13 @@ return `nil` → Complete, return an error → Abandon (redelivery below the max
 the failed final attempt goes to the DLQ), with auto lock-renewal and configurable
 concurrency.
 
+The core calls in this example also work with the standard-library-only,
+remote-only companion module: install `github.com/mqlitehq/mqlite-go@v0.1.0`
+and change the import to
+`mqlite "github.com/mqlitehq/mqlite-go"`. Its source floor is Go 1.13. Use the
+main module shown below when the same application also needs embedded mode,
+`Observe`, or managed access-key administration.
+
 ```go
 package main
 
@@ -5872,19 +5943,34 @@ Use one stable subscription for high-rate request/reply traffic and route replie
 inside the consumer by a globally unique `correlation_id`. A subscription per
 request adds metadata and cleanup work to the single writer.
 
+For a remote broker, open the two clients below with separate `listen` and
+`manage` keys. Subscription creation/filter updates are application operations,
+while broker-wide inventory and both deletion modes remain administrative.
+
 ```go
-if err := cli.Subscribe(ctx, "replies", "checkout-instance-7", nil); err != nil {
+listener, err := mqlite.Open(ctx, endpoint, mqlite.WithToken(listenerToken))
+if err != nil {
+	log.Fatal(err)
+}
+defer listener.Close()
+manager, err := mqlite.Open(ctx, endpoint, mqlite.WithToken(managerToken))
+if err != nil {
+	log.Fatal(err)
+}
+defer manager.Close()
+
+if err := listener.Subscribe(ctx, "replies", "checkout-instance-7", nil); err != nil {
 	log.Fatal(err)
 }
 
-// For a genuinely temporary owner, TTL is a cleanup backstop. It is fixed at
-// first creation and does not replace explicit deletion after normal success.
-if err := cli.SubscribeWithOptions(ctx, "replies", "checkout-request-01J...", nil,
+// For a genuinely temporary listener, TTL is the cleanup path. It is fixed at
+// first creation; a manager may explicitly retire the subscription earlier.
+if err := listener.SubscribeWithOptions(ctx, "replies", "checkout-request-01J...", nil,
 	mqlite.SubscribeOptions{TTL: 15 * time.Minute}); err != nil {
 	log.Fatal(err)
 }
 
-page, err := cli.ListSubscriptionsWithOptions(ctx, mqlite.ListSubscriptionsOptions{
+page, err := manager.ListSubscriptionsWithOptions(ctx, mqlite.ListSubscriptionsOptions{
 	Topic: "replies",
 	Limit: 100,
 })
@@ -5894,7 +5980,7 @@ if err != nil {
 log.Printf("subscriptions=%d first-page=%d", page.Total, len(page.Subscriptions))
 
 // Empty-only by default. Drain and settle retained replies before retirement.
-if err := cli.DeleteSubscription(ctx, "replies", "checkout-instance-7"); err != nil {
+if err := manager.DeleteSubscription(ctx, "replies", "checkout-instance-7"); err != nil {
 	log.Fatal(err)
 }
 ```

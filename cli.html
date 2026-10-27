@@ -251,9 +251,10 @@ command. In creation order, the cursor must be an existing key ID (revoked and
 expired keys remain valid cursors). ID order also accepts absent predecessor IDs
 for reconciling a lost create response.</p>
 <p><code>send</code> permits sending, scheduling and cancelling scheduled messages; <code>listen</code>
-permits consumption, settlement, renewal, peek and queue stats; <code>manage</code> includes
-both and all administration, including issuing other <code>manage</code> keys. Permissions
-apply to the whole broker. A 403 is a permission failure, not an invalid token;
+permits consumption, settlement, renewal, peek, queue stats, subscription upsert,
+and filter testing; <code>manage</code> includes both and the remaining administrative
+operations, including subscription inventory/deletion and issuing other <code>manage</code>
+keys. Permissions apply to the whole broker. A 403 is a permission failure, not an invalid token;
 ordinary send/listen keys cannot use <code>key</code>, <code>list</code>, <code>status</code> or the admin console.
 Existing configured administrator tokens retain their original format and rights.</p>
 <p>To rotate a managed key, create its replacement, move the application to the new
@@ -346,6 +347,8 @@ runs a bounded recovery pass. Recreate the name only after it disappears from th
 list.</p>
 <h3 id="subscribe-topic-name--create-a-subscription"><code>subscribe &lt;topic&gt; &lt;name&gt;</code> — create a subscription</h3>
 <p><em>(alias: <code>create-subscription</code>)</em></p>
+<p>Requires <code>listen</code>. This is a broker-wide upsert: the same <code>(topic,name)</code> updates
+its filter, rather than creating a caller-owned resource.</p>
 <pre><code class="language-bash">mqlite subscribe orders eu-orders --expr &#39;subject_parts[0]==&quot;orders&quot; &amp;&amp; properties[&quot;region&quot;]==&quot;eu&quot;&#39;
 mqlite subscribe replies instance-7 --ttl 15m
 </code></pre>
@@ -371,9 +374,11 @@ mqlite subscribe replies instance-7 --ttl 15m
 <p>On an existing subscription, omitting <code>--ttl</code> or passing zero preserves its lifetime. Repeating
 the original positive value is idempotent; a different positive value returns a
 name conflict before changing the filter. Expiry is advance authorization to
-discard retained messages during bounded cleanup. Explicit deletion remains the
-normal completion path.</p>
+discard retained messages during bounded cleanup. It is the cleanup path for a
+listen-only temporary client; a manager may explicitly retire the subscription
+earlier after normal success.</p>
 <h3 id="delete-subscription-topic-name--retire-a-subscription"><code>delete-subscription &lt;topic&gt; &lt;name&gt;</code> — retire a subscription</h3>
+<p>Requires <code>manage</code> with or without <code>--force</code>.</p>
 <pre><code class="language-bash">mqlite delete-subscription orders eu-orders
 mqlite delete-subscription orders eu-orders --force
 </code></pre>
@@ -648,6 +653,7 @@ the same value as <code>server_time_ms</code>. It is the clock used for TTL, sch
 lease deadlines. Older compatible brokers omit it, which means unavailable rather
 than Unix epoch zero.</p>
 <h3 id="list-subscriptions--subscriptions-with-topic--filter"><code>list-subscriptions</code> — subscriptions with topic + filter</h3>
+<p>Requires <code>manage</code>; it exposes broker-wide subscription names, filters and lifecycle.</p>
 <pre><code class="language-bash">mqlite list-subscriptions                                      # all active (legacy-compatible)
 mqlite list-subscriptions --topic orders --limit 100
 mqlite list-subscriptions --topic orders --include-deleting
@@ -662,6 +668,7 @@ pages. Every page entry includes required <code>created_at_ms</code> and <code>e
 fields; zero expiry means permanent. With <code>--include-deleting</code>, an expired row is
 visible as <code>deleting</code> even before physical cleanup removes it.</p>
 <h3 id="test-filter-expr--dry-run-a-subscription-filter"><code>test-filter &lt;expr&gt;</code> — dry-run a subscription filter</h3>
+<p>Requires <code>listen</code>; it reads no broker data and makes no persistent change.</p>
 <p>Compiles the expression and, with a sample, reports whether it would match (nothing is
 enqueued).</p>
 <pre><code class="language-bash">mqlite test-filter &#39;subject == &quot;ord.created&quot;&#39;                       # just validate
