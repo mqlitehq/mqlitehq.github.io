@@ -49,7 +49,7 @@ Version v0.3.0 supports configured administrator tokens only.</p>
 </tr>
 <tr>
 <td><code>listen</code></td>
-<td>Receive, settle, renew, peek and read queue statistics</td>
+<td>Receive, settle, renew, peek, read queue statistics, and create/update subscriptions and test their filters</td>
 </tr>
 <tr>
 <td><code>send</code> + <code>listen</code></td>
@@ -57,13 +57,21 @@ Version v0.3.0 supports configured administrator tokens only.</p>
 </tr>
 <tr>
 <td><code>manage</code></td>
-<td>Both application roles, queue/topic administration, console, metrics, and issuing/revoking keys, including other <code>manage</code> keys</td>
+<td>Both application roles, queue administration, subscription inventory/deletion, console, metrics, and issuing/revoking keys, including other <code>manage</code> keys</td>
 </tr>
 </tbody></table>
 <p>Permissions apply across the broker, not to individual queues. A <code>listen</code> key can
 delete consumed messages through completion or receive-and-delete; it is not a
 read-only auditing role. A <code>send</code> key can cancel scheduled messages from other
 producers. Use separate brokers when applications need a stronger isolation boundary.</p>
+<p><code>Subscribe</code> is a broker-wide upsert, not ownership-scoped creation. A <code>listen</code> key
+can create a permanent or fixed-lifetime subscription and update the filter of any
+known existing <code>(topic,name)</code> pair. It can therefore reserve subscription capacity
+and increase publish fan-out. It cannot enumerate or explicitly delete subscriptions;
+both empty-only and forced deletion require <code>manage</code>. Give listen-only temporary
+subscriptions a fixed TTL as a cleanup backstop, and use a manager for early
+retirement. A subscription&#39;s TTL is fixed at creation, so a listener cannot add or
+change expiry on an existing subscription.</p>
 <p>The keys in <code>MQLITE_TOKENS</code> remain administrators. Keep one configured administrator
 available for recovery. Existing configured token strings remain valid; every newly
 generated token uses <code>mqk_</code> followed by 64 lowercase hexadecimal characters. The

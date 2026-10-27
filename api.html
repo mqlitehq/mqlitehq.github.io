@@ -171,11 +171,11 @@ receiving, settling and renewing change message state.</p>
 </tr>
 <tr>
 <td><code>listen</code></td>
-<td><code>QueueService/Receive</code>, <code>ReceiveDeferred</code>, <code>Peek</code>, <code>Stats</code>, <code>Complete</code>, <code>CompleteBatch</code>, <code>Abandon</code>, <code>Reject</code>, <code>Defer</code>, <code>Renew</code>, <code>RenewBatch</code></td>
+<td><code>QueueService/Receive</code>, <code>ReceiveDeferred</code>, <code>Peek</code>, <code>Stats</code>, <code>Complete</code>, <code>CompleteBatch</code>, <code>Abandon</code>, <code>Reject</code>, <code>Defer</code>, <code>Renew</code>, <code>RenewBatch</code>; <code>AdminService/Subscribe</code>, <code>TestFilter</code></td>
 </tr>
 <tr>
 <td><code>manage</code></td>
-<td>All <code>AdminService</code> methods, all <code>AuthService</code> methods, and <code>/metrics</code></td>
+<td>All other <code>AdminService</code> methods, all <code>AuthService</code> methods, and <code>/metrics</code></td>
 </tr>
 <tr>
 <td>configured monitor</td>
@@ -184,6 +184,9 @@ receiving, settling and renewing change message state.</p>
 </tbody></table>
 <p>Both receive modes require <code>listen</code>, including receive-and-delete. Batch and
 idempotent replay paths use the same permission checks as the original operation.
+Subscription inventory and deletion require <code>manage</code>; <code>force</code> changes the deletion
+precondition, not its permission. A fixed TTL is creation-time advance authorization
+for automatic cleanup and cannot be added to or changed on an existing subscription.
 The console&#39;s administration views require <code>manage</code>. A configured monitor token
 opens only its observability views. The public static page alone grants no API access.</p>
 <p>In v0.3.2 and later, <code>MQLITE_MONITOR_TOKENS</code> configures comma-separated read-only
@@ -729,6 +732,8 @@ operation as unsupported.</p>
 <p>Deletes one exact topic/subscription pair. It uses the same durable, bounded
 lifecycle as <code>DeleteQueue</code>, but owns both the topic roster mapping and the
 subscription&#39;s backing queue.</p>
+<p>Requires <code>manage</code> for both empty-only and forced deletion. The <code>force</code> field is
+explicit discard authorization, not a separate permission tier.</p>
 <ul>
 <li>POST <code>/mqlite.v1.AdminService/DeleteSubscription</code></li>
 <li>Request: <code>{&quot;topic&quot;:&quot;events&quot;,&quot;name&quot;:&quot;worker&quot;}</code> or the same object with
@@ -855,7 +860,14 @@ exceed them between worker passes or while bounded cleanup catches up.</p>
 # → {}
 </code></pre>
 <h3 id="subscribe">Subscribe</h3>
-<p>Register subscription <code>name</code> under <code>topic</code> (creates its backing queue).</p>
+<p>Register subscription <code>name</code> under <code>topic</code> (creates its backing queue). Requires
+<code>listen</code>; <code>manage</code> includes <code>listen</code>.</p>
+<p>This is a broker-wide upsert, not create-only ownership. A listener that knows an
+existing <code>(topic,name)</code> can update its filter, and a new permanent or temporary
+subscription consumes the shared capacity and adds publish fan-out. Subscription
+inventory and explicit deletion remain <code>manage</code> operations. Listen-only clients
+should set a fixed TTL on temporary subscriptions and leave early retirement to a
+manager.</p>
 <ul>
 <li><strong>Request</strong> <code>SubscribeRequest</code>: <code>topic</code>, <code>name</code>, <code>filter</code> (optional —
 <code>{&quot;expr&quot;: &quot;&lt;predicate&gt;&quot;}</code>, an <a href="concepts.html#subscription-filters-expr">expr boolean over the message</a>; empty/omitted
@@ -920,6 +932,7 @@ not expose its deadline.</li>
 </ul>
 <h3 id="listsubscriptions">ListSubscriptions</h3>
 <ul>
+<li>Requires <code>manage</code> because the result inventories broker-wide names and filters.</li>
 <li><strong>Request</strong> <code>{}</code>. <strong>Response</strong> <code>{subscriptions: [{topic, name, expr}]}</code> — every
 active subscription with its topic and <a href="concepts.html#subscription-filters-expr">filter expression</a> (<code>expr</code> empty = match
 all). This compatibility-only route is active/unexpired-only and intentionally
@@ -931,6 +944,7 @@ retains the original three-field <code>SubscriptionInfo</code> type for this met
 <h3 id="listsubscriptionspage">ListSubscriptionsPage</h3>
 <p>Available in v0.4.0.</p>
 <ul>
+<li>Requires <code>manage</code>, including when it is used to reconcile deletion or expiry.</li>
 <li>POST <code>/mqlite.v1.AdminService/ListSubscriptionsPage</code>.</li>
 <li>Request fields: <code>topic</code> (optional exact topic), <code>after</code> (an opaque cursor from
 the previous response), <code>limit</code> (<code>0</code> or omitted = 100, maximum 1,000), and
@@ -961,6 +975,8 @@ evidence for destructive-operation reconciliation.</li>
 </ul>
 <h3 id="testfilter">TestFilter</h3>
 <ul>
+<li>Requires <code>listen</code>; it evaluates only the caller-provided expression and sample
+and does not read or mutate broker data.</li>
 <li><strong>Request</strong> <code>{expr, message?}</code> — dry-run a <a href="concepts.html#subscription-filters-expr">filter expression</a>: it
 compiles <code>expr</code> and, if <code>message</code> (a sample, body base64) is given, evaluates it
 exactly as publish-time fan-out would (nothing is enqueued).</li>

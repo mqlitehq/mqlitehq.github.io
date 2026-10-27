@@ -85,7 +85,9 @@ test('changing the operating-system motion preference stops an active demo', asy
 test('tablet and mobile use the vertical transcript without horizontal overflow', async ({ page }) => {
   for (const viewport of [{ width: 768, height: 900 }, { width: 390, height: 844 }]) {
     await page.setViewportSize(viewport);
-    await page.goto('/#demo');
+    // A distinct query forces a fresh document for each viewport instead of
+    // retaining IntersectionObserver state across a same-fragment navigation.
+    await page.goto('/?viewport=' + viewport.width + '#demo');
 
     await expect(page.locator('[data-demo-controls]')).toBeVisible();
     await expect(page.locator('.demo-visual')).toBeHidden();
