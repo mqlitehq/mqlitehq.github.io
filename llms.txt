@@ -23,10 +23,11 @@ binary/database pair and starting v0.4.1 with a fresh database.
 - One engine, two front-ends: `mqlite.OpenEmbedded` (in-process, one SQLite file)
   and `mqlite serve` (HTTP broker, default :6754, Bearer-token auth, secure by
   default — a token is auto-generated if none is set).
-- Go SDK choices: `github.com/mqlitehq/mqlite` is the full Go 1.21 module for
-  embedded and remote use. `github.com/mqlitehq/mqlite-go` is the official
-  remote-only, standard-library-only companion with a Go 1.13 source floor; it
-  omits embedded mode, `Observe`, and managed access-key administration.
+- Go client choices: `github.com/mqlitehq/mqlite` is the full Go 1.21 module for
+  embedded and remote use. MQLite Remote Client for Go keeps the module path
+  `github.com/mqlitehq/mqlite-go`; it is the official remote-only,
+  standard-library-only companion with a Go 1.13 source floor and omits embedded
+  mode, `Observe`, and managed access-key administration.
 - Storage: local SQLite (pure-Go driver) or remote Turso/libSQL. A historical
   co-located Turso workload measured about 45 ms p50 for a single durable Send;
   remeasure the current version, database and region before sizing. Both backends
@@ -203,5 +204,6 @@ binary/database pair and starting v0.4.1 with a fresh database.
 - MCP server: `go install github.com/mqlitehq/mqlite/cmd/mqlite-mcp@v0.4.1`.
 - Full SDK (embedded + remote): `go get github.com/mqlitehq/mqlite@v0.4.1`
   (Go ≥ 1.21).
-- Remote-only SDK: `go get github.com/mqlitehq/mqlite-go@v0.1.0` (Go ≥ 1.13
-  source compatibility; build production binaries with a supported Go release).
+- MQLite Remote Client for Go: `go get github.com/mqlitehq/mqlite-go@v0.1.1`
+  (Go ≥ 1.13 source compatibility; build production binaries with a supported
+  Go release).
