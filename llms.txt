@@ -7,18 +7,21 @@
 Public documentation: https://mqlitehq.github.io/.
 Relative links below resolve against this website.
 
-NOTE ON VERSIONS: the latest supported release is v0.4.1 (default port 6754,
+NOTE ON VERSIONS: the latest supported release is v0.4.2 (default port 6754,
 schema token 7). v0.3.3 is withdrawn, unsupported and retracted by v0.4.0 and later; its
 public artifacts remain only for forensic or compatibility inspection and must not
-be deployed. This website tracks main, currently source v0.4.1. Runtime access
+be deployed. This website tracks main, currently source v0.4.2. Runtime access
 keys and key-management tools require v0.3.1 or later.
 Unified Observe, configured monitor
 credentials and the monitoring starter require v0.3.2 or later. Installation commands
-below pin v0.4.1. Use the
-[v0.4.1 documentation](https://github.com/mqlitehq/mqlite/tree/v0.4.1/docs)
-for the supported release's exact API. v0.4.1 is a same-schema patch from v0.4.0.
-Schema-5 databases from v0.3.x still require preserving the matching old
-binary/database pair and starting v0.4.1 with a fresh database.
+below pin v0.4.2. Use the
+[v0.4.2 documentation](https://github.com/mqlitehq/mqlite/tree/v0.4.2/docs)
+for the supported release's exact API. v0.4.2 is a same-schema patch from v0.4.1:
+listen keys can provision subscriptions and test filters, while inventory and
+deletion remain manage operations; browser root requests that prefer HTML enter
+the enabled console, while curl and JSON clients retain discovery. No database
+rebuild is required from v0.4.1. Schema-5 databases from v0.3.x still require
+preserving the matching old binary/database pair and starting v0.4.2 with a fresh database.
 
 - One engine, two front-ends: `mqlite.OpenEmbedded` (in-process, one SQLite file)
   and `mqlite serve` (HTTP broker, default :6754, Bearer-token auth, secure by
@@ -34,9 +37,11 @@ binary/database pair and starting v0.4.1 with a fresh database.
   share successful queue semantics, validation, state transitions and logical errors;
   latency, availability, remote outcome_unknown failures and storage operations
   have different envelopes.
-- Wire protocol: JSON over HTTP, one POST per operation, 29 routes in source v0.4.1 under
+- Wire protocol: JSON over HTTP, one POST per operation, 29 routes in source v0.4.2 under
   /mqlite.v1.QueueService/*, /mqlite.v1.AdminService/* and /mqlite.v1.AuthService/*. Message bodies are
-  base64 in JSON. GET / is an open discovery card listing every endpoint.
+  base64 in JSON. GET / with no Accept header, */*, or JSON is an open discovery
+  card listing every endpoint; an interactive browser that prefers HTML enters
+  the enabled console.
 - Delivery: Peek-Lock (receive → work → settle with a lock_token) or
   receive-and-delete. Exactly one settlement verb per outcome:
   Complete / Abandon / Reject / Defer. Each newly granted claim increments
@@ -65,6 +70,8 @@ binary/database pair and starting v0.4.1 with a fresh database.
   and keeps blocking its ordered group until due (strict_fifo: the whole queue).
 - Pub/sub: topics are implicit; Subscribe(topic, name, filter) creates a backing
   queue per subscription; filters are one expr boolean predicate, fail-closed.
+  Subscribe and TestFilter require listen; subscription inventory and deletion
+  require manage. Subscribe is a broker-wide upsert, not create-only ownership.
   Queue, subscription and topic names are one disjoint namespace (conflicts 409).
   Retiring the last active subscription makes its implicit topic unavailable for
   fan-out immediately; a deleting mapping reserves the address until cleanup ends.
@@ -110,7 +117,7 @@ binary/database pair and starting v0.4.1 with a fresh database.
 - Transactional outbox (embedded-only): business write + enqueue commit in ONE
   SQLite transaction via mq.Tx.
 - Ops: /ui embedded admin console, opt-in authenticated /metrics Prometheus
-  (incl. per-RPC latency histograms), /healthz, CLI (26 commands, including the key subcommand group), MCP server (mqlite-mcp, 22 tools in source v0.4.1). The local production
+  (incl. per-RPC latency histograms), /healthz, CLI (26 commands, including the key subcommand group), MCP server (mqlite-mcp, 22 tools in source v0.4.2). The local production
   boundary is one broker per persistent SQLite file; backups and recovery must be
   rehearsed. Use TLS and Bearer authentication for network access.
 - Unified observation (v0.3.2 and later): AdminService/Observe, SDK, CLI observe,
@@ -139,8 +146,10 @@ binary/database pair and starting v0.4.1 with a fresh database.
 - Access keys (v0.3.1 and later): configured MQLITE_TOKENS remain full
   administrators. Managed keys are persisted in the same DB and can be created,
   listed, expired and revoked at runtime using SDK/HTTP/CLI/console/MCP.
-  send = send/schedule/cancel; listen = receive/settle/renew/peek/queue stats;
-  manage includes both and administration/key issuance, including other managers.
+  send = send/schedule/cancel; listen = receive/settle/renew/peek/queue stats plus
+  broker-wide subscription creation/filter updates and filter testing; manage
+  includes both and administration/key issuance, including other managers, plus
+  subscription inventory and deletion regardless of the force value.
   Rights cover the entire broker. Listen is consumption, not read-only auditing.
   Newly generated secrets are mqk_ + 64 lowercase hex; stored as SHA-256 digests,
   never plaintext. Preserve the public 32-lowercase-hex ID before creation.
@@ -198,11 +207,11 @@ binary/database pair and starting v0.4.1 with a fresh database.
 - [MCP source](https://github.com/mqlitehq/mqlite/blob/main/docs/mcp.md).
 - [Releases](https://github.com/mqlitehq/mqlite/releases): binaries for
   linux/macos/windows (amd64+arm64), each archive contains mqlite + mqlite-mcp.
-- Container image: `ghcr.io/mqlitehq/mqlite:0.4.1` (default port 6754).
+- Container image: `ghcr.io/mqlitehq/mqlite:0.4.2` (default port 6754).
   See [Deployment](deployment.html) for persistent storage, authentication and TLS.
-- Broker: `go install github.com/mqlitehq/mqlite/cmd/mqlite@v0.4.1`.
-- MCP server: `go install github.com/mqlitehq/mqlite/cmd/mqlite-mcp@v0.4.1`.
-- Full SDK (embedded + remote): `go get github.com/mqlitehq/mqlite@v0.4.1`
+- Broker: `go install github.com/mqlitehq/mqlite/cmd/mqlite@v0.4.2`.
+- MCP server: `go install github.com/mqlitehq/mqlite/cmd/mqlite-mcp@v0.4.2`.
+- Full SDK (embedded + remote): `go get github.com/mqlitehq/mqlite@v0.4.2`
   (Go ≥ 1.21).
 - MQLite Remote Client for Go: `go get github.com/mqlitehq/mqlite-go@v0.1.1`
   (Go ≥ 1.13 source compatibility; build production binaries with a supported
