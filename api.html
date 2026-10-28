@@ -361,7 +361,7 @@ replacement key, moving clients, then revoking the old key.</p>
 <tbody><tr>
 <td><code>GET</code></td>
 <td><code>/</code></td>
-<td>JSON discovery card (see below)</td>
+<td>JSON discovery card, or the console for an interactive browser (see below)</td>
 </tr>
 <tr>
 <td><code>GET</code></td>
@@ -381,6 +381,12 @@ replacement key, moving clients, then revoking the old key.</p>
 #    &quot;health&quot;:&quot;/healthz&quot;,&quot;ui&quot;:&quot;/ui&quot;}
 curl &quot;$BASE_URL/healthz&quot;             # ok
 </code></pre>
+<p>An interactive browser that explicitly prefers <code>text/html</code> receives a temporary
+redirect from <code>/</code> to <code>/ui/</code> when the embedded console is enabled. Requests with no
+<code>Accept</code> header, <code>*/*</code>, or <code>application/json</code> continue to receive the exact JSON
+card above; the response varies on <code>Accept</code>. A headless broker (<code>MQLITE_UI=off</code>)
+always keeps <code>/</code> as JSON. This preserves machine discovery while making direct
+browser navigation useful.</p>
 <p>The card&#39;s <code>auth</code> is <code>&quot;bearer&quot;</code> when RPCs require a token or <code>&quot;none&quot;</code> when auth is off,
 so an agent can branch on it directly. <code>endpoints</code> is the <strong>complete</strong> list of RPC route
 paths (it always matches what the broker serves — a pinned contract). <code>health</code> is
