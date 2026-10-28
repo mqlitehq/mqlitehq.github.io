@@ -182,8 +182,9 @@ a broker (<code>mqlite serve</code> + <code>--endpoint</code>) when you need man
 (<code>MQLITE_TOKENS=off</code>) the broker <strong>refuses a non-loopback bind</strong> unless
 <code>--insecure-allow-remote</code> is passed, and <strong><code>MQLITE_CORS</code> defaults to off</strong>.</p>
 <p>Serves the RPC API, the open <code>/</code> + <code>/healthz</code>, and — unless <code>MQLITE_UI=off</code> —
-the embedded admin console at <code>/ui</code>. Enable Prometheus on the same API port with
-one flag:</p>
+the embedded admin console at <code>/ui</code>. With the console enabled, opening <code>/</code> in an
+interactive browser redirects to <code>/ui/</code>; curl and JSON clients still receive the
+machine discovery card. Enable Prometheus on the same API port with one flag:</p>
 <pre><code class="language-bash">MQLITE_DB=file:./mq.db MQLITE_TOKENS=mqk_dev mqlite serve \
   --addr 127.0.0.1:6754 --metrics
 </code></pre>

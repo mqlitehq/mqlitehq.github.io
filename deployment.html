@@ -155,7 +155,9 @@ docker run -d --name mqlite -p 6754:6754 \
 <li>Verify: <code>curl http://localhost:6754/</code> (discovery card) and <code>/healthz</code>. Metrics is
 disabled by default. For a private broker or an ingress that blocks public
 <code>/metrics</code>, add <code>-e MQLITE_METRICS=on</code> and give the collector a monitor token.
-Scraping uses the same API port; enabled discovery includes <code>&quot;metrics&quot;:&quot;/metrics&quot;</code>.</li>
+Scraping uses the same API port; enabled discovery includes <code>&quot;metrics&quot;:&quot;/metrics&quot;</code>.
+With the console enabled, opening the root URL in a browser redirects to <code>/ui/</code>;
+curl and JSON clients continue to receive the discovery card.</li>
 </ul>
 <h2 id="flyio-minimal-cost">Fly.io (minimal cost)</h2>
 <p>A scale-to-zero, single-machine recipe — cheapest way to run it online. Save as
