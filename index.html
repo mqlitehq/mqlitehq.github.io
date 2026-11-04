@@ -22,12 +22,13 @@
   .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 20px 0 24px; }
   .chip { font: 500 12px/1 var(--mono); color: var(--ink2); border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; }
   .chip.v { color: var(--accent); border-color: rgba(250, 204, 21, 0.35); }
-  .cta { display: flex; flex-wrap: wrap; gap: 12px; }
+  .cta { gap: 12px; }
   .btn { font: 600 14px/1 var(--mono); border-radius: 9px; padding: 12px 18px; display: inline-block; }
   .btn.primary { background: var(--accent); color: #111; }
   .btn.primary:hover { text-decoration: none; filter: brightness(1.08); }
   .btn.ghost { border: 1px solid var(--line); color: var(--ink); }
   .btn.ghost:hover { text-decoration: none; border-color: var(--accent); }
+  .cta .overflow-more summary { font-size: 14px; line-height: 1; padding: 12px 18px; }
 
   section.land { padding: 34px 0 6px; }
 
@@ -44,6 +45,7 @@
   section.land > .lede { color: var(--muted); font-size: 13.5px; margin-bottom: 16px; }
   section.land h3.subh { font: 650 13.5px/1.6 var(--mono); color: var(--ink2); margin: 26px 0 10px; }
   section.land h3.subh a { color: var(--link); }
+  section.land :not(pre) > code { overflow-wrap: anywhere; }
 
   .tabbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
   .tabbar button { font: 600 12.5px/1 var(--mono); color: var(--ink2); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 9px 14px; cursor: pointer; }
@@ -83,9 +85,14 @@
 </style>
 </head>
 <body>
-<nav class="top"><div class="wrap">
-  <a class="brand" href="./"><img src="logo.svg" alt="" width="24" height="24"> mqlite</a>
-  <div class="links">
+<nav class="top" aria-label="Main navigation"><div class="wrap">
+  <a class="brand" href="./" aria-current="page"><img src="logo.svg" alt="" width="24" height="24"> mqlite</a>
+  <div class="links overflow-nav" data-overflow>
+    <div class="overflow-primary"></div>
+    <a class="gh" href="https://github.com/mqlitehq/mqlite">GitHub ↗</a>
+    <details class="overflow-more">
+      <summary aria-label="More navigation links">More</summary>
+      <div class="overflow-items">
     <a href="concepts.html">Concepts</a>
     <a href="internals.html">Internals</a>
     <a href="api.html">API</a>
@@ -96,7 +103,8 @@
     <a href="observability-cloud.html">Cloud monitoring</a>
     <a href="operations.html">Operations</a>
     <a href="agents.html">For AI agents</a>
-    <a class="gh" href="https://github.com/mqlitehq/mqlite">GitHub ↗</a>
+      </div>
+    </details>
   </div>
 </div></nav>
 
@@ -123,14 +131,20 @@
   with published artifacts. v0.3.3 is withdrawn, unsupported and retracted by
   v0.4.0 and later; its public artifacts remain only for forensic or compatibility
   inspection and must not be deployed.</p>
-  <div class="cta">
+  <nav class="cta overflow-nav" data-overflow aria-label="Get started">
     <a class="btn primary" href="#quickstart">Quickstart</a>
+    <div class="overflow-primary"></div>
+    <details class="overflow-more">
+      <summary aria-label="More getting started links">More</summary>
+      <div class="overflow-items">
     <a class="btn ghost" href="#demo">Watch one message</a>
     <a class="btn ghost" href="concepts.html">Read the concepts</a>
     <a class="btn ghost" href="operations.html">Production operations</a>
     <a class="btn ghost" href="access-keys.html">Access keys</a>
     <a class="btn ghost" href="agents.html">I'm an AI agent</a>
-  </div>
+      </div>
+    </details>
+  </nav>
 </div>
 
 <section class="land" id="solves">

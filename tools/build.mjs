@@ -94,7 +94,7 @@ function page({ title, description, src, body }, metadata) {
   const sourceStatus = unreleased
     ? `unreleased v${metadata.sourceVersion} candidate`
     : `source v${metadata.sourceVersion}`;
-  const navigation = PAGES.map(([, out, label]) => `    <a href="${out}">${label.replace('HTTP API reference', 'API').replace('CLI reference', 'CLI')}</a>`).join('\n');
+  const navigation = PAGES.map(([pageSrc, out, label]) => `    <a href="${out}"${pageSrc === src ? ' aria-current="page"' : ''}>${label.replace('HTTP API reference', 'API').replace('CLI reference', 'CLI')}</a>`).join('\n');
   return `<!doctype html>
 ${GENERATED_MARKER}
 <html lang="en">
@@ -109,12 +109,18 @@ ${GENERATED_MARKER}
 <script src="assets/site.js" defer></script>
 </head>
 <body>
-<nav class="top"><div class="wrap">
+<nav class="top" aria-label="Main navigation"><div class="wrap">
   <a class="brand" href="./"><img src="logo.svg" alt="" width="24" height="24"> mqlite</a>
-  <div class="links">
+  <div class="links overflow-nav" data-overflow>
+    <div class="overflow-primary"></div>
+    <a class="gh" href="${GH}">GitHub ↗</a>
+    <details class="overflow-more has-current">
+      <summary aria-label="More navigation links">More</summary>
+      <div class="overflow-items">
 ${navigation}
     <a href="agents.html">For AI agents</a>
-    <a class="gh" href="${GH}">GitHub ↗</a>
+      </div>
+    </details>
   </div>
 </div></nav>
 <div class="wrap">
