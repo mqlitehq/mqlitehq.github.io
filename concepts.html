@@ -12,10 +12,15 @@
 <script src="assets/site.js" defer></script>
 </head>
 <body>
-<nav class="top"><div class="wrap">
+<nav class="top" aria-label="Main navigation"><div class="wrap">
   <a class="brand" href="./"><img src="logo.svg" alt="" width="24" height="24"> mqlite</a>
-  <div class="links">
-    <a href="concepts.html">Concepts</a>
+  <div class="links overflow-nav" data-overflow>
+    <div class="overflow-primary"></div>
+    <a class="gh" href="https://github.com/mqlitehq/mqlite">GitHub ↗</a>
+    <details class="overflow-more has-current">
+      <summary aria-label="More navigation links">More</summary>
+      <div class="overflow-items">
+    <a href="concepts.html" aria-current="page">Concepts</a>
     <a href="internals.html">Internals</a>
     <a href="api.html">API</a>
     <a href="cli.html">CLI</a>
@@ -25,7 +30,8 @@
     <a href="observability-cloud.html">Cloud monitoring</a>
     <a href="operations.html">Operations</a>
     <a href="agents.html">For AI agents</a>
-    <a class="gh" href="https://github.com/mqlitehq/mqlite">GitHub ↗</a>
+      </div>
+    </details>
   </div>
 </div></nav>
 <div class="wrap">
@@ -235,11 +241,13 @@ is deleted from the database:</p>
 <code>Abandon</code>, lock expiry, and the scheduler do not. With <code>max=10</code>, the ordinary
 Peek-Lock <code>Receive</code> that returns <code>count=10</code> is a complete final attempt: it may renew
 its live lease repeatedly and still <code>Complete</code>. Reaching 10 does not itself move
-the row. If that attempt is abandoned, its lease expires, or startup recovery
-finds it locked, the row goes to the DLQ instead of receiving ordinary Peek-Lock
-attempt number 11. Explicit <code>ReceiveDeferred</code> currently differs: it increments <code>count</code> but does
-not currently refuse the claim based on <code>max</code>, so do not treat the configured
-maximum as an admission limit for that by-sequence recovery path.</li>
+the row. If that attempt is abandoned, its lease expires, or an embedded owner
+explicitly reclaims live leases, the row goes to the DLQ instead of receiving
+ordinary Peek-Lock attempt number 11. Startup preserves it by default while the
+lease remains live; expiry still applies the same boundary. Explicit <code>ReceiveDeferred</code>
+currently differs: it increments <code>count</code> but does not currently refuse the claim
+based on <code>max</code>, so do not treat the configured maximum as an admission limit for
+that by-sequence recovery path.</li>
 <li><strong>The DLQ is not a separate queue.</strong> It is messages in the same queue with
 <code>state=&#39;dead_lettered&#39;</code>. A message lands there when a failed locked attempt is
 abandoned, reaped, or recovered with <code>delivery_count &gt;= max_delivery_count</code>, on
@@ -365,7 +373,9 @@ for that invalid internal state is not specified.</li>
 <li>Name resolution at publish/send is unambiguous in the supported namespace: an
 active plain-queue or backing-queue name addresses that queue; an implicit topic
 name addresses its active subscription rows; any other name returns
-<code>ErrQueueNotFound</code>. A valid name can never be both a queue and a topic, so a
+<code>ErrQueueNotFound</code>. That sentinel also matches the broader <code>ErrNotFound</code> via
+<code>errors.Is</code>, consistently in embedded mode and with a resource-aware remote
+broker. A valid name can never be both a queue and a topic, so a
 <code>Send</code> is never silently rerouted.</li>
 </ul>
 <pre><code>You only ever do two kinds of &quot;create&quot;:

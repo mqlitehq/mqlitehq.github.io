@@ -12,12 +12,17 @@
 <script src="assets/site.js" defer></script>
 </head>
 <body>
-<nav class="top"><div class="wrap">
+<nav class="top" aria-label="Main navigation"><div class="wrap">
   <a class="brand" href="./"><img src="logo.svg" alt="" width="24" height="24"> mqlite</a>
-  <div class="links">
+  <div class="links overflow-nav" data-overflow>
+    <div class="overflow-primary"></div>
+    <a class="gh" href="https://github.com/mqlitehq/mqlite">GitHub ↗</a>
+    <details class="overflow-more has-current">
+      <summary aria-label="More navigation links">More</summary>
+      <div class="overflow-items">
     <a href="concepts.html">Concepts</a>
     <a href="internals.html">Internals</a>
-    <a href="api.html">API</a>
+    <a href="api.html" aria-current="page">API</a>
     <a href="cli.html">CLI</a>
     <a href="access-keys.html">Access keys</a>
     <a href="deployment.html">Deployment</a>
@@ -25,7 +30,8 @@
     <a href="observability-cloud.html">Cloud monitoring</a>
     <a href="operations.html">Operations</a>
     <a href="agents.html">For AI agents</a>
-    <a class="gh" href="https://github.com/mqlitehq/mqlite">GitHub ↗</a>
+      </div>
+    </details>
   </div>
 </div></nav>
 <div class="wrap">
@@ -49,9 +55,38 @@ values replace earlier ones, while repeated object and map values may merge.</p>
 <ul>
 <li><strong>Transport:</strong> HTTP <code>POST</code>, <code>Content-Type: application/json</code>. Discovery and
 health use open <code>GET</code> endpoints; opt-in metrics uses authenticated <code>GET</code> on the same port.</li>
+<li><strong>Go SDK transport:</strong> RPC clients never follow HTTP redirects. The default
+client keeps up to 64 idle connections per broker for concurrent receivers and
+releases its own idle connections on <code>Client.Close</code>. A client passed through
+<code>WithHTTPClient</code> remains caller-owned; MQLite preserves its transport and timeout
+but still disables redirects for RPCs. Size a custom transport&#39;s
+<code>MaxIdleConnsPerHost</code> to at least Receiver concurrency plus effective prefetch
+(the managed pipeline&#39;s maximum network work in flight). If an application has
+replaced the process-wide <code>http.DefaultTransport</code> with an opaque wrapper,
+MQLite preserves that wrapper for instrumentation/mock compatibility and does
+not close it; its underlying connection-pool sizing remains the application&#39;s
+responsibility because a generic <code>http.RoundTripper</code> cannot be cloned or tuned.</li>
 <li><strong><code>body</code></strong> is <strong>base64</strong> in JSON (Go marshals <code>[]byte</code> as base64).</li>
 <li><strong>Timestamps</strong> are <strong>epoch milliseconds</strong> (UTC) integers. Message durations use
 <code>*_ms</code>; observability durations explicitly named <code>*_seconds</code> retain fractional seconds.</li>
+<li><strong>Broker time header:</strong> every broker response includes
+<code>X-Mqlite-Server-Time-Ms</code>, the UTC epoch-millisecond value from the same clock
+used for lease, TTL, scheduling, and settlement decisions. The managed Go
+client trusts it only on successful broker responses and maps absolute lease
+deadlines onto its local monotonic clock with a conservative transport budget.
+Older clients ignore the additive header. With an older broker, the client can
+use HTTP <code>Date</code> at its one-second precision; a short lower bound dominated by
+that precision uses bounded degraded-clock pacing. Without either header the
+public absolute deadline is retained, but the managed Receiver reports one
+diagnostic, confirms the lease before dispatch, and keeps a bounded
+untrusted-clock cadence instead of using that foreign timestamp as a local
+schedule. New and reconfigured queues accept either <code>0</code> (the 30-second default)
+or a lock duration from 1 second through 1 hour. Legacy databases containing a
+duration outside that range remain readable, but this no-header fallback may
+fail closed when it cannot prove enough lease remains for a very short lease.
+Raw HTTP callers should preserve one time header, map broker time, or synchronize
+clocks.
+CORS-enabled brokers expose this header to browser clients.</li>
 <li><strong>Sequence numbers</strong> (<code>seq_number</code>) are broker-assigned integers, strictly increasing
 and <strong>never reused</strong> (they may gap) — <strong>the handle you settle with</strong>, valid only while
 the message lives. You never set them.</li>
@@ -458,13 +493,44 @@ resource and its backing queue.</p>
 Receive-and-Delete removes the row before returning it and grants no lease:
 <code>lock_token</code> is empty and <code>locked_until_ms</code> is zero (omitted when empty), including
 replays with the same receive attempt ID. The SDK exposes a zero <code>LockedUntil</code> time.
-Every newly granted <code>Receive</code> claim increments <code>delivery_count</code>; replaying a live
-<code>receive_attempt_id</code> returns the saved claim and does not increment it again.</p>
+Every newly granted <code>Receive</code> claim increments <code>delivery_count</code>. A Peek-Lock
+<code>receive_attempt_id</code> returns its saved claim without another increment only while
+every saved token still owns a live lease. If explicit embedded live-lease
+recovery, startup recovery of an expired lease, settlement, or ordinary lease
+expiry invalidates any token, the broker discards that stale response and the
+retry performs a safe new claim; it never returns ownership the caller no longer
+has.
+Use an attempt ID only to retry the exact Receive whose response was not observed.
+Once the response arrives, do not reuse that ID for another Receive or after
+settling part of its batch. Invalidating a partially stale cached response does
+not revoke the other live leases from the original response: their original
+tokens remain valid until settlement or lease expiry, preventing concurrent
+delivery while the original caller may still be processing them. A replacement
+claim may therefore return fewer messages or different currently eligible work.
+Receive-and-Delete keeps replaying its tokenless saved response for the attempt lifetime.
+A live non-empty saved response also binds that attempt ID to its original
+<code>receive_mode</code>; reusing it with the other mode is <code>400 invalid_argument</code>. Empty
+results are not saved, and an expired record no longer binds the ID.</p>
+<p>The managed Go Receiver keeps that attempt ID across all transient retries in one
+Receive round. Its first transient failure adds no client-generated delay unless
+HTTP 429/503 may supply a valid <code>Retry-After</code> pacing hint. Continued failures use
+equal-jitter exponential backoff with a 500 ms base and a three-second generated
+cap. A valid hint may raise one wait up to 60 seconds; when it raises the generated
+delay, the error handler is called before waiting, including on the first failure.
+<code>Retry-After: 0</code> cannot remove later backoff. The Receiver accepts delta-seconds
+and HTTP-date forms. An absolute date uses
+the same response&#39;s parseable <code>Date</code>, otherwise the local response receipt time;
+malformed, negative, and overflowing values are ignored. Cancellation interrupts
+the wait. A successful response, including an empty batch, starts a fresh round
+with a new attempt ID. HTTP 500–599 are transient under the 5xx rule; status 600
+is terminal. Renew and settlement use separate retry policies.</p>
 <ul>
 <li><strong>Request</strong> <code>ReceiveRequest</code>: <code>queue</code>, <code>max_messages</code> (int, default 1, max 256),
 <code>wait_time_ms</code> (int, long-poll; max 20000), <code>receive_mode</code> (int: <code>0</code> peek-lock,
-<code>1</code> receive-and-delete), <code>receive_attempt_id</code> (string, optional idempotency key —
-a retry replays the same batch / same lock tokens).</li>
+<code>1</code> receive-and-delete; any other value is <code>400 invalid_argument</code>),
+<code>receive_attempt_id</code> (string, optional idempotency key —
+a Peek-Lock retry replays the same batch while all saved leases remain valid;
+Receive-and-Delete replays its tokenless saved response).</li>
 <li><strong>Response</strong> <code>ReceiveResponse</code>: <code>messages</code> ([Message]) — each carries a
 <code>lock_token</code> to settle with (peek-lock mode).</li>
 </ul>
@@ -533,8 +599,10 @@ current deadline; once the lease is expired, Renew fails with <code>409 lock_los
 ordinary Peek-Lock claim is granted. For example, with a maximum of 10, an ordinary Peek-Lock <code>Receive</code>
 may return <code>delivery_count=10</code>; that consumer can renew the lease repeatedly and
 Complete successfully. If it instead Abandons, lets the lease expire, or leaves the
-lock for startup recovery, the message goes to the DLQ and is not ordinarily claimed
-an eleventh time. <code>ReceiveDeferred</code> currently differs, as described below.</p>
+lock for explicit embedded live-lease recovery, the message goes to the DLQ and is
+not ordinarily claimed an eleventh time. Startup preserves that final attempt by
+default while its lease is unexpired; expiry still applies the same DLQ boundary. <code>ReceiveDeferred</code> currently
+differs, as described below.</p>
 <blockquote>
 <p><strong>Defer + ordering.</strong> A deferred message keeps its head-of-line position: in a
 <code>group_fifo</code>/<code>strict_fifo</code> (or otherwise grouped) queue the messages behind it — its
@@ -569,6 +637,10 @@ a Complete-per-message N+1 (the cheap path for draining).</p>
 for a stale/expired lock on that item (not fatal to the batch). Each item is fenced +
 idempotent exactly like <code>Complete</code>.</li>
 </ul>
+<p>The Go SDK requires exactly one result per requested message in the same order,
+with no renewal deadline on a completion result. A malformed successful
+acknowledgement returns <code>ErrOutcomeUnknown</code>, because some completions may already
+have committed.</p>
 <h3 id="renewbatch">RenewBatch</h3>
 <p>Extend the lock lease of a whole received batch in <strong>one round-trip</strong>.</p>
 <p>Renewing message-by-message costs one request per message, so on a slow link a renewal pass can
@@ -581,15 +653,34 @@ against a 2 s lock, and most of the locks expire mid-pass.</p>
 <code>ok=false</code> for a stale/expired lock on that item (not fatal to the batch); each item is fenced
 on its own <code>lock_token</code>, exactly like <code>Renew</code>.</li>
 </ul>
-<p><code>locked_until_ms</code> is the deadline the broker actually committed — renew again before it. And
-<code>ok=true</code> means the lease was live <strong>when the broker&#39;s statement finished</strong> — not when the answer
-reaches you. The result still has to be mapped, encoded and travel back, so on a very short lease
-it can lapse on the way. <strong><code>locked_until_ms</code> is the authoritative fact: compare it against your own
-clock.</strong> (If the write itself outlived the lock, you get <code>ok=false</code> rather than a lock you never
-really held.) Like single-message Renew, the batch operation leaves token, state, and
+<p><code>locked_until_ms</code> is the absolute broker deadline that was actually committed — renew again before
+it. And <code>ok=true</code> means the lease was live <strong>when the broker&#39;s statement finished</strong> — not when the
+answer reaches you. The result still has to be mapped, encoded and travel back, so on a very short
+lease it can lapse on the way. Current brokers return <code>X-Mqlite-Server-Time-Ms</code> from the same clock
+as the lease; the managed Receiver combines that observation with local monotonic time and a
+conservative transport budget instead of directly comparing two hosts&#39; wall clocks. It performs a
+bounded synchronous Renew before dispatch when a deadline is unusable, separates renewal cadence
+from the request watchdog, reserves two observed round trips for the next request, and never extends
+a lease merely because the local wall clock falls in a wide uncertainty interval. A confirmed exact
+lease below the 50 ms minimum cadence fails closed instead of entering a renewal hot loop. Older
+brokers use HTTP <code>Date</code> when available; without either time header they retain the public absolute
+deadline but never use it as a managed local schedule. The Receiver emits one diagnostic, confirms
+ownership before dispatch, and keeps a conservative 250ms cadence. Because no relative lease
+duration is available in that fallback, preserve one time header. New and
+reconfigured queues enforce an explicit lock duration range of 1 second through
+1 hour; zero selects the 30-second default. Legacy configurations outside that
+range remain readable, but a very short lease can fail closed when safe renewal
+cannot be proven.
+Raw <code>RenewBatch</code> callers should map the broker clock likewise (or keep clocks synchronized) and
+must not turn clock offset alone into <code>ErrLockLost</code>. (If the write itself outlived the lock, you get
+<code>ok=false</code> rather than a lock you never really held.) Like single-message Renew, the batch
+operation leaves token, state, and
 <code>delivery_count</code> unchanged and commits the later of the existing deadline and the
 broker&#39;s fresh <code>now + lock_duration</code> candidate (capped by a fixed subscription
 lifetime).</p>
+<p>The Go SDK requires exactly one ordered result per request item. A successful
+renewal must have a positive <code>locked_until_ms</code>; a failed renewal must not claim a
+deadline. Malformed renewal results are rejected rather than treated as renewed.</p>
 <blockquote>
 <p><strong>Why 512?</strong> Renewal is a claim about the <em>future</em> (&quot;this lease is live&quot;), and that claim is
 only keepable within a single statement: across several, the first batch&#39;s lease can expire —
@@ -801,7 +892,7 @@ Config is <strong>queue-level</strong>: it&#39;s set here, not per <code>Send</c
 <td><code>lock_duration_ms</code></td>
 <td>int (ms)</td>
 <td><code>30000</code> (30s)</td>
-<td>the <strong>peek-lock window</strong>. At <code>locked_until_ms</code>, new settlement and renewal fail immediately; the reaper later returns the row to <code>active</code> below the delivery limit or dead-letters it at the limit. <code>Renew</code> uses this duration to extend the same live attempt; the committed deadline is never earlier than the existing one. There is <strong>no per-<code>Receive</code> override</strong> — it&#39;s fixed by the queue. <code>0</code> → the 30s default.</td>
+<td>the <strong>peek-lock window</strong>. At <code>locked_until_ms</code>, new settlement and renewal fail immediately; the reaper later returns the row to <code>active</code> below the delivery limit or dead-letters it at the limit. <code>Renew</code> uses this duration to extend the same live attempt; the committed deadline is never earlier than the existing one. There is <strong>no per-<code>Receive</code> override</strong> — it&#39;s fixed by the queue. <code>0</code> selects the 30s default; an explicit value must be from <code>1000</code> through <code>3600000</code> (1s–1h), inclusive. Existing databases with an older value outside that range still open, but an explicit reconfiguration must satisfy the range. Upgrade and reconfiguration do not rewrite or shorten a <code>locked_until_ms</code> already issued to a consumer.</td>
 </tr>
 <tr>
 <td><code>max_delivery_count</code></td>
@@ -1149,7 +1240,9 @@ each is independent.</li>
 conflict signal. With dedup off (default), or with identical bodies, there is no problem.</li>
 </ul>
 <h2 id="errors">Errors</h2>
-<p>Errors are a JSON envelope <code>{&quot;code&quot;: &quot;...&quot;, &quot;message&quot;: &quot;...&quot;}</code> with an HTTP status:</p>
+<p>Errors are a JSON envelope <code>{&quot;code&quot;: &quot;...&quot;, &quot;message&quot;: &quot;...&quot;}</code> with an HTTP
+status. A <code>not_found</code> response may add an optional <code>resource</code> discriminator
+(<code>&quot;queue&quot;</code> or <code>&quot;subscription&quot;</code>); older clients safely ignore this additive field:</p>
 <table>
 <thead>
 <tr>
@@ -1181,7 +1274,7 @@ conflict signal. With dedup off (default), or with identical bodies, there is no
 <tr>
 <td>404</td>
 <td><code>not_found</code></td>
-<td>the queue, exact topic/subscription pair, or message doesn&#39;t exist; or an unknown path</td>
+<td>the queue, exact topic/subscription pair, or message doesn&#39;t exist; or an unknown path. Missing queues and subscriptions include the corresponding <code>resource</code> when the broker can identify it.</td>
 </tr>
 <tr>
 <td>409</td>
@@ -1226,7 +1319,12 @@ conflict signal. With dedup off (default), or with identical bodies, there is no
 <tr>
 <td>499</td>
 <td><code>canceled</code></td>
-<td>the client canceled the request</td>
+<td>the request context was canceled. A managed Receiver whose own context is still live treats a received 499 as transient and retries the same Receive attempt; caller cancellation still stops immediately.</td>
+</tr>
+<tr>
+<td>503</td>
+<td><code>unavailable</code></td>
+<td>graceful broker drain fenced a <code>Receive</code> before its first claim round. The response includes <code>Retry-After: 1</code> (also exposed to browser code when CORS is enabled); retry with the <strong>same</strong> <code>receive_attempt_id</code>, because this request may itself be replaying a claim whose earlier response was lost. A long poll that had already completed a confirmed empty round instead wakes with <code>200</code> and an empty <code>messages</code> list.</td>
 </tr>
 <tr>
 <td>503</td>
@@ -1248,6 +1346,16 @@ intermediary may have generated that response after the broker committed.</p>
 works in both embedded and client mode. An accepted queue or subscription
 deletion is a successful operation even when its typed HTTP result is
 <code>state:&quot;deleting&quot;</code>.</p>
+<p>With a resource-aware broker, a missing queue matches both
+<code>mqlite.ErrQueueNotFound</code> and the broader <code>mqlite.ErrNotFound</code>; this is the same
+hierarchy as embedded mode. A new client connected to an older broker receives
+the legacy envelope without <code>resource</code> and can only match <code>ErrNotFound</code>.</p>
+<p>The Go SDK bounds ordinary successful response bodies at 64 MiB and error bodies
+at 64 KiB. Outside lifecycle deletion&#39;s explicit <code>ErrOutcomeUnknown</code> cases, a
+non-2xx response is available through <code>errors.As</code> as <code>*mqlite.HTTPError</code>; its
+<code>StatusCode</code> and <code>HTTPStatus()</code> retain the HTTP status even when an intermediary
+returned no JSON error code. Redirect errors report only the status and never copy
+the untrusted <code>Location</code> value into the error.</p>
 
   </main>
 </div>

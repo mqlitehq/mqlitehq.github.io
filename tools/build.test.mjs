@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync } from 'node:fs';
+import { request } from 'node:http';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import { PAGES, BUNDLE_FILES, GENERATED_FILES, HANDWRITTEN_RELEASE_FILES, sourceMetadata, renderSite, checkOutputs, checkClaims, checkLinks, rewriteLinks, rewriteMdLinks } from './build.mjs';
+import { createSiteServer } from './serve.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const site = resolve(here, '..');
@@ -13,6 +15,72 @@ const put = (root, path, text) => {
   mkdirSync(dirname(resolve(root, path)), { recursive: true });
   writeFileSync(resolve(root, path), text);
 };
+
+async function preview(t) {
+  const root = mkdtempSync(resolve(tmpdir(), 'mqlite-preview-test-'));
+  const server = createSiteServer(root);
+  t.after(async () => {
+    await new Promise((done) => server.close(done));
+    rmSync(root, { recursive: true, force: true });
+  });
+  await new Promise((done) => server.listen(0, '127.0.0.1', done));
+  return {
+    root,
+    get: (path, method = 'GET') => new Promise((done, fail) => {
+      const req = request({ hostname: '127.0.0.1', port: server.address().port, path, method }, (response) => {
+        const chunks = [];
+        response.on('data', (chunk) => chunks.push(chunk));
+        response.on('end', () => done({ status: response.statusCode, headers: response.headers, body: Buffer.concat(chunks).toString() }));
+      });
+      req.on('error', fail);
+      req.end();
+    }),
+  };
+}
+
+test('local preview serves real GET and HEAD responses with static MIME types', async (t) => {
+  const { root, get } = await preview(t);
+  put(root, 'index.html', '<h1>Preview</h1>');
+  put(root, 'assets/example.js', 'const value = 1;');
+  const home = await get('/?preview=1');
+  assert.equal(home.status, 200);
+  assert.equal(home.body, '<h1>Preview</h1>');
+  assert.equal(home.headers['content-type'], 'text/html; charset=utf-8');
+  const script = await get('/assets/example.js', 'HEAD');
+  assert.equal(script.status, 200);
+  assert.equal(script.body, '');
+  assert.equal(Number(script.headers['content-length']), 'const value = 1;'.length);
+  assert.equal(script.headers['content-type'], 'text/javascript; charset=utf-8');
+});
+
+test('local preview rejects hidden paths, traversal, listing and unsupported methods', async (t) => {
+  const { root, get } = await preview(t);
+  put(root, '.git/config', 'PRIVATE_REPOSITORY_SENTINEL');
+  symlinkSync(resolve(root, '.git/config'), resolve(root, 'hidden-link.txt'));
+  mkdirSync(resolve(root, 'assets'));
+  for (const path of ['/.git/config', '/%2egit/config', '/hidden-link.txt', '/../private', '/%2e%2e/private', '/assets%5c..%5cprivate', '/bad%00path']) {
+    const response = await get(path);
+    assert.equal(response.status, 403, path);
+    assert.ok(!response.body.includes('PRIVATE_REPOSITORY_SENTINEL'), path);
+  }
+  assert.equal((await get('/assets/')).status, 404);
+  assert.equal((await get('/missing.html')).status, 404);
+  assert.equal((await get('/bad%ZZ')).status, 400);
+  const post = await get('/', 'POST');
+  assert.equal(post.status, 405);
+  assert.equal(post.headers.allow, 'GET, HEAD');
+});
+
+test('local preview never follows an escaping symbolic link', async (t) => {
+  const { root, get } = await preview(t);
+  const outside = mkdtempSync(resolve(tmpdir(), 'mqlite-preview-outside-'));
+  t.after(() => rmSync(outside, { recursive: true, force: true }));
+  put(outside, 'private.txt', 'OUTSIDE_ROOT_SENTINEL');
+  symlinkSync(resolve(outside, 'private.txt'), resolve(root, 'escape.txt'));
+  const response = await get('/escape.txt');
+  assert.equal(response.status, 403);
+  assert.ok(!response.body.includes('OUTSIDE_ROOT_SENTINEL'));
+});
 
 function fixture(t) {
   const root = mkdtempSync(resolve(tmpdir(), 'mqlite-site-test-'));
@@ -61,6 +129,20 @@ test('the complete generated output and source inventories are explicit', () => 
   assert.ok(summary.includes(`the ${BUNDLE_FILES.length - 2} canonical source documents linked above`));
   assert.ok(summary.includes('The hand-written agent guide remains a separate page.'));
   assert.deepEqual(GENERATED_FILES, ['concepts.html', 'internals.html', 'api.html', 'cli.html', 'access-keys.html', 'deployment.html', 'observability.html', 'observability-cloud.html', 'operations.html', 'llms-full.txt', 'site-metadata.json', 'assets/highlight.min.js']);
+});
+
+test('every generated reference keeps native navigation and marks its current page', (t) => {
+  const { outputs } = renderSite(fixture(t));
+  for (const [, output] of PAGES) {
+    const html = outputs.get(output);
+    assert.match(html, /<nav class="top" aria-label="Main navigation">/);
+    assert.match(html, /<div class="overflow-primary"><\/div>/);
+    assert.match(html, /<details class="overflow-more has-current">/);
+    assert.match(html, /<summary aria-label="More navigation links">More<\/summary>/);
+    assert.ok(html.includes(`<a href="${output}" aria-current="page">`), output);
+    assert.equal((html.match(/aria-current="page"/g) || []).length, 1, output);
+    assert.ok(html.indexOf('class="gh"') < html.indexOf('<details'), output);
+  }
 });
 
 test('source and latest supported release stay distinct across patch preparation and publication', (t) => {
