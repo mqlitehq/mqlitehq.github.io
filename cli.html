@@ -138,11 +138,10 @@ omits <code>lock_token</code>; raw Peek-Lock Receive always returns one.</li>
 <p>The CLI also doesn&#39;t expose <em>every</em> HTTP operation (batch send, attempt ids). For the complete
 contract — all routes, all fields — see <a href="api.html">api-reference.md</a>.</p>
 <blockquote>
-<p><strong>Settling across invocations needs a broker.</strong> <code>receive --no-ack</code> locks a message and
-prints its <code>lock-token</code>; you settle it later with <code>complete/abandon/reject/defer/renew &lt;queue&gt; &lt;seq&gt; &lt;token&gt;</code>. This works against a running broker (client mode), which holds
-the lock between calls. In <strong>embedded</strong> mode each invocation opens the DB fresh and
-reclaims orphaned locks, so a <code>--no-ack</code> lock does not survive to the next command — use
-a broker (<code>mqlite serve</code> + <code>--endpoint</code>) when you need manual settle-later.</p>
+<p><strong>Settling across invocations.</strong> <code>receive --no-ack</code> locks a message and prints its
+<code>lock-token</code>; settle it later with <code>complete/abandon/reject/defer/renew &lt;queue&gt; &lt;seq&gt; &lt;token&gt;</code>. Both broker and local embedded CLI invocations preserve that token until
+its deadline. Prefer a broker for multi-process consumers: the local DB still permits
+only one owning process at a time, and an expired token cannot be revived.</p>
 </blockquote>
 <h2 id="commands">Commands</h2>
 <h3 id="serve--run-the-broker"><code>serve</code> — run the broker</h3>
@@ -276,7 +275,7 @@ token, then revoke the old ID. No broker restart is needed. See
 <tbody><tr>
 <td><code>--lock</code></td>
 <td>0 → 30s</td>
-<td>Peek-Lock duration (<code>0</code> inherits the engine default, 30s)</td>
+<td>Peek-Lock duration (<code>0</code> inherits the 30s engine default; an explicit value must be from 1s through 1h)</td>
 </tr>
 <tr>
 <td><code>--max-delivery</code></td>
@@ -580,14 +579,16 @@ reject it otherwise). New local DBs use <code>auto_vacuum=INCREMENTAL</code>, so
 checkpoints and exhausts the current incremental freelist; <code>--full</code> runs a full
 <code>VACUUM</code> (rewrites the file, global lock). The running broker also performs a
 bounded pass every 60 seconds once at least 256 pages are free. Not applicable to
-a remote Turso/libSQL store.</p>
+a remote Turso/libSQL store. Opening the stopped broker DB for vacuum preserves
+every unexpired delivery and its fencing token.</p>
 <pre><code class="language-bash">MQLITE_DB=file:/data/mq.db mqlite vacuum          # incremental
 MQLITE_DB=file:/data/mq.db mqlite vacuum --full   # full rewrite
 </code></pre>
 <h3 id="complete--abandon--reject--defer--renew--settle-a-message"><code>complete</code> / <code>abandon</code> / <code>reject</code> / <code>defer</code> / <code>renew</code> — settle a message</h3>
 <p>Settle a message received earlier with <code>receive --no-ack</code> (which printed its
-<code>lock-token</code>). Positional args are always <code>&lt;queue&gt; &lt;seq&gt; &lt;lock-token&gt;</code>. Client mode only
-in practice (a broker holds the lock between calls — see the note under Global flags).</p>
+<code>lock-token</code>). Positional args are always <code>&lt;queue&gt; &lt;seq&gt; &lt;lock-token&gt;</code>. A broker is
+recommended for concurrent consumers; local embedded invocations can also settle
+a token while its lease remains live (see the note under Global flags).</p>
 <pre><code class="language-bash">mqlite complete orders 42 lt_9f3a…                 # done
 mqlite abandon  orders 42 lt_9f3a… --delay 60s     # retry after backoff, or DLQ at the limit
 mqlite reject   orders 42 lt_9f3a… --reason bad    # dead-letter it (--detail …)

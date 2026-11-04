@@ -357,17 +357,24 @@ transaction without consuming the ordinary 32-local/1-remote resource-count
 allowance. Those two rows per subscription still consume the shared 4,096-row
 budget. Exact affected-row checks keep this safe even when foreign keys are off.
 Subscriptions with any retained state remain on the ordinary fair row/byte path.</p>
-<p><strong>Crash recovery is one statement.</strong> On <code>Open</code>, every <code>locked</code> row is an orphan
-of a previous process (locks are rows, remember) and is reclaimed — back to
-<code>active</code>, or straight to the dead-letter state if it died on its final allowed
-attempt. Same rule as the reaper; a crash never buys an extra delivery.</p>
+<p><strong>Startup lease recovery is one statement.</strong> Open preserves rows whose
+<code>locked_until</code> is still in the future because a new process cannot prove that no
+remote or out-of-process handler still owns the persisted fencing token. It
+reclaims only expired rows on active resources by default. A single-process
+embedded owner that knows all prior handlers are gone may explicitly reclaim live
+leases. Resource lifecycle and message TTL remain authoritative. Every reclaimed
+row returns to <code>active</code>, or goes straight to the dead-letter state if it used its
+final allowed attempt. The rule is the same as the reaper, and preserving a live
+attempt does not increment <code>delivery_count</code>.</p>
 <p><strong>Ordinary retries are bounded by data.</strong> <code>delivery_count</code> is incremented <em>at
 claim time</em> inside the claim UPDATE itself, so no failure mode can lose count.
 Reaching the maximum does not interrupt that claim: with <code>max_delivery_count=10</code>,
-ordinary Peek-Lock claim 10 is a full final attempt that can be renewed repeatedly and
-completed. If it is Abandoned, its lock expires, or startup recovery finds it
-still locked, that transition sees <code>delivery_count &gt;= max_delivery_count</code> and
-moves it to <code>state=&#39;dead_lettered&#39;</code> instead of allowing ordinary Peek-Lock claim 11.
+ordinary Peek-Lock claim 10 is a full final attempt that can be renewed repeatedly
+and completed. If it is Abandoned, its lock expires, or an embedded owner explicitly
+reclaims live leases, that transition sees <code>delivery_count &gt;= max_delivery_count</code>
+and moves it to <code>state=&#39;dead_lettered&#39;</code> instead of allowing ordinary Peek-Lock claim
+11. Default startup preserves that final attempt until its deadline; expiry then
+applies the same transition.
 <code>ReceiveDeferred</code> is the explicit exception described in §4: it increments the
 count without a maximum admission check. The DLQ is not a separate queue, just a
 state you can <code>Peek</code>, <code>Redrive</code> (back to active, count reset) or <code>Purge</code>, with
@@ -397,9 +404,20 @@ receipt can replay the original effect after the original lease expires, but can
 grant a new effect or renew that expired lease.</p>
 </li>
 <li><p><strong><code>receive_attempts</code></strong> — a client may tag <code>Receive</code> with an <code>attempt_id</code>. The
-claimed batch is recorded under that id (same transaction again); a retry of
-the same attempt <strong>replays the exact same messages and lock tokens</strong> instead of
-claiming fresh ones and burning delivery counts.</p>
+claimed batch is recorded under that id (same transaction again); Peek-Lock
+stores only the ordered sequence/token/deadline roster, then reconstructs the
+immutable message fields from the locked rows while validating the whole batch
+in one query. This avoids duplicating every live message body in the replay
+table. A retry replays the exact same messages and lock tokens only while every
+token still owns a live lease. If explicit embedded live-lease recovery,
+startup recovery of an expired lease, ordinary lease expiry, or settlement
+invalidated any token, the same transaction removes the stale response and
+makes a safe new claim; a stale or
+partially owned batch never reaches the caller. Tokenless ReceiveAndDelete
+retains the full response because its message rows are gone. Its replay lifetime
+remains the greater of five minutes and the queue lock duration, matching the
+existing contract. Managed local and remote receivers both retain AttemptID replay:
+even an in-process database commit can return an uncertain outcome.</p>
 </li>
 <li><p><strong><code>dedup</code></strong> — on the producer side, a <code>message_id</code> within the queue&#39;s dedup
 window collapses resends into the original row (no id? the body&#39;s SHA-256 is
@@ -458,8 +476,9 @@ every message arrives (no loss), arrives intact (content hash), and never
 exceeds its delivery bound.</li>
 <li><strong>A crash-injection layer</strong> — a real worker process, hard-killed (<code>SIGKILL</code>)
 mid-transaction and restarted, proving the outbox is atomic across the crash
-and every producer commit acknowledged to the harness survives. <code>Open</code> reclaims orphaned locks
-to active or DLQ at the delivery limit. It re-execs the test binary, so
+and every producer commit acknowledged to the harness survives. The crash
+worker uses embedded recovery, which reclaims its orphaned locks to active or
+DLQ at the delivery limit. It re-execs the test binary, so
 it is gated behind the <code>crash_injection</code> build tag and run on Linux in its own
 CI job: <code>make crash</code>, with the race detector, separately from the default package
 matrix. This tests <em>process</em> death, not power loss.</li>
