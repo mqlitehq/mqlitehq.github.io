@@ -39,7 +39,8 @@ Generated pages carry separate **source version** and **latest supported release
 stamps and must never be edited by hand. The source version comes from
 `internal/version/version.go`; the latest supported release comes from the first
 dated non-withdrawn release heading in `CHANGELOG.md`, never from the source
-version constant.
+version constant. A nonempty `Unreleased` section also marks source behavior as
+unreleased, even when the version constant still matches the last release.
 The website describes `main`, including changes not yet released.
 
 Use Node 24 LTS. Whenever the mqlite docs change (and on every release):

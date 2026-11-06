@@ -98,7 +98,8 @@ function fixture(t) {
 
 function handWrittenFacts(metadata) {
   const source = `v${metadata.sourceVersion}`;
-  const status = metadata.latestRelease === source ? `source ${source}` : `unreleased source ${source} candidate`;
+  const status = metadata.hasUnreleasedChanges || metadata.latestRelease !== source
+    ? `source ${source} with unreleased changes` : `source ${source}`;
   return `latest supported release ${metadata.latestRelease}; ${status}.`;
 }
 
@@ -154,7 +155,7 @@ test('source and latest supported release stay distinct across patch preparation
     assert.equal(metadata.sourceVersion, source);
     assert.equal(metadata.latestRelease, `v${released}`);
     for (const [, out] of PAGES) {
-      assert.ok(outputs.get(out).includes(source === released ? `source v${source}` : `unreleased v${source} candidate`));
+      assert.ok(outputs.get(out).includes(source === released ? `source v${source}` : `source v${source} with unreleased changes`));
       assert.ok(outputs.get(out).includes('Latest supported release:'));
       assert.ok(outputs.get(out).includes(`releases/tag/v${released}`));
       assert.ok(outputs.get(out).includes('mqlite main'));
@@ -164,6 +165,32 @@ test('source and latest supported release stay distinct across patch preparation
     }
     assert.ok(outputs.get('llms-full.txt').includes(`Source version: v${source}. Latest supported release: [v${released}](https://github.com/mqlitehq/mqlite/releases/tag/v${released}).`));
   }
+});
+
+test('main stays unreleased when its version constant still matches the latest release', (t) => {
+  const root = fixture(t);
+  put(root, 'CHANGELOG.md', '## Unreleased\n\n### Fixed\n\n- Preserve live leases.\n\n## v0.3.0 — 2026-09-06\n');
+  const { metadata, outputs } = renderSite(root);
+  assert.equal(metadata.sourceVersion, '0.3.0');
+  assert.equal(metadata.latestRelease, 'v0.3.0');
+  assert.equal(metadata.hasUnreleasedChanges, true);
+  for (const [, output] of PAGES) {
+    assert.ok(outputs.get(output).includes('source v0.3.0 with unreleased changes'));
+  }
+  assert.ok(outputs.get('llms-full.txt').includes('Source includes unreleased changes.'));
+  const generatedRoot = materialize(t, outputs, metadata);
+  checkClaims(metadata, generatedRoot);
+  put(generatedRoot, 'llms.txt', 'latest supported release v0.3.0; source v0.3.0.');
+  assert.throws(() => checkClaims(metadata, generatedRoot), /must be described as unreleased/);
+
+  for (const section of ['\n### Fixed\n\n<!-- Pending changes go here. -->\n', '\n']) {
+    put(root, 'CHANGELOG.md', `## Unreleased\n${section}\n## v0.3.0 — 2026-09-06\n\n- Already released.\n`);
+    const released = renderSite(root);
+    assert.equal(released.metadata.hasUnreleasedChanges, false);
+    assert.ok(!released.outputs.get('concepts.html').includes('with unreleased changes'));
+  }
+  put(root, 'CHANGELOG.md', '## v0.3.0 — 2026-09-06\n');
+  assert.equal(sourceMetadata(root).hasUnreleasedChanges, false);
 });
 
 test('retracted and withdrawn changelog entries are never advertised as releases', (t) => {
@@ -181,7 +208,7 @@ test('retracted and withdrawn changelog entries are never advertised as releases
   ].join('\n'));
   const { metadata, outputs } = renderSite(root);
   assert.equal(metadata.latestRelease, 'v0.3.2');
-  assert.ok(outputs.get('concepts.html').includes('unreleased v0.4.0 candidate'));
+  assert.ok(outputs.get('concepts.html').includes('source v0.4.0 with unreleased changes'));
   assert.ok(outputs.get('concepts.html').includes('releases/tag/v0.3.2'));
   assert.ok(!outputs.get('concepts.html').includes('releases/tag/v0.3.3'));
   assert.ok(!outputs.get('concepts.html').includes('releases/tag/v0.4.0'));
@@ -279,7 +306,7 @@ test('every hand-written entry point rejects source, release and publication-sta
     for (const [from, to, error] of [
       ['source v0.3.0', 'source v9.9.9', /incorrect source version v9\.9\.9/],
       ['latest supported release v0.2.0', 'latest supported release v0.1.0', /incorrect latest release|missing latest supported release v0\.2\.0/],
-      ['unreleased source v0.3.0 candidate', 'source v0.3.0', /must be described as unreleased/],
+      ['source v0.3.0 with unreleased changes', 'source v0.3.0', /must be described as unreleased/],
     ]) {
       put(root, file, original.replace(from, to));
       assert.throws(() => checkClaims(metadata, root), error, `${file}: ${from}`);

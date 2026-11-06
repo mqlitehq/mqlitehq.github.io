@@ -1,5 +1,6 @@
 mqlite main — full documentation bundle.
 Source version: v0.4.2. Latest supported release: [v0.4.2](https://github.com/mqlitehq/mqlite/releases/tag/v0.4.2).
+Source includes unreleased changes.
 These docs track main; consult release notes for published artifacts and upgrade requirements.
 Source of truth: https://github.com/mqlitehq/mqlite/tree/main/docs
 

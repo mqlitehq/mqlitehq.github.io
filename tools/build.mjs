@@ -44,7 +44,11 @@ const requireValue = (condition, message) => {
 export function sourceMetadata(mq) {
   const versions = [...read(mq, 'internal/version/version.go').matchAll(/^const Version = "(\d+\.\d+\.\d+)"$/gm)];
   requireValue(versions.length === 1, 'cannot read the single source version constant');
-  const release = [...read(mq, 'CHANGELOG.md').matchAll(/^## (v\d+\.\d+\.\d+(?:-rc\.\d+)?)\s+—\s+\d{4}-\d{2}-\d{2}(?:\s+\(([^)]+)\))?\s*$/gm)]
+  const changelog = read(mq, 'CHANGELOG.md');
+  const unreleasedSection = /^## Unreleased[ \t]*\r?\n([\s\S]*?)(?=^## |(?![\s\S]))/m.exec(changelog)?.[1] ?? '';
+  const hasUnreleasedChanges = unreleasedSection.replace(/<!--[\s\S]*?-->/g, '')
+    .split('\n').some((line) => line.trim() && !/^\s*#{1,6}\s/.test(line));
+  const release = [...changelog.matchAll(/^## (v\d+\.\d+\.\d+(?:-rc\.\d+)?)\s+—\s+\d{4}-\d{2}-\d{2}(?:\s+\(([^)]+)\))?\s*$/gm)]
     .find(([, , status = '']) => !/\b(?:retracted|withdrawn)\b/i.test(status));
   requireValue(release, 'CHANGELOG.md has no dated release heading');
   const routes = [...read(mq, 'wire/wire.go').matchAll(/^\s*Path\w+\s*=\s*"(\/mqlite\.v1\.[^"]+)"/gm)].map((m) => m[1]);
@@ -59,6 +63,7 @@ export function sourceMetadata(mq) {
   return {
     sourceVersion: versions[0][1],
     latestRelease: release[1],
+    hasUnreleasedChanges,
     source: `${GH}/tree/main/docs`,
     routes: routes.sort(),
     mcpTools: tools.sort(),
@@ -90,9 +95,9 @@ export function rewriteMdLinks(md) {
 }
 
 function page({ title, description, src, body }, metadata) {
-  const unreleased = metadata.latestRelease !== `v${metadata.sourceVersion}`;
+  const unreleased = metadata.hasUnreleasedChanges || metadata.latestRelease !== `v${metadata.sourceVersion}`;
   const sourceStatus = unreleased
-    ? `unreleased v${metadata.sourceVersion} candidate`
+    ? `source v${metadata.sourceVersion} with unreleased changes`
     : `source v${metadata.sourceVersion}`;
   const navigation = PAGES.map(([pageSrc, out, label]) => `    <a href="${out}"${pageSrc === src ? ' aria-current="page"' : ''}>${label.replace('HTTP API reference', 'API').replace('CLI reference', 'CLI')}</a>`).join('\n');
   return `<!doctype html>
@@ -154,7 +159,9 @@ export function renderSite(mq) {
   }
   const releaseURL = `${GH}/releases/tag/${metadata.latestRelease}`;
   const parts = BUNDLE_FILES.map((file) => `<!-- ===== mqlite main · source v${metadata.sourceVersion}; latest supported release ${metadata.latestRelease} · docs/${file} ===== -->\n\n${rewriteMdLinks(read(mq, `docs/${file}`))}`);
-  outputs.set('llms-full.txt', `mqlite main — full documentation bundle.\nSource version: v${metadata.sourceVersion}. Latest supported release: [${metadata.latestRelease}](${releaseURL}).\nThese docs track main; consult release notes for published artifacts and upgrade requirements.\nSource of truth: ${metadata.source}\n\n${parts.join('\n\n')}`);
+  const sourceStatus = metadata.hasUnreleasedChanges || metadata.latestRelease !== `v${metadata.sourceVersion}`
+    ? 'Source includes unreleased changes.\n' : '';
+  outputs.set('llms-full.txt', `mqlite main — full documentation bundle.\nSource version: v${metadata.sourceVersion}. Latest supported release: [${metadata.latestRelease}](${releaseURL}).\n${sourceStatus}These docs track main; consult release notes for published artifacts and upgrade requirements.\nSource of truth: ${metadata.source}\n\n${parts.join('\n\n')}`);
   outputs.set('site-metadata.json', `${JSON.stringify(metadata, null, 2)}\n`);
   outputs.set('assets/highlight.min.js', readFileSync(resolve(here, 'node_modules/@highlightjs/cdn-assets/highlight.min.js')));
   requireValue(JSON.stringify([...outputs.keys()]) === JSON.stringify(GENERATED_FILES), 'generated output inventory drift');
@@ -214,7 +221,7 @@ export function checkClaims(metadata, root = site) {
       new RegExp(`\\blatest supported release(?::| is)?\\s+${escape(latest)}\\b`, 'i').test(visible),
       `${file}: missing latest supported release ${latest}`,
     );
-    const expectedUnreleased = latest !== source;
+    const expectedUnreleased = metadata.hasUnreleasedChanges || latest !== source;
     requireValue(
       releaseStatus.test(visible) === expectedUnreleased,
       `${file}: source ${source} must be described as ${expectedUnreleased ? 'unreleased' : 'released'}`,

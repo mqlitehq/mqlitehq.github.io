@@ -62,7 +62,7 @@
 
 <div class="wrap">
 
-<div class="stamp">These docs track <a href="https://github.com/mqlitehq/mqlite/tree/main">main · source v0.4.2</a>.
+<div class="stamp">These docs track <a href="https://github.com/mqlitehq/mqlite/tree/main">main · source v0.4.2 with unreleased changes</a>.
   The latest supported release is
   <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.2">v0.4.2</a>
   (default port 6754, schema token 7); installation examples pin that release. Use the
@@ -194,8 +194,11 @@ Rules:
   lock_token is empty and locked_until_ms is zero (omitted in JSON), including
   receive-attempt replays. Do not settle it.
 - Default Peek-Lock delivery is AT-LEAST-ONCE: you may see a message twice.
-  Make your handling idempotent (set message_id on send; check your own state
-  before acting).
+  Make business handling idempotent using your own durable state. message_id alone
+  does not deduplicate sends: duplicate detection is OFF by default. When the queue
+  has a positive dedup_window_ms, retry the same message_id and body within that
+  retention window; a different body conflicts. Broker deduplication does not make
+  external side effects exactly-once.
 - Long-running work: call QueueService/Renew with the lock_token before expiry.
   It extends the same claim without increasing delivery_count, does not stack
   durations, and cannot revive an expired lease.
@@ -227,6 +230,9 @@ Rules:
   413 message_too_large · 429 resource_exhausted · 503 outcome_unknown.
   On 409 lock_lost, re-Receive instead of retrying the settle. A 503
   outcome_unknown may already have committed; reconcile instead of blindly retrying.
+  Exact settlement receipts last 30 minutes from recording; replay does not extend
+  them, and resource deletion or expiry can end replay earlier. Keep application
+  evidence when reconciliation must outlive that window.
 
 Cheat sheet (request bodies abbreviated):
   AdminService/CreateQueue   {"name","config":{}}
@@ -252,7 +258,7 @@ Cheat sheet (request bodies abbreviated):
   a repeated id returns key_conflict and never returns the secret again.
   For ListKeys: sort defaults to id_asc. Use created_desc for newest first,
   keep the same sort on every page, and pass next_after_id back as after_id.
-Full reference: https://github.com/mqlitehq/mqlite/blob/main/docs/api-reference.md</code></pre>
+Full v0.4.2 reference: https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/api-reference.md</code></pre>
   </div>
   <div class="quote"><b>Why this works well for models:</b> there is no connection state to
   manage, no binary protocol, no SDK to install — every step is a self-contained POST whose
