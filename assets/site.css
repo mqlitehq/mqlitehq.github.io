@@ -235,3 +235,10 @@ figure.fig svg, figure.fig img { width: 100%; min-width: 640px; height: auto; di
 }
 .expandbtn:hover { color: var(--ink); border-color: var(--accent); }
 .codebox.clip .coderow, .codebox.clip > pre { border-radius: 10px 10px 0 0; }
+
+/* Chinese prose uses local system fonts; no font download or layout dependency. */
+:lang(zh-CN) { --sans: system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif; }
+html:lang(zh-CN) .prose :is(h1,h2,h3,h4), html:lang(zh-CN) nav.top .links a,
+html:lang(zh-CN) .overflow-more summary, html:lang(zh-CN) .overflow-items a { font-family: var(--sans); }
+.language-switch { border: 1px solid var(--line); border-radius: 7px; padding: 5px 9px; color: var(--ink); font-size: 13px; }
+.language-switch:hover { border-color: var(--accent); }

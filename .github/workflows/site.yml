@@ -33,7 +33,7 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Test generation and rejection contracts
         working-directory: tools
-        run: node --test build.test.mjs
+        run: node --test *.test.mjs
       - name: Test the accessible landing-page demo
         working-directory: tools
         run: npx playwright test --config playwright.config.mjs

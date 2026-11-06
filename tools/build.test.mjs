@@ -6,8 +6,10 @@ import { tmpdir } from 'node:os';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
-import { PAGES, BUNDLE_FILES, GENERATED_FILES, HANDWRITTEN_RELEASE_FILES, sourceMetadata, renderSite, checkOutputs, checkClaims, checkLinks, rewriteLinks, rewriteMdLinks } from './build.mjs';
+import { PAGES, BUNDLE_FILES, GENERATED_FILES, HANDWRITTEN_RELEASE_FILES, sourceMetadata, renderSite as renderBilingualSite, checkOutputs, checkClaims, checkLinks, rewriteLinks, rewriteMdLinks } from './build.mjs';
 import { createSiteServer } from './serve.mjs';
+
+const renderSite = (mq) => renderBilingualSite(mq, { bilingual: false });
 
 const here = dirname(fileURLToPath(import.meta.url));
 const site = resolve(here, '..');
@@ -41,11 +43,13 @@ async function preview(t) {
 test('local preview serves real GET and HEAD responses with static MIME types', async (t) => {
   const { root, get } = await preview(t);
   put(root, 'index.html', '<h1>Preview</h1>');
+  put(root, 'zh-CN/index.html', '<h1>中文首页</h1>');
   put(root, 'assets/example.js', 'const value = 1;');
   const home = await get('/?preview=1');
   assert.equal(home.status, 200);
   assert.equal(home.body, '<h1>Preview</h1>');
   assert.equal(home.headers['content-type'], 'text/html; charset=utf-8');
+  assert.equal((await get('/zh-CN/')).body, '<h1>中文首页</h1>');
   const script = await get('/assets/example.js', 'HEAD');
   assert.equal(script.status, 200);
   assert.equal(script.body, '');
@@ -118,6 +122,8 @@ test('the complete generated output and source inventories are explicit', () => 
     ['concepts.md', 'concepts.html'], ['internals.md', 'internals.html'], ['api-reference.md', 'api.html'],
     ['cli.md', 'cli.html'], ['access-keys.md', 'access-keys.html'], ['deployment.md', 'deployment.html'], ['observability.md', 'observability.html'],
     ['observability-cloud.md', 'observability-cloud.html'], ['operations.md', 'operations.html'],
+    ['turso.md', 'turso.html'], ['retention.md', 'retention.html'], ['benchmark.md', 'benchmark.html'],
+    ['conformance.md', 'conformance.html'], ['dependencies.md', 'dependencies.html'], ['mcp.md', 'mcp.html'], ['examples.md', 'examples.html'],
   ]);
   assert.deepEqual(BUNDLE_FILES, [
     'concepts.md', 'internals.md', 'api-reference.md', 'cli.md', 'access-keys.md',
@@ -129,7 +135,7 @@ test('the complete generated output and source inventories are explicit', () => 
   const summary = readFileSync(resolve(site, 'llms.txt'), 'utf8');
   assert.ok(summary.includes(`the ${BUNDLE_FILES.length - 2} canonical source documents linked above`));
   assert.ok(summary.includes('The hand-written agent guide remains a separate page.'));
-  assert.deepEqual(GENERATED_FILES, ['concepts.html', 'internals.html', 'api.html', 'cli.html', 'access-keys.html', 'deployment.html', 'observability.html', 'observability-cloud.html', 'operations.html', 'llms-full.txt', 'site-metadata.json', 'assets/highlight.min.js']);
+  assert.deepEqual(GENERATED_FILES, ['concepts.html', 'internals.html', 'api.html', 'cli.html', 'access-keys.html', 'deployment.html', 'observability.html', 'observability-cloud.html', 'operations.html', 'turso.html', 'retention.html', 'benchmark.html', 'conformance.html', 'dependencies.html', 'mcp.html', 'examples.html', 'llms-full.txt', 'site-metadata.json', 'assets/highlight.min.js']);
 });
 
 test('every generated reference keeps native navigation and marks its current page', (t) => {
@@ -140,9 +146,10 @@ test('every generated reference keeps native navigation and marks its current pa
     assert.match(html, /<div class="overflow-primary"><\/div>/);
     assert.match(html, /<details class="overflow-more has-current">/);
     assert.match(html, /<summary aria-label="More navigation links">More<\/summary>/);
-    assert.ok(html.includes(`<a href="${output}" aria-current="page">`), output);
+    assert.ok(new RegExp(`<a[^>]*href="${output}"[^>]*aria-current="page">`).test(html), output);
     assert.equal((html.match(/aria-current="page"/g) || []).length, 1, output);
-    assert.ok(html.indexOf('class="gh"') < html.indexOf('<details'), output);
+    assert.ok(html.indexOf('class="gh"') > html.indexOf('<details'), output);
+    assert.ok(html.includes(`data-language-switch href="zh-CN/${output}"`));
   }
 });
 
@@ -338,6 +345,8 @@ test('all generated pages and bundle links resolve to the correct source or prev
   }
   assert.equal(rewriteLinks('<a href="../README.md#start">'), '<a href="https://github.com/mqlitehq/mqlite/blob/main/README.md#start">');
   assert.equal(rewriteMdLinks('[read](../engine/tx.go)'), '[read](https://github.com/mqlitehq/mqlite/blob/main/engine/tx.go)');
+  const literal = '`[read](concepts.md)`\n\n```md\n[manual](concepts.md)\n```\n\n> ```md\n> [nested](concepts.md)\n> ```\n';
+  assert.equal(rewriteMdLinks(literal, true), literal);
 });
 
 test('the full Pages workflow contract pins validation, artifact scope and main-only deployment', () => {
@@ -383,7 +392,8 @@ test('the real Pages package contains the complete static inventory with identic
     'assets/demo.css', 'assets/demo.js', 'assets/highlight.min.js', 'assets/site.css', 'assets/site.js', 'cli.html',
     'concepts.html', 'deployment.html', 'favicon.svg', 'index.html', 'internals.html',
     'llms-full.txt', 'llms.txt', 'logo.svg', 'observability.html', 'observability-cloud.html', 'operations.html',
-    'site-metadata.json',
+    'site-metadata.json', 'turso.html', 'retention.html', 'benchmark.html', 'conformance.html', 'dependencies.html', 'mcp.html', 'examples.html',
+    ...['index.html', 'agents.html', 'concepts.html', 'internals.html', 'api.html', 'cli.html', 'access-keys.html', 'deployment.html', 'observability.html', 'observability-cloud.html', 'operations.html', 'turso.html', 'retention.html', 'benchmark.html', 'conformance.html', 'dependencies.html', 'mcp.html', 'examples.html', 'llms.txt', 'llms-full.txt'].map((name) => `zh-CN/${name}`),
   ].sort();
   assert.deepEqual(files(output).sort(), expected);
   for (const file of expected) {

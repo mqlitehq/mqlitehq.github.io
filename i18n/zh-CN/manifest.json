@@ -1,0 +1,86 @@
+{
+  "locale": "zh-CN",
+  "sourceLocale": "en",
+  "documents": {
+    "concepts.md": {
+      "sourceSha256": "93d4de5f0fccd7acc54ff091564aacc5ba1fc30bc46d091bdb75c57de65c6bde",
+      "translationSha256": "442dee485f92d66a98f7b5c80ffdafe3508c2e90c926ab82b8a12b5d2be1121a"
+    },
+    "internals.md": {
+      "sourceSha256": "8c62ef63a92485d30bed3fde3a448582f044398cb3f7adffe0701cb800ca1cf9",
+      "translationSha256": "ca7cc168064f6baead7afa13427cc68363c088f1ef2563349e075792ac7c6e12"
+    },
+    "api-reference.md": {
+      "sourceSha256": "fde61d45473926ca8f9ea557ee026a487e678ffc189844d2fa2223266536f1c8",
+      "translationSha256": "501f958614b1df735d164a6e5e3aa82e046a04b633e51eae2481358f399152f1"
+    },
+    "cli.md": {
+      "sourceSha256": "d9eead47f54140f52c6e0a117e0329f32e9a936b8956a12bbbdb01a28ddae617",
+      "translationSha256": "60ebeb39fdcc7f0499e3a72c2d866ae11c0e51a7e58d281a81c29b9331e2fa2f"
+    },
+    "access-keys.md": {
+      "sourceSha256": "1c689535e529889feffb424eb56b5c82b46cd7d7b969586b9d41e026b060f948",
+      "translationSha256": "42b794ec0af417f957efeedb3689da9cbed80985624a83676f0a06fc890e3c49"
+    },
+    "deployment.md": {
+      "sourceSha256": "12cb923681909cf1bddd28557ebf26d206b6890cc46dc013d1994803350ac30f",
+      "translationSha256": "379fd4f56a0dced2639d3933ebc7da403186fb4834e61c1893101393a4c1eb49"
+    },
+    "observability.md": {
+      "sourceSha256": "d9a539b98250b1d172df71e6a61664f18fae31b9e03b25d17b598e8cb2dbc371",
+      "translationSha256": "bfdd67308c0a73c185a62dee659bdbc6d2afac8b48b118199fd30fc333f1dbca"
+    },
+    "observability-cloud.md": {
+      "sourceSha256": "3a7036ab0b934aae12130e7dfe52d39a852dc6e06ffabbb71a5b25550623e1a5",
+      "translationSha256": "732c8ceb7d064caf94a6ab7317d5803af21e1919dfbdaef4749bff001f15601d"
+    },
+    "operations.md": {
+      "sourceSha256": "3f3c7d639e3da78a9c9c9361df6e1e89d21c6cd9041e4b14a426d86ea4eff8d1",
+      "translationSha256": "d10952e8e264cb7631c08707364593d00497df5c783cbaf135f80974fb645850"
+    },
+    "turso.md": {
+      "sourceSha256": "009bd6f0b56831e5d3dec54d29dfa234814458488fdbe6981d25499e2a35aa73",
+      "translationSha256": "c7b0ea93f0e092ddc7049f75d4fa51e16fd3953ee8b9151c63cedaf7e00b0b76"
+    },
+    "retention.md": {
+      "sourceSha256": "011bc9c8f5613b16232dac69f02c6fefefc39a2bb4829949ca46e95df714aa36",
+      "translationSha256": "a2d33e125bed896d629444cd2fd46b3cfb74f3e968a5b784de99552da3219080"
+    },
+    "benchmark.md": {
+      "sourceSha256": "d217ac950e46a6578a76196ce4b6bd6552aad29eec44c1de34367d352509aa4a",
+      "translationSha256": "48541c0509cbebb4f51a8283009dec7a788385d18d6b940b3dda0b39f12c174e"
+    },
+    "conformance.md": {
+      "sourceSha256": "3936447053d6209568991cf319b55dccb52f73d8b5be3df727749aec061f79d8",
+      "translationSha256": "2183b1e9f6e6eb530f2d68899a97ccccb3fa106428d2bf6cfcc466ff556b5fe8"
+    },
+    "dependencies.md": {
+      "sourceSha256": "a8659e143d6aec322a4863ed6d6a2324df56a0ae7164d8cf3c1dc769dc44e050",
+      "translationSha256": "ad209372278f9bfebfd708d3b3ce63bb58ddf93f53eec04971ea6b241ee57cde"
+    },
+    "mcp.md": {
+      "sourceSha256": "88754268f0ce41ab68f631f8a3905b997e6b709774e274931242099195982900",
+      "translationSha256": "4f86c5304b01630f5aeb0d96e3fd35a8147dedae9b15cc3a5774693d652ea436"
+    },
+    "examples.md": {
+      "sourceSha256": "a1ded452da092dd974370d9f69e13fe87039939a5ef73298fa1aed0c2998bb46",
+      "translationSha256": "a96495c9d2ff8a47d9bd011631ae4abe654ca96cc374d40bc4ffe149a62914d2"
+    }
+  },
+  "interfaceSha256": "fa7f4ea2aa636446996d89f0bbfaa05fb3f90b7f3f49bfea9c38d157613f36e8",
+  "summary": {
+    "sourceSha256": "2d18cd67b062abd7a79f58236c2dc1e0220e0cc53b3d208c7668b1ec099c62c9",
+    "translationSha256": "e5c28ec16da9311d5507eb6ca77d71082586d455d4e4e3818bbf54ace6dea7e2"
+  },
+  "chromeSourceSha256": "339d4d3c2b93b8b5a1f3c13d720094155f42b3400eff530e28f7f4fc2602e372",
+  "runtimeSources": {
+    "tools/build.mjs": "1bb6cb6279daff998c2e0db3dcdf329fae6452afae244b311c256d2e19e5a2b2",
+    "tools/i18n.mjs": "80baca7ba74754c04c6005e39ec690c7b6d68b99d06a44ab0ff37b7e78516544",
+    "assets/site.js": "2c61ae5e131f97e9bb77d50657ff7a1c63e8b073717495808877aa451f6adb9c",
+    "assets/demo.js": "1a916e737341db031451acf1297cbcf5a8e6f6225963ead959e6b0b599dea2ed"
+  },
+  "agentPrompt": {
+    "sourceSha256": "1a487369a62783c8d02dbd6d7966f5d0a5c6736c8192cd92baf361379df023d4",
+    "translationSha256": "0011af4a4991e1600aa1a0ce6e1286f5c1c241179bdfc66a53f90dc0ca4d1510"
+  }
+}

@@ -6,6 +6,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>HTTP API reference · mqlite</title>
 <meta name="description" content="Every broker operation: requests, responses, errors, and limits.">
+<link rel="alternate" hreflang="en" href="api.html">
+<link rel="alternate" hreflang="zh-CN" href="zh-CN/api.html">
+<link rel="alternate" hreflang="x-default" href="api.html">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="assets/site.css">
 <script src="assets/highlight.min.js" defer></script>
@@ -16,7 +19,7 @@
   <a class="brand" href="./"><img src="logo.svg" alt="" width="24" height="24"> mqlite</a>
   <div class="links overflow-nav" data-overflow>
     <div class="overflow-primary"></div>
-    <a class="gh" href="https://github.com/mqlitehq/mqlite">GitHub ↗</a>
+    <a class="language-switch" data-language-switch href="zh-CN/api.html" hreflang="zh-CN" lang="zh-CN" aria-label="切换为简体中文">简体中文</a>
     <details class="overflow-more has-current">
       <summary aria-label="More navigation links">More</summary>
       <div class="overflow-items">
@@ -30,13 +33,13 @@
     <a href="observability-cloud.html">Cloud monitoring</a>
     <a href="operations.html">Operations</a>
     <a href="agents.html">For AI agents</a>
+    <a class="gh" href="https://github.com/mqlitehq/mqlite">GitHub ↗</a>
       </div>
     </details>
   </div>
 </div></nav>
 <div class="wrap">
-  <div class="stamp">Source: <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/api-reference.md">mqlite main · docs/api-reference.md</a> — source v0.4.2 with unreleased changes. Latest supported release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.2">v0.4.2</a>.
-  These docs track main; use the linked release for published artifacts.</div>
+  <div class="stamp">Source: <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/api-reference.md">mqlite main · docs/api-reference.md</a> — source v0.4.2 with unreleased changes. Latest supported release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.2">v0.4.2</a>. These docs track main; use the linked release for published artifacts.</div>
   <main class="prose">
 <h1 id="mqlite-http-api-reference">mqlite HTTP API reference</h1>
 <p>The broker speaks <strong>Connect-style JSON over HTTP</strong>. Every operation is a single
@@ -101,7 +104,7 @@ broker-removal path that removes a message before returning it; an explicit
 retry with the same receive attempt ID can replay its saved response.
 Message TTL configured to discard, DLQ retention, forced resource deletion and
 fixed subscription expiry are explicit removal paths; see
-<a href="https://github.com/mqlitehq/mqlite/blob/main/docs/retention.md">retention.md</a>.</li>
+<a href="retention.html">retention.md</a>.</li>
 <li><strong>One settlement verb per outcome</strong> — <code>Complete</code> / <code>Abandon</code> / <code>Reject</code> / <code>Defer</code>,
 no aliases. New effects require the <code>lock_token</code> from <code>Receive</code> and an unexpired
 lease; exact-request receipt replays are described below.</li>
@@ -937,13 +940,13 @@ Config is <strong>queue-level</strong>: it&#39;s set here, not per <code>Send</c
 <td><code>ordering_mode</code></td>
 <td>string</td>
 <td><code>standard</code></td>
-<td><code>standard</code> (per-<code>GroupID</code> FIFO, cross-group parallel; ungrouped messages unordered) · <code>group_fifo</code> (same, but every send <strong>must</strong> carry a <code>group_id</code> → else <code>400 group_required</code>) · <code>strict_fifo</code> (one global head-of-line FIFO for the whole queue). See <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/conformance.md#5--ordering-modes">conformance §5</a>.</td>
+<td><code>standard</code> (per-<code>GroupID</code> FIFO, cross-group parallel; ungrouped messages unordered) · <code>group_fifo</code> (same, but every send <strong>must</strong> carry a <code>group_id</code> → else <code>400 group_required</code>) · <code>strict_fifo</code> (one global head-of-line FIFO for the whole queue). See <a href="conformance.html#5--ordering-modes">conformance §5</a>.</td>
 </tr>
 <tr>
 <td><code>dlq_max_age_ms</code></td>
 <td>int (ms)</td>
 <td><code>0</code> = inherit</td>
-<td>per-queue DLQ retention override: drop dead letters older than this. <code>0</code> inherits the broker default, <code>-1</code> = unbounded. See <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/retention.md">retention.md</a>.</td>
+<td>per-queue DLQ retention override: drop dead letters older than this. <code>0</code> inherits the broker default, <code>-1</code> = unbounded. See <a href="retention.html">retention.md</a>.</td>
 </tr>
 <tr>
 <td><code>dlq_max_count</code></td>

@@ -36,14 +36,14 @@ test('header and hero keep one row and move a stable prefix into More at every w
     await expectSingleRow(header.locator('.wrap'));
     await expectSingleRow(hero);
     await expectNoPageOverflow(page);
-    await expect(header.getByRole('link', { name: 'GitHub' })).toBeVisible();
+    await expect(header.locator('[data-language-switch]')).toBeVisible();
     await expect(hero.getByRole('link', { name: 'Quickstart', exact: true })).toBeVisible();
     previousHeader = await header.locator('.overflow-primary > a').count();
     previousHero = await hero.locator('.overflow-primary > a').count();
     for (const row of [header, hero]) {
       const order = await row.locator('.overflow-primary > a, .overflow-items > a').evaluateAll((links) => links.map((link) => link.textContent));
       expect(new Set(order).size).toBe(order.length);
-      if (row === header) expect(order).toEqual(['Concepts', 'Internals', 'API', 'CLI', 'Access keys', 'Deployment', 'Observability', 'Cloud monitoring', 'Operations', 'For AI agents']);
+      if (row === header) expect(order).toEqual(['Concepts', 'Internals', 'API', 'CLI', 'Access keys', 'Deployment', 'Observability', 'Cloud monitoring', 'Operations', 'For AI agents', 'GitHub ↗']);
       else expect(order).toEqual(['Watch one message', 'Read the concepts', 'Production operations', 'Access keys', "I'm an AI agent"]);
     }
   }
@@ -103,9 +103,9 @@ test('all links return when space allows and focus leaves a disappearing More sa
   await row.locator('summary').focus();
   await page.addStyleTag({ content: 'nav.top .wrap { max-width: none; }' });
   await page.setViewportSize({ width: 2000, height: 900 });
-  await expect(row.locator('.overflow-primary > a')).toHaveCount(10);
+  await expect(row.locator('.overflow-primary > a')).toHaveCount(11);
   await expect(row.locator('details')).toBeHidden();
-  await expect(row.getByRole('link', { name: 'For AI agents', exact: true })).toBeFocused();
+  await expect(row.getByRole('link', { name: 'GitHub', exact: false })).toBeFocused();
   await expectSingleRow(row.locator('.wrap'));
 });
 

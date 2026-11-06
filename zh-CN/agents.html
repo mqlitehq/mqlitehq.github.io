@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>面向 AI 智能体 · mqlite</title>
+<meta name="description" content="AI 智能体如何使用 mqlite：MCP 服务端、可直接粘贴的原始 HTTP API 系统提示词，以及供阅读网页的模型使用的 llms.txt。">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/site.css">
+<script src="../assets/highlight.min.js" defer></script>
+<script src="../assets/site.js" defer></script>
+<style>
+  .head { padding: 56px 0 8px; }
+  .head h1 { font: 700 30px/1.25 var(--mono); color: var(--ink); letter-spacing: -0.02em; }
+  .head p { margin-top: 12px; max-width: 50em; }
+  section.blk { padding: 30px 0 4px; }
+  section.blk > h2 { font: 700 19px/1.4 var(--mono); color: var(--ink); margin-bottom: 4px; }
+  section.blk > .lede { color: var(--muted); font-size: 13.5px; margin-bottom: 14px; }
+  .quote { border-left: 3px solid var(--accent); background: var(--surface); border-radius: 0 10px 10px 0; padding: 13px 17px; margin: 12px 0; font-size: 13.8px; }
+  .quote b { color: var(--ink); }
+  .tbl { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 4px 14px; overflow-x: auto; margin: 12px 0; }
+  .tbl table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .tbl th { color: var(--muted); font: 600 11.5px/1.5 var(--sans); letter-spacing: 0.4px; text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+  .tbl td { padding: 8px 12px; border-bottom: 1px solid var(--grid); vertical-align: top; }
+  .tbl tr:last-child td { border-bottom: none; }
+  .prompt { position: relative; }
+  .prompt pre { font-size: 12.4px; line-height: 1.62; }
+  .copy {
+    position: absolute; top: 10px; right: 10px;
+    font: 600 11.5px/1 var(--mono); color: #111; background: var(--accent);
+    border: 0; border-radius: 6px; padding: 7px 12px; cursor: pointer;
+  }
+  .copy:hover { filter: brightness(1.08); }
+  h3.sub { font: 650 15px/1.4 var(--mono); color: var(--ink); margin: 22px 0 8px; }
+  p { margin: 8px 0; }
+  strong { color: var(--ink); font-weight: 650; }
+</style>
+<link rel="alternate" hreflang="en" href="../agents.html">
+<link rel="alternate" hreflang="zh-CN" href="agents.html">
+<link rel="alternate" hreflang="x-default" href="../agents.html">
+</head>
+<body>
+<nav class="top" aria-label="主导航"><div class="wrap">
+  <a class="brand" href="./"><img src="../logo.svg" alt="" width="24" height="24"> mqlite</a>
+  <div class="links overflow-nav" data-overflow>
+    <div class="overflow-primary"></div>
+    <a class="language-switch" data-language-switch href="../agents.html" hreflang="en" lang="en" aria-label="Switch to English">English</a>
+    <details class="overflow-more has-current">
+      <summary aria-label="更多导航链接">更多</summary>
+      <div class="overflow-items">
+    <a href="concepts.html">核心概念</a>
+    <a href="internals.html">内部原理</a>
+    <a href="api.html">API</a>
+    <a href="cli.html">CLI</a>
+    <a href="access-keys.html">访问密钥</a>
+    <a href="deployment.html">部署</a>
+    <a href="observability.html">可观测性</a>
+    <a href="observability-cloud.html">云端监控</a>
+    <a href="operations.html">运维</a>
+    <a href="agents.html" aria-current="page">面向 AI 智能体</a>
+    <a class="gh" href="https://github.com/mqlitehq/mqlite">GitHub ↗</a>
+      </div>
+    </details>
+  </div>
+</div></nav>
+
+<div class="wrap">
+
+<div class="stamp">本文档跟随 <a href="https://github.com/mqlitehq/mqlite/tree/main">main · 源版本 v0.4.2，含未发布改动</a>。最新受支持版本是
+  <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.2">v0.4.2</a>
+  （默认端口 6754，schema 令牌 7）；安装示例固定使用该版本。请参阅
+  <a href="https://github.com/mqlitehq/mqlite/tree/v0.4.2/docs">v0.4.2 文档</a>
+  了解其准确 API。v0.3.3 已撤回、不再受支持，且自 v0.4.0 起被标记为撤销版本；其公开产物仅供取证或兼容性检查，不得部署。</div>
+
+<div class="head">
+  <h1># 面向 AI 智能体的 mqlite</h1>
+  <p>mqlite 的设计让模型能够 <strong>准确使用</strong>：每项操作均为携带 JSON 正文的单次 HTTP POST，每种结算结果只有一个动词，没有会让模型困惑的别名； <code>GET /</code> 返回机器可读的发现卡片，投递语义则以可测试的不变量记录。以下三种使用方式按推荐程度排列。</p>
+</div>
+
+<section class="blk">
+  <h2># 1 · MCP 服务端（推荐）</h2>
+  <p class="lede"><code>mqlite-mcp</code> 随同一个仓库提供，是无需依赖的 stdio MCP 服务端，将每次工具调用转换为发往 broker 的一次 HTTP POST。</p>
+  <p>使用以下命令安装受支持的 v0.4.2 版本： <code>go install github.com/mqlitehq/mqlite/cmd/mqlite-mcp@v0.4.2</code>，或者使用 <code>mqlite-mcp</code> （取自
+  <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.2">v0.4.2 发布归档</a>），然后将安装好的二进制文件注册到 MCP 宿主：</p>
+<pre><code class="language-json">{
+  "mcpServers": {
+    "mqlite": {
+      "command": "/path/to/mqlite-mcp",
+      "env": {
+        "MQLITE_ENDPOINT": "https://your-broker.example.com",
+        "MQLITE_TOKEN": "mqk_..."
+      }
+    }
+  }
+}</code></pre>
+  <p>v0.4.2 提供 <strong>22 个工具</strong>；其 broker 提供 <strong>29 条路由</strong> ，CLI 提供 <strong>26 条命令</strong>。下表说明该发布版本提供的接口。请确保 broker 与 <code>mqlite-mcp</code> 来自同一发布版本。 <code>observe</code> 工具要求 broker 与 MCP 服务端均为 v0.3.2 或更高版本。密钥管理工具要求 v0.3.1 或更高版本：</p>
+  <div class="tbl"><table>
+    <tr><th>工具</th><th>功能</th></tr>
+    <tr><td><code>list_queues</code></td><td>列出普通队列与订阅后备队列，包括正在删除的名称</td></tr>
+    <tr><td><code>create_queue</code></td><td>按名称创建或更新队列</td></tr>
+    <tr><td><code>delete_queue</code></td><td>删除空的普通队列；也可显式使用 <code>force</code> 以丢弃保留工作</td></tr>
+    <tr><td><code>subscribe</code></td><td>创建订阅或更新其过滤器；可选的 <code>ttl_ms</code> 设定一次固定生命周期</td></tr>
+    <tr><td><code>list_subscriptions</code></td><td>按主题分页列出订阅，包含计数、生命周期状态，并可包含正在删除的条目</td></tr>
+    <tr><td><code>delete_subscription</code></td><td>删除一个准确的 topic/name 组合；可选的 <code>force</code> 会丢弃所有保留工作</td></tr>
+    <tr><td><code>send</code></td><td>发送消息（<code>queue</code>， <code>body</code>，可选 <code>message_id</code> / <code>group_id</code>）</td></tr>
+    <tr><td><code>receive</code></td><td>按 Peek-Lock 接收消息 → 返回 <code>seq_number</code> + <code>lock_token</code></td></tr>
+    <tr><td><code>complete</code> / <code>abandon</code> / <code>reject</code></td><td>结算：完成 / 未达上限则重试（达到上限则进 DLQ）/ 立即转为死信</td></tr>
+    <tr><td><code>renew</code></td><td>在到期前延长同一次有效领取； <code>delivery_count</code> 保持不变</td></tr>
+    <tr><td><code>defer</code> / <code>receive_deferred</code></td><td>暂存后按序号领取；领取会增加 <code>delivery_count</code> ；目前没有最大投递次数准入检查</td></tr>
+    <tr><td><code>peek</code></td><td>不加锁浏览，可按状态筛选</td></tr>
+    <tr><td><code>stats</code></td><td>按状态统计队列深度</td></tr>
+    <tr><td><code>observe</code></td><td>broker 健康状态与生命周期时钟、队列快照、消息操作效果、存储和请求测量值（自 v0.3.2 起）</td></tr>
+    <tr><td><code>redrive</code> / <code>purge</code></td><td>将死信移回正常队列 / 删除死信</td></tr>
+    <tr><td><code>create_key</code></td><td>签发密钥，包含 <code>id</code>， <code>name</code>， <code>permissions</code> ，以及可选的 <code>expires_at_ms</code>；令牌只返回一次</td></tr>
+    <tr><td><code>list_keys</code></td><td>列出公开元数据，使用 <code>after_id</code> / <code>limit</code> / <code>sort</code>，包括已撤销和已过期的密钥</td></tr>
+    <tr><td><code>revoke_key</code></td><td>撤销密钥，使用公开字段 <code>id</code>；重复撤销是安全的</td></tr>
+  </table></div>
+  <p>密钥工具要求 <code>manage</code>；配置中的管理员和托管的 <code>manage</code> 密钥均可签发新的管理员密钥。请为消息生产者授予 <code>send</code> ，消费者使用 <code>listen</code>。在 v0.4.2 中， <code>listen</code> 还允许在整个 broker 范围创建订阅、更新过滤器和测试过滤器；订阅清单与删除仍要求 <code>manage</code>，无论是否使用 <code>force</code>。消费者可以结算消息，也可以按接收即删除模式消费； <code>listen</code> 并非仅审计角色。</p>
+  <p>若 MCP 连接仅用于监控，请将配置中的 <code>MQLITE_MONITOR_TOKENS</code> 凭据填入客户端的 <code>MQLITE_TOKEN</code>。它可以调用 <code>observe</code>，但不能读取消息正文、消费消息、修改队列或签发密钥。请检查返回的采集状态和可用性字段；不可用的测量值不能视为健康的零值。v0.4.1 增加了 <code>server_time_ms</code> 用于比较生命周期截止时间；请勿替换为缓存的队列采样时间字段 <code>sampled_at_ms</code>。参见 <a href="observability.html">可观测性</a>。 <code>observe</code> 工具独立于可选的 Prometheus 开关工作； <code>--metrics</code> 仅启用经过鉴权的 <code>/metrics</code> 端点，位于 API 端口。v0.4.0 删除了已弃用的 <code>mqlite_queue_total</code> 和 <code>mqlite_queue_oldest_message_age_ms</code> 别名；请使用 <code>mqlite_queue_retained_messages</code> 和 <code>mqlite_queue_oldest_message_age_seconds</code>。</p>
+  <h3 class="sub">创建生产者密钥</h3>
+  <p>调用工具前，先选择并保留一个唯一的公开 ID，由 32 位小写十六进制字符组成：</p>
+<pre><code class="language-json">{
+  "name": "create_key",
+  "arguments": {
+    "id": "e734810a9f634d75bd8a029c1f7e5062",
+    "name": "orders-producer",
+    "permissions": ["send"]
+  }
+}</code></pre>
+  <p>请妥善保管返回的 <code>mqk_</code> 加 64 位小写十六进制字符组成的令牌；令牌只在工具结果中显示一次，MCP 宿主可能保留该结果。请保留公开 ID，用于列举和撤销。若创建响应丢失，先根据该 ID 核对状态，并在签发另一把密钥前撤销可能已经创建的密钥；用同一 ID 重试无法找回秘密令牌。使用 <code>next_after_id</code> 遍历 <code>list_keys</code> 的各页结果完成分页。参见 <a href="access-keys.html">访问密钥</a> 了解过期、轮换与恢复。</p>
+  <p>列表默认使用 <code>sort: "id_asc"</code>。使用 <code>sort: "created_desc"</code> 按最新创建的密钥优先排序；时间戳相同时，按公开 ID 降序排列。每页必须沿用同一排序方式。按创建顺序分页时，游标必须指向现有密钥。默认 ID 排序还接受不存在的前驱 ID，以便核对响应丢失的创建请求。</p>
+  <p>详情： <a href="mcp.html">docs/mcp.md</a>。</p>
+</section>
+
+<section class="blk">
+  <h2># 2 · 原始 HTTP：可直接粘贴的提示词</h2>
+  <p class="lede">适用于能运行 <code>curl</code> 或发起 HTTP 调用的智能体。此提示词描述受支持的 v0.4.2，包括生命周期操作；请与匹配的 v0.4.2 broker 配套使用。填入两个占位值，将对应说明粘贴到智能体的系统提示词或任务上下文：</p>
+  <div class="prompt">
+<pre id="p1"><code>你可以访问一个消息队列（mqlite broker）。
+
+基础 URL： &lt;MQLITE_ENDPOINT&gt;              broker 的源地址，包含端口。
+           直连： http://127.0.0.1:6754   （mqlite 在 TCP 6754 上提供 JSON-over-HTTP，
+                                             自身不终止 TLS）
+           代理： https://mq.example.com  （反向代理在 HTTPS :443 接收请求，
+                                             再转发到 broker 内部的 :6754）
+           下文端点路径均相对于此源地址。
+认证：     每次调用都需要请求头            Authorization: Bearer &lt;MQLITE_TOKEN&gt;
+协议：     每个操作都是一次携带 JSON 请求体的 HTTP POST，目标为
+           /mqlite.v1.QueueService/&lt;Method&gt;、/mqlite.v1.AdminService/&lt;Method&gt;，
+           或 /mqlite.v1.AuthService/&lt;Method&gt;（v0.3.1 及后续版本）。
+           GET /（无需认证）返回列出所有端点的服务发现信息。
+
+规则：
+- 密钥权限：send 允许生产/定时发送/取消消息；listen 允许接收/结算/续锁/查看消息、
+  读取队列统计、创建或更新订阅，以及测试过滤条件；manage
+  包含上述两类权限，以及管理/签发密钥。查看订阅清单和每一次
+  DeleteSubscription 请求都要求 manage，无论 force 为 false 还是 true。
+  权限适用于整个 broker。不要重试 401 或 403；应向管理员获取
+  具备所需权限的有效密钥。
+- v0.3.2+ 中，AdminService/Observe {} 可使用配置的
+  monitor 凭据或 manage 密钥读取 broker 测量值。应检查 collection/availability 字段；缺失的
+  测量值不等于零。监控凭据不能读取消息体。
+- JSON 中的消息体是 BASE64 字符串。发送前编码，
+  接收后解码。
+- 队列绝不会自动创建。请先创建：
+    AdminService/CreateQueue  {&quot;name&quot;:&quot;jobs&quot;,&quot;config&quot;:{}}
+  队列和订阅删除默认仅允许空资源。force=true 是显式
+  授权，允许丢弃所有保留状态，包括持锁处理中的消息。成功的
+  state=deleted 结果表示清理已在接受请求的提交中完成；state=deleting
+  表示有界清理仍在继续，并且名称仍被保留。API 没有 Generation
+  字段：必须由一个所有者核对清单，并将删除与同名
+  创建串行协调。遇到重定向、传输失败、任意 5xx 或无效的成功响应体后，
+  不要重试删除。应使用 ListQueues 或 ListSubscriptionsPage，配合
+  include_deleting=true 核对；在单一所有者规则下，名称不存在即可确认清理完成。
+- 使用 Peek-Lock 消费：
+    QueueService/Receive  {&quot;queue&quot;:&quot;jobs&quot;,&quot;max_messages&quot;:1,&quot;wait_time_ms&quot;:5000}
+  每次新授予的 Peek-Lock 领取都会增加 delivery_count。返回的每条
+  消息都包含 seq_number + lock_token。你必须结算收到的每条消息，
+  使用它的 lock_token：
+    QueueService/Complete {&quot;queue&quot;:&quot;jobs&quot;,&quot;seq_number&quot;:N,&quot;lock_token&quot;:&quot;...&quot;}  完成
+    QueueService/Abandon  {...,&quot;delay_ms&quot;:60000}   未达上限则重试；达到上限 -&gt; DLQ
+    QueueService/Reject   {...}                    放弃处理 -&gt; 死信队列
+  如果不结算，锁会过期（默认 30s）。恢复处理会将
+  消息移回 active，或在最后一次尝试失败后将其送入 DLQ。达到
+  上限不会中断最后一次领取：它仍可续锁或完成。
+  新的结算和 Renew 要求 locked_until_ms &gt; now：恰好到达截止时间
+  就已过期，即使回收器尚未运行也一样。未过期回执只允许
+  完全相同的请求在租约到期后重放之前已提交的结算。
+- Receive-and-Delete 是显式的至多一次 broker 移除语义，不授予租约：
+  lock_token 为空，locked_until_ms 为零（JSON 中省略），包括
+  receive-attempt 重放。不要对它执行结算。
+- 默认 Peek-Lock 投递为至少一次（AT-LEAST-ONCE）：你可能两次看到同一条消息。
+  应通过自己持久化的状态确保业务处理幂等。仅设置 message_id
+  不会对发送去重：重复检测默认关闭。队列
+  设置了正数 dedup_window_ms 时，应在该保留窗口内使用相同的 message_id 和消息体
+  重试；消息体不同则发生冲突。broker 去重不能让
+  外部副作用变成恰好一次。
+- 长时间处理：在租约过期前，携带 lock_token 调用 QueueService/Renew。
+  它延长同一次领取，不增加 delivery_count，不累加
+  时长，也无法恢复已经过期的租约。
+- 发布/订阅：AdminService/Subscribe {&quot;topic&quot;:&quot;events&quot;,&quot;name&quot;:&quot;my-sub&quot;,
+  &quot;filter&quot;:{&quot;expr&quot;:&quot;subject == \&quot;order\&quot;&quot;},&quot;ttl_ms&quot;:900000} —— 随后向
+  &quot;events&quot; 执行 Send 会进行扇出；从 &quot;my-sub&quot; 执行 Receive。filter 可省略；省略 ttl_ms 或设为零
+  会创建永久订阅，或保留现有存活期。
+  正数 TTL 是从首次创建起计算的固定存活期：重试、过滤条件更新
+  和消息流量都不会延长它。到期意味着已预先授权强制清理。
+  正常使用结束后应显式删除；高频请求/回复应使用一个稳定回复
+  订阅，并按 correlation_id 分发，而不是每次请求创建一个订阅。
+  Subscribe 和 TestFilter 要求 listen；列出和删除订阅要求
+  manage。Subscribe 是整个 broker 范围的创建或更新操作，不代表仅创建或调用方专属所有权。
+- 有序处理：发送时提供 &quot;group_id&quot;——具有相同 group_id 的消息
+  严格按顺序投递，每组同一时刻仅一条在途消息。delay_ms &gt; 0 的 Abandon
+  将消息暂放在 scheduled 状态，并继续阻塞其有序分组，直至预定重试时刻
+  （strict_fifo：阻塞整个队列）。Cancel 只移除从未投递过的定时
+  消息，即 delivery_count = 0。
+- 消息 TTL：整个 Send 批次的存活期相同时，使用顶层 ttl_ms；
+  各条目存活期不同时，使用 messages[].ttl_ms。正数队列默认值同时是默认值和
+  上限。固定的 expires_at_ms 等于初始 visible_at_ms + 生效的 TTL，因此
+  定时消息从首次到达预定投递时间开始计算 TTL。Renew、延迟 Abandon 和
+  调度器激活都不会延长它。到期后终止正常投递，再
+  根据队列策略进入死信或被丢弃。
+- 错误采用 JSON {&quot;code&quot;,&quot;message&quot;}：400 invalid_argument · 401 unauthenticated ·
+  403 permission_denied · 404 not_found ·
+  409 name_conflict / already_exists / lock_lost / key_conflict /
+      queue_not_empty / subscription_not_empty ·
+  413 message_too_large · 429 resource_exhausted · 503 outcome_unknown。
+  遇到 409 lock_lost，应重新执行 Receive，而不是重试结算。503
+  outcome_unknown 可能已经提交；应核对结果，而不是盲目重试。
+  精确结算回执从记录时起保留 30 分钟；重放不会延长
+  窗口，资源删除或到期可能使重放提前结束。如果核对结果需要超出
+  该窗口，应保留应用侧证据。
+
+速查表（请求体已简写）：
+  AdminService/CreateQueue   {&quot;name&quot;,&quot;config&quot;:{}}
+  AdminService/DeleteQueue   {&quot;name&quot;,&quot;force?&quot;}
+  AdminService/ListQueues    {}
+  AdminService/Subscribe     {&quot;topic&quot;,&quot;name&quot;,&quot;filter?&quot;,&quot;ttl_ms?&quot;}
+  AdminService/TestFilter    {&quot;expr&quot;,&quot;message?&quot;}
+  AdminService/ListSubscriptionsPage {&quot;topic?&quot;,&quot;after?&quot;,&quot;limit?&quot;,&quot;include_deleting?&quot;}
+  AdminService/DeleteSubscription {&quot;topic&quot;,&quot;name&quot;,&quot;force?&quot;}
+  QueueService/Send          {&quot;queue&quot;,&quot;messages&quot;:[{&quot;body&quot;:&quot;&lt;base64&gt;&quot;,
+                              &quot;message_id?&quot;,&quot;group_id?&quot;}]}
+  QueueService/Receive       {&quot;queue&quot;,&quot;max_messages&quot;,&quot;wait_time_ms&quot;}
+  QueueService/Complete      {&quot;queue&quot;,&quot;seq_number&quot;,&quot;lock_token&quot;}
+  QueueService/Abandon       {&quot;queue&quot;,&quot;seq_number&quot;,&quot;lock_token&quot;,&quot;delay_ms?&quot;}
+  QueueService/Reject        {&quot;queue&quot;,&quot;seq_number&quot;,&quot;lock_token&quot;}
+  QueueService/Renew         {&quot;queue&quot;,&quot;seq_number&quot;,&quot;lock_token&quot;}
+  QueueService/Stats         {&quot;queue&quot;}
+  AuthService/CreateKey      {&quot;id&quot;,&quot;name&quot;,&quot;permissions&quot;:[&quot;send&quot;],&quot;expires_at_ms?&quot;}
+  AuthService/ListKeys       {&quot;after_id?&quot;,&quot;limit?&quot;,&quot;sort?&quot;}
+  AuthService/RevokeKey      {&quot;id&quot;}
+  对 CreateKey：调用前先保留一个唯一的 32 字符小写十六进制 id。token
+  仅返回一次。结果不确定时，先列出/撤销该 id，再创建替代密钥；
+  重复 id 会返回 key_conflict，绝不会再次返回秘密值。
+  对 ListKeys：sort 默认为 id_asc。使用 created_desc 可按最新优先排列，
+  每页保持相同 sort，并将 next_after_id 作为 after_id 传回。
+完整 v0.4.2 参考：https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/api-reference.md
+</code></pre>
+  </div>
+  <div class="quote"><b>为什么适合模型使用：</b> 无需管理连接状态，无二进制协议，也无需安装 SDK；每一步都是独立的 POST，响应明确告诉模型下一步应使用哪个令牌。若结算响应丢失，只要回执未过期，就可以安全重试，方法是 <b>重发同一个请求</b>：队列、消息、锁令牌、操作动词以及会改变效果的参数均保持一致。改变这组身份，就会得到 <code>lock_lost</code>，绝不会悄然保留首次调用的效果却返回成功。有效回执可在原租约到期后重放已提交的结算，但不能授权新效果，也不能恢复租约。因此，智能体即使弄错了请求，也会得到明确错误，而不会悄悄执行错误操作。</div>
+</section>
+
+<section class="blk">
+  <h2># 3 · 面向阅读网页的模型</h2>
+  <p class="lede">本网站提供机器可读的入口；完整文档包从源文档生成。</p>
+  <div class="tbl"><table>
+    <tr><th>文件</th><th>内容</th></tr>
+    <tr><td><a href="llms.txt"><code>llms.txt</code></a></td><td>单页概览：mqlite 是什么、关键事实以及各项内容的位置</td></tr>
+    <tr><td><a href="llms-full.txt"><code>llms-full.txt</code></a></td><td>纯 Markdown 完整文档包：核心概念 + 内部原理 + HTTP API + CLI + 访问密钥 + MCP + 示例 + 运维 + 部署 + 可观测性 + 云端监控</td></tr>
+    <tr><td><code>GET /</code> （任意 broker）</td><td>实时发现卡片：名称、版本、鉴权模式、每个端点路径</td></tr>
+  </table></div>
+  <p>管理 broker 时，先阅读 <a href="operations.html">运维</a>，请使用 <a href="deployment.html">部署</a> 完成配置，并参考
+  <a href="observability.html">可观测性</a> 进行监控和告警，或使用
+  <a href="observability-cloud.html">云端监控</a> 复用现有采集器与 Grafana。</p>
+</section>
+
+<section class="blk">
+  <h2># 最重要的一条规则</h2>
+  <div class="quote">
+    默认的 Peek-Lock 投递仅承诺 <b>至少一次（at-least-once）</b>；显式的接收即删除模式则选择在 broker 侧至多删除一次（at-most-once）。broker 无法保证 handler 的外部副作用恰好发生一次。设计智能体工作流时，应确保
+    <b>同一消息处理两次也无害</b>：以 <code>message_id</code> 或自己的幂等键标识副作用，并及时结算。其他规则请参阅
+    <a href="concepts.html">核心概念页面</a>。
+  </div>
+</section>
+
+</div>
+
+<footer class="site"><div class="wrap">
+  <span>MIT © MQLite 作者</span>
+  <a href="https://github.com/mqlitehq/mqlite">GitHub</a>
+  <a href="https://github.com/mqlitehq/mqlite/releases">发布版本</a>
+  <a href="llms.txt">llms.txt</a>
+</div></footer>
+</body>
+</html>

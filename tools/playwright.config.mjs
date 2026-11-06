@@ -2,7 +2,7 @@ import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
   testDir: '.',
-  testMatch: ['demo.spec.mjs', 'navigation.spec.mjs'],
+  testMatch: ['demo.spec.mjs', 'navigation.spec.mjs', 'bilingual.spec.mjs'],
   fullyParallel: false,
   workers: 1,
   reporter: 'line',

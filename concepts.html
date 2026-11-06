@@ -6,6 +6,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Concepts · mqlite</title>
 <meta name="description" content="Queues, topics, subscriptions, filters, and the full message lifecycle.">
+<link rel="alternate" hreflang="en" href="concepts.html">
+<link rel="alternate" hreflang="zh-CN" href="zh-CN/concepts.html">
+<link rel="alternate" hreflang="x-default" href="concepts.html">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="assets/site.css">
 <script src="assets/highlight.min.js" defer></script>
@@ -16,7 +19,7 @@
   <a class="brand" href="./"><img src="logo.svg" alt="" width="24" height="24"> mqlite</a>
   <div class="links overflow-nav" data-overflow>
     <div class="overflow-primary"></div>
-    <a class="gh" href="https://github.com/mqlitehq/mqlite">GitHub ↗</a>
+    <a class="language-switch" data-language-switch href="zh-CN/concepts.html" hreflang="zh-CN" lang="zh-CN" aria-label="切换为简体中文">简体中文</a>
     <details class="overflow-more has-current">
       <summary aria-label="More navigation links">More</summary>
       <div class="overflow-items">
@@ -30,13 +33,13 @@
     <a href="observability-cloud.html">Cloud monitoring</a>
     <a href="operations.html">Operations</a>
     <a href="agents.html">For AI agents</a>
+    <a class="gh" href="https://github.com/mqlitehq/mqlite">GitHub ↗</a>
       </div>
     </details>
   </div>
 </div></nav>
 <div class="wrap">
-  <div class="stamp">Source: <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/concepts.md">mqlite main · docs/concepts.md</a> — source v0.4.2 with unreleased changes. Latest supported release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.2">v0.4.2</a>.
-  These docs track main; use the linked release for published artifacts.</div>
+  <div class="stamp">Source: <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/concepts.md">mqlite main · docs/concepts.md</a> — source v0.4.2 with unreleased changes. Latest supported release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.2">v0.4.2</a>. These docs track main; use the linked release for published artifacts.</div>
   <main class="prose">
 <h1 id="core-concepts--subscription-filters">Core concepts &amp; subscription filters</h1>
 <p>This document follows <code>main</code>, including unreleased changes. For an installed
@@ -932,9 +935,9 @@ the error is logged — never a broker crash, never a silent match.</li>
 <li><strong>expr language</strong> — source <a href="https://github.com/expr-lang/expr"><code>github.com/expr-lang/expr</code></a>,
 full reference at <a href="https://expr-lang.org/docs/language-definition">https://expr-lang.org/docs/language-definition</a> (see §8 for the
 per-category builtin links).</li>
-<li><strong>Why expr</strong> — <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/dependencies.md">dependencies.md</a> explains why <code>expr-lang/expr</code> is a
+<li><strong>Why expr</strong> — <a href="dependencies.html">dependencies.md</a> explains why <code>expr-lang/expr</code> is a
 stable long-term dependency (pinned v1.17.8).</li>
-<li><strong>Normative invariants</strong> — the conformance spec (<a href="https://github.com/mqlitehq/mqlite/blob/main/docs/conformance.md">conformance.md</a> §11)
+<li><strong>Normative invariants</strong> — the conformance spec (<a href="conformance.html">conformance.md</a> §11)
 for the filter rules MQLite guarantees.</li>
 </ul>
 

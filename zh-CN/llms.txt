@@ -1,0 +1,69 @@
+# mqlite
+
+> 单个 SQLite 文件中的消息队列。支持 Peek-Lock 投递、重试、死信队列、定时发送、重复检测、FIFO 分组和主题扇出——可嵌入 Go 进程，也可作为轻量 HTTP broker 运行。纯 Go，无需 CGO。采用 MIT 许可证。
+
+公开文档：<https://mqlitehq.github.io/zh-CN/>。
+下文相对链接均以本网站为基准解析。
+
+版本说明：最新受支持版本为 v0.4.2（默认端口 6754，schema token 为 7）。v0.3.3 已撤回、不再受支持，并被 v0.4.0 及后续版本标记为 retract；其公开制品仅为取证或兼容性检查而保留，不得部署。本网站跟随 main，当前源码版本为 v0.4.2，包含尚未发布的更改。源码版本常量可能仍与上个发布版本相同，但行为已发生变化；对于已安装的发布版本，以下版本化文档才是权威依据。运行时访问密钥和密钥管理工具要求 v0.3.1 或更高版本。统一的 Observe、配置式监控凭据和监控入门套件要求 v0.3.2 或更高版本。下文安装命令固定为 v0.4.2。受支持发布版本的确切 API 请参阅 [v0.4.2 文档](https://github.com/mqlitehq/mqlite/tree/v0.4.2/docs)。v0.4.2 是基于 v0.4.1、schema 不变的补丁版本：listen 密钥可创建订阅和测试过滤条件，但查看订阅清单和删除订阅仍要求 manage；偏好 HTML 的浏览器根路径请求会进入已启用的控制台，curl 和 JSON 客户端则仍获得服务发现信息。从 v0.4.1 升级无需重建数据库。来自 v0.3.x、使用 Schema-5 的数据库仍需保留匹配的旧二进制程序/数据库组合，并让 v0.4.2 从全新数据库启动。
+
+- 一个引擎，两个前端：`mqlite.OpenEmbedded`（进程内，单个 SQLite 文件）和 `mqlite serve`（HTTP broker，默认 :6754，Bearer-token 认证，默认安全——未配置 token 时会自动生成）。
+- Go 客户端选择：`github.com/mqlitehq/mqlite` 是同时支持嵌入式和远程使用的完整 Go 1.21 模块。MQLite Remote Client for Go 保留模块路径 `github.com/mqlitehq/mqlite-go`；它是官方的仅远程、仅依赖标准库的配套客户端，源码最低兼容 Go 1.13，不包含嵌入式模式、`Observe` 或托管访问密钥管理。
+- 存储：本地 SQLite（纯 Go 驱动）或远程 Turso/libSQL。历史上一次同地域 Turso 工作负载测得，单条持久化 Send 的 p50 约为 45 ms；容量规划前应对当前版本、数据库和地域重新测量。两种后端共享成功操作的队列语义、校验、状态转换和逻辑错误；延迟、可用性、远程 outcome_unknown 失败以及存储运维则有不同的适用边界。
+- 线协议：JSON over HTTP，每个操作一次 POST；源码 v0.4.2 中有 29 条路由，位于 /mqlite.v1.QueueService/*、/mqlite.v1.AdminService/* 和 /mqlite.v1.AuthService/*。JSON 中的消息体采用 base64 编码。GET / 在没有 Accept 头、Accept 为 */* 或 JSON 时，返回公开的服务发现信息，列出全部端点；偏好 HTML 的交互式浏览器则进入已启用的控制台。
+- 投递：Peek-Lock（接收 → 处理 → 使用 lock_token 结算）或接收并删除。每种处理结果恰好对应一个结算操作：Complete / Abandon / Reject / Defer。每次新授予的领取都会增加 delivery_count；Renew 延长同一次有效领取，不增加计数。每 1 s 执行的回收器将过期锁对应的消息移回 active，或在达到投递上限时移入 DLQ。Peek-Lock 为至少一次（at-least-once）语义；处理函数必须幂等。
+- 租约边界：新的结算和 Renew 要求当前 lock_token 有效，且 locked_until_ms > now；等于截止时间即为过期，即使回收器尚未运行也一样。应在过期前续锁。未过期的精确请求回执可以在原始截止时间之后重放已提交的结算（队列、序列号、token、操作及影响结果的参数均须相同）；它不能授权新效果，也不能恢复租约。
+- Receive-and-Delete 是显式的至多一次 broker 移除语义：返回消息前先删除该行，不授予租约；lock_token 为空，locked_until_ms 为零（JSON 中省略），Receive attempt 重放也遵循此规则。SDK 将 LockedUntil 暴露为零值时间。
+- 重试：达到 max_delivery_count 的第 N 次普通 Peek-Lock 领取仍是可用的最后一次尝试，可以续锁或完成。这次尝试失败后，Abandon、锁过期或显式回收有效租约会使消息进入死信状态（不是独立队列），不会再进行普通的第 N+1 次领取。ReceiveDeferred 会增加计数，但目前没有最大次数准入检查。Redrive 将死信移回。尚未发布的 main 在普通打开时保留未过期租约；v0.4.2 仍在启动时回收它们。规划维护时，应使用匹配发布版本的操作手册。死信的年龄/数量/字节设置是异步保留目标，因此在有界清理轮次之间，保留数据可能暂时超出限制。
+- 顺序：standard（同一 group_id 内 FIFO，跨组并行）、group_fifo（必须提供 group_id）、strict_fifo（整个队列串行）。崩溃和锁过期后仍保持顺序。delay_ms > 0 的 Abandon 将消息暂放在 scheduled 状态，并继续阻塞其有序分组直至到期（strict_fifo 下阻塞整个队列）。
+- 发布/订阅：主题隐式存在；Subscribe(topic, name, filter) 为每个订阅创建一个 backing queue；过滤条件是单个 expr 布尔谓词，失败时拒绝匹配。Subscribe 和 TestFilter 要求 listen 权限；查看订阅清单和删除订阅要求 manage。Subscribe 是 broker 范围的创建或更新操作，不代表仅创建或调用方专属所有权。队列、订阅和主题共享一个互斥的命名空间（冲突返回 409）。退役最后一个活跃订阅会立即使其隐式主题无法接受扇出；正在删除的映射会保留该地址，直到清理结束。
+- 资源删除（v0.4.0 及后续版本）：DeleteQueue 和 DeleteSubscription 要求 manage 权限，默认仅允许删除空资源。`force=true` 是显式且持久化的授权，允许丢弃所有保留状态，包括持锁处理中的消息。删除被接受后，资源立即退出数据面。`state=deleted` 表示清理在接受请求的提交中已经完成；`state=deleting` 表示有界清理仍会继续，且名称被保留。应通过清单核对删除中状态或结果未知的操作，而不是再执行一次删除。API 直接以名称寻址，没有 Generation 字段；必须由一个所有者串行协调删除和同名重建。DeleteQueue 拒绝删除订阅 backing queue。DeleteSubscription 要求主题/名称对完全匹配。
+- 订阅生命周期（v0.4.0 及后续版本）：ListSubscriptionsPage 提供有界的主题过滤、总数/数量、不透明游标、生命周期状态，以及可选的删除中记录。Subscribe 可设置正数 `ttl_ms`；省略或为零表示创建永久订阅，或保留现有存活期。broker 从首次创建时起保存一个绝对截止时间。重试、过滤条件更新和消息流量均不会延长它。到期时，订阅恰好在截止时间退出扇出，并依据预先授权进行强制清理。清理完成前，名称仍被保留，且继续占用容量。正常完成应显式删除；真正临时的订阅应使用全局唯一的一次性名称；高频请求/回复流量应使用稳定的每实例回复订阅，并配合 `correlation_id`。v0.4.1 在 Status 和 Observe 中新增 `server_time_ms`，用于比较绝对截止时间；`sampled_at_ms` 可能来自缓存，浏览器时钟不是权威时钟。内置控制台按主题分组订阅，显示创建时间、截止时间或永久存活期，以及相对于 broker 时钟的剩余存活期。在当前 broker 上，其五秒循环只调用 Observe；连接、显式刷新和配置更改会加载生命周期清单，消息操作不会触发加载。旧版 broker 会缓存旧接口回退结果，不会反复探测分页路由。控制台的这些行为既不改变 schema，也不改变 HTTP/线协议 API；它使用 v0.4.1 已有的 ListSubscriptionsPage 和 `server_time_ms`。
+- 维护诊断（v0.4.0 及后续版本）：Observe 暴露有界的故障详情和恢复状态。可选的私有诊断日志会将脱敏后的详情跨重启保留；累计错误数不代表当前健康状态。
+- 定时发送：在指定时间投递（Schedule）。Cancel 只移除从未投递过的定时消息（delivery_count = 0），不移除延迟重试。消息 TTL 从首次可见时开始，到期后终止正常投递，再按队列策略进入死信或被丢弃。正数队列默认值既是默认值也是上限；Renew、延迟 Abandon 和调度器激活都不会移动固定截止时间。混合 HTTP 批次使用 messages[].ttl_ms；统一 TTL 的批次可使用顶层字段。重复检测默认关闭。队列的正数 dedup_window_ms 会从该键上次新入队起保留 message_id/body 身份；命中不会延长窗口。窗口内重试应使用相同 ID 和消息体；不同消息体会冲突。这不对外部业务副作用去重。
+- 事务性 outbox（仅嵌入式）：通过 mq.Tx，在同一个 SQLite 事务中提交业务写入和消息入队。
+- 运维：/ui 嵌入式管理控制台、按需启用且经过认证的 /metrics Prometheus（包括每个 RPC 的延迟直方图）、/healthz、CLI（26 个命令，包含 key 子命令组）、MCP 服务端（mqlite-mcp，源码 v0.4.2 中包含 22 个工具）。本地生产边界是每个持久化 SQLite 文件对应一个 broker；必须演练备份和恢复。网络访问应使用 TLS 和 Bearer 认证。
+- 统一观测（v0.3.2 及后续版本）：AdminService/Observe、SDK、CLI observe、MCP observe、控制台和 Prometheus 共享同一指标契约。采集成功与新鲜度应独立于抓取可用性追踪；不可用值不是零。v0.4.1 新增 `server_time_ms`，它在组装响应前后从 broker 生命周期时钟采样；队列瞬时值保留各自可能较早的 `sampled_at_ms`。进程计数器在重启时归零。使用 MQLITE_MONITOR_TOKENS 提供独立的只读采集凭据；它只允许 Observe 和 /metrics，不允许访问消息体、消费、管理或签发密钥。Grafana 查询 Prometheus，无需 MQLite token。可在现有采集器或本地监控入门套件中复用随附的仪表盘和告警规则。
+- Prometheus 访问（v0.3.2 及后续版本）：默认禁用（/metrics 返回 404，服务发现中省略 metrics）。使用 --metrics 或 MQLITE_METRICS=on 在 API 端口启用；随后服务发现包含 "metrics":"/metrics"。管理员认证必须保持启用。只有配置的监控或管理员凭据，以及托管 manage 密钥可以抓取指标。Observe 独立于此开关。采集器应位于私网；在任何公网 API 入口阻止 /metrics。认证不会使公开路由变成私有路由。在 Fly.io 上应通过私网复用外部采集器，而不必新增监控虚拟机。v0.4.0 移除了已弃用的 `mqlite_queue_total` 和 `mqlite_queue_oldest_message_age_ms` 别名。请使用 `mqlite_queue_retained_messages` 和 `mqlite_queue_oldest_message_age_seconds`；旧的毫秒告警阈值应除以 1,000。原生 Observe JSON 保留 `queues[].oldest_message_age_ms`。
+- 访问密钥（v0.3.1 及后续版本）：配置的 MQLITE_TOKENS 仍是完整管理员。托管密钥持久化在同一数据库中，可在运行时通过 SDK/HTTP/CLI/控制台/MCP 创建、列出、设置过期和撤销。send = 发送/定时发送/取消；listen = 接收/结算/续锁/查看消息/队列统计，以及整个 broker 的订阅创建/过滤条件更新和过滤测试；manage 包含上述权限，以及管理/签发密钥（包括其他管理密钥），还包括查看订阅清单和删除订阅，不受 force 值影响。权限覆盖整个 broker。Listen 是消费权限，不是只读审计。新生成的秘密值为 mqk_ 加 64 个小写十六进制字符；以 SHA-256 摘要保存，绝不明文存储。创建前应保留公开的 32 字符小写十六进制 ID。秘密值仅返回一次；响应丢失时，必须按 ID 核对并撤销，再创建替代密钥。重复 ID 返回 key_conflict，绝不返回旧秘密值。CLI：key create/list/revoke。MCP：create_key/list_keys/revoke_key。列表分页：next_after_id -> after_id；默认 100，最多 1000。401 unauthenticated 或 403 permission_denied 是永久错误：不要无限重试。撤销会影响后续请求；已获授权的长轮询可能继续完成。环境配置的 token 不能通过托管密钥 API 列出或撤销。
+- 限制：消息体 ≤ 1 MiB（可配置），请求体 ≤ 32 MiB，Receive ≤ 256 条消息 / 20 s 长轮询。
+- 不适用于：日志流/重放（可使用 Kafka/Redpanda/NATS JetStream）、多节点高可用集群（NATS/RabbitMQ）、Postgres 原生队列（pgmq/River），或单节点持续每秒六位数消息。单写入者、单节点是其设计边界。
+
+## 文档
+
+- [概念](concepts.html)：完整模型——队列、主题、订阅、过滤条件和完整的消息生命周期状态机。
+- [内部机制](internals.html)：schema、并发、所有权隔离和恢复。
+- [HTTP API 参考](api.html)：全部路由、请求、响应、错误码和限制。
+- [CLI 参考](cli.html)：mqlite 命令行客户端——broker、生产/消费/管理，可嵌入本地或连接 broker。
+- [访问密钥](access-keys.html)：权限、签发、轮换、过期和撤销。
+- [运维](operations.html)：生产范围、备份、恢复、升级和回滚。
+- [部署](deployment.html)：安装、持久存储、token 和 TLS。
+- [可观测性](observability.html)：规范化测量值、可用性、凭据、仪表盘和告警。
+- [云端监控](observability-cloud.html)：在 Fly.io、阿里云、Azure 和 Kubernetes 上进行私有且经过认证的采集。
+- [Turso 语义](turso.html)：共享业务契约、远程失败模式和单一拥有者边界。
+- [保留策略](retention.html)：全部获授权的移除路径、清理预算和存储回收边界。
+- [基准测试证据](benchmark.html)：可复现的工作负载、测量结果，以及它们能够证明什么的边界。
+- [一致性契约](conformance.html)：外部可见的不变量及其对应测试。
+- [依赖策略](dependencies.html)：Go 1.21 最低版本、明确固定的依赖版本和安全检查。
+- [面向 AI agent](agents.html)：MCP 服务端设置，以及可直接复制、用于操作原始 HTTP API 的系统提示词。
+- [完整文档合集](llms-full.txt)：上面链接的 14 份规范源文档，加上 MCP 和示例，合为一份纯 Markdown 文件，保留源码边界和版本元数据。手写的 agent 指南仍是独立页面。
+
+## 源码
+
+- [GitHub](https://github.com/mqlitehq/mqlite)：代码、issue、完整 docs/ 目录树（部署、Turso、保留策略、可观测性、一致性 TCK、基准测试）。
+- [概念源码](https://github.com/mqlitehq/mqlite/blob/main/docs/concepts.md)。
+- [内部机制源码](https://github.com/mqlitehq/mqlite/blob/main/docs/internals.md)。
+- [HTTP API 源码](https://github.com/mqlitehq/mqlite/blob/main/docs/api-reference.md)。
+- [CLI 源码](https://github.com/mqlitehq/mqlite/blob/main/docs/cli.md)。
+- [运维源码](https://github.com/mqlitehq/mqlite/blob/main/docs/operations.md)。
+- [部署源码](https://github.com/mqlitehq/mqlite/blob/main/docs/deployment.md)。
+- [可观测性源码](https://github.com/mqlitehq/mqlite/blob/main/docs/observability.md)。
+- [云端监控源码](https://github.com/mqlitehq/mqlite/blob/main/docs/observability-cloud.md)。
+- [访问密钥源码](https://github.com/mqlitehq/mqlite/blob/main/docs/access-keys.md)。
+- [MCP 源码](https://github.com/mqlitehq/mqlite/blob/main/docs/mcp.md)。
+- [发布版本](https://github.com/mqlitehq/mqlite/releases)：适用于 linux/macos/windows（amd64+arm64）的二进制程序，每个归档包含 mqlite 和 mqlite-mcp。
+- 容器镜像：`ghcr.io/mqlitehq/mqlite:0.4.2`（默认端口 6754）。持久存储、认证和 TLS 请参阅[部署](deployment.html)。
+- Broker：`go install github.com/mqlitehq/mqlite/cmd/mqlite@v0.4.2`。
+- MCP 服务端：`go install github.com/mqlitehq/mqlite/cmd/mqlite-mcp@v0.4.2`。
+- 完整 SDK（嵌入式和远程）：`go get github.com/mqlitehq/mqlite@v0.4.2`（Go ≥ 1.21）。
+- MQLite Remote Client for Go：`go get github.com/mqlitehq/mqlite-go@v0.1.1`（源码兼容 Go ≥ 1.13；生产二进制程序应使用受支持的 Go 版本构建）。

@@ -1,6 +1,7 @@
 .DS_Store
 *.log
 node_modules/
+/tools/node_modules
 _site/
 test-results/
 playwright-report/

@@ -78,6 +78,26 @@
   var label = root.querySelector('[data-demo-step-label]');
   var caption = root.querySelector('[data-demo-caption]');
   var transcript = Array.from(root.querySelectorAll('[data-demo-step]'));
+  var chinese = document.documentElement.lang === 'zh-CN';
+  var stateTranslations = {
+    'waiting for copy': '等待消息副本', 'filter matched': '过滤器匹配',
+    'active · seq 1041': 'active · 序号 1041', 'active · seq 1042': 'active · 序号 1042',
+    'locked · delivery 1': 'locked · 第 1 次投递', 'locked · delivery 2': 'locked · 第 2 次投递',
+    'scheduled · delivery 1': 'scheduled · 第 1 次投递', 'active · delivery 1': 'active · 第 1 次投递',
+    'copy removed · queue remains': '副本已删除 · 队列保留', 'waiting': '等待中',
+    'processing': '处理中', 'complete ✓': '完成 ✓', 'abandon + delay': '放弃并延迟重投',
+    'ready to retry': '等待重试', 'processing retry': '重试处理中'
+  };
+  if (chinese) transcript.forEach(function (item, index) {
+    var heading = item.querySelector('b');
+    if (heading) {
+      steps[index].label = heading.textContent;
+      steps[index].caption = item.textContent.slice(item.textContent.indexOf(heading.textContent) + heading.textContent.length).trim();
+      ['auditState', 'fulfillmentState', 'auditAction', 'fulfillmentAction'].forEach(function (key) {
+        steps[index][key] = stateTranslations[steps[index][key]] || steps[index][key];
+      });
+    }
+  });
   var nodes = Array.from(root.querySelectorAll('[data-demo-node]'));
   var edges = Array.from(root.querySelectorAll('[data-demo-edge]'));
   var values = {};
@@ -110,7 +130,7 @@
     root.dataset.step = String(index);
     label.textContent = step.label;
     caption.textContent = step.caption;
-    progress.textContent = 'step ' + (index + 1) + ' / ' + steps.length;
+    progress.textContent = (chinese ? '步骤 ' : 'step ') + (index + 1) + ' / ' + steps.length;
     values['audit-state'].textContent = step.auditState;
     values['fulfillment-state'].textContent = step.fulfillmentState;
     values['audit-action'].textContent = step.auditAction;
@@ -138,15 +158,15 @@
     toggle.disabled = reduced;
     replay.disabled = reduced;
     if (reduced) {
-      toggle.textContent = 'motion reduced';
+      toggle.textContent = chinese ? '已减少动态效果' : 'motion reduced';
     } else if (playing) {
-      toggle.textContent = 'pause animation';
+      toggle.textContent = chinese ? '暂停动画' : 'pause animation';
     } else if (complete) {
-      toggle.textContent = 'play again';
+      toggle.textContent = chinese ? '再次播放' : 'play again';
     } else if (started) {
-      toggle.textContent = 'resume animation';
+      toggle.textContent = chinese ? '继续播放' : 'resume animation';
     } else {
-      toggle.textContent = 'play animation';
+      toggle.textContent = chinese ? '播放动画' : 'play animation';
     }
   }
 
