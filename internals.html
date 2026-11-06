@@ -39,6 +39,9 @@
   These docs track main; use the linked release for published artifacts.</div>
   <main class="prose">
 <h1 id="how-mqlite-works--building-a-reliable-queue-on-one-sqlite-file">How mqlite works — building a reliable queue on one SQLite file</h1>
+<p>This document follows <code>main</code>, including unreleased changes. For an installed
+v0.4.2 release, use the <a href="https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/internals.md">internals at that tag</a>;
+see <a href="https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md#unreleased">CHANGELOG.md</a> for pending behavior changes.</p>
 <blockquote>
 <p>This is the teaching document: how mqlite is actually built, table by table and
 decision by decision — and <em>why</em> this construction yields a queue you can trust.
@@ -394,7 +397,9 @@ to make the <em>window</em> small and the <em>retries</em> safe:</p>
 <ul>
 <li><p><strong><code>settlement_receipts</code></strong> — when a settle (Complete/Abandon/Reject/Defer)
 succeeds, a receipt for the <em>request</em> is written <em>in the same transaction</em>
-(kept ~30 minutes). If the client&#39;s response got lost and it retries, the
+(logically valid for 30 minutes from recording; replay does not extend it).
+Resource deletion or fixed subscription expiry can end replay earlier. If the
+client&#39;s response got lost and it retries within that window, the
 settle matches zero rows — but finds an unexpired receipt, and returns success instead
 of a spurious <code>lock_lost</code>. Acknowledgements are idempotent.</p>
 <p>A receipt is keyed by the whole request — <code>queue</code>, <code>seq_number</code>, <code>lock_token</code>,
@@ -414,22 +419,29 @@ claimed batch is recorded under that id (same transaction again); Peek-Lock
 stores only the ordered sequence/token/deadline roster, then reconstructs the
 immutable message fields from the locked rows while validating the whole batch
 in one query. This avoids duplicating every live message body in the replay
-table. A retry replays the exact same messages and lock tokens only while every
-token still owns a live lease. If explicit embedded live-lease recovery,
+table. A retry replays the exact same messages and lock tokens only while the
+record is unexpired and every token still owns a live lease. If explicit embedded live-lease recovery,
 startup recovery of an expired lease, ordinary lease expiry, or settlement
 invalidated any token, the same transaction removes the stale response and
 makes a safe new claim; a stale or
 partially owned batch never reaches the caller. Tokenless ReceiveAndDelete
-retains the full response because its message rows are gone. Its replay lifetime
-remains the greater of five minutes and the queue lock duration, matching the
-existing contract. Managed local and remote receivers both retain AttemptID replay:
+retains the full response because its message rows are gone. Both modes retain
+the record for the greater of five minutes and the queue lock duration when
+recorded, capped by a fixed subscription expiry. Neither replay nor lease
+renewal extends that record&#39;s deadline. After it expires, the same ID may claim
+new work even while a renewed original token remains live.
+Managed local and remote receivers both retain AttemptID replay:
 even an in-process database commit can return an uncertain outcome.</p>
 </li>
 <li><p><strong><code>dedup</code></strong> — on the producer side, a <code>message_id</code> within the queue&#39;s dedup
 window collapses resends into the original row (no id? the body&#39;s SHA-256 is
 used as a content-addressed key). Same id with a <em>different</em> body is a loud
 conflict, never a silent overwrite — a single send gets <code>409</code>; in a batch the
-offending slot is skipped (seq <code>0</code>) while the rest commit.</p>
+offending slot is skipped (seq <code>0</code>) while the rest commit. Dedup is off by
+default. When enabled, its window starts at the last new enqueue for that key;
+duplicate sends do not refresh it, and completion does not erase it. The
+conflict check covers body bytes, not metadata, TTL or scheduled time, so a
+duplicate does not update the original message.</p>
 </li>
 </ul>
 <p>Notice the pattern: each idempotency mechanism is <strong>a small table written in the
@@ -506,7 +518,8 @@ replay; consumer groups over history are Kafka&#39;s job, not this one&#39;s.</l
 </ul>
 <p>If your problem fits inside those lines — one node, thousands-per-second, must
 never lie to you — then the whole stack under your queue is a ~30 MB process,
-one file on disk (copyable with <code>cp</code> when stopped; use <code>VACUUM INTO</code> for a hot backup —
+one SQLite database (copy the complete DB/WAL/SHM set while stopped; use
+read-only <code>VACUUM INTO</code> for a hot backup —
 see <a href="operations.html#consistent-backups">operations runbook</a>), and a set of promises you can
 re-verify by running <code>go test</code>.</p>
 <h2 id="11--appendix-swapping-the-engine--the-contract-a-new-store-must-sign">11 · Appendix: swapping the engine — the contract a new store must sign</h2>

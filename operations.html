@@ -39,8 +39,13 @@
   These docs track main; use the linked release for published artifacts.</div>
   <main class="prose">
 <h1 id="production-operations">Production operations</h1>
-<p>This runbook describes v0.4.2, the latest supported release (port 6754, schema
-token 7). v0.3.3 is withdrawn and
+<p>This runbook follows <code>main</code>, including unreleased changes. The latest supported
+release is v0.4.2 (port 6754, schema token 7); use the
+<a href="https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/operations.md">v0.4.2 runbook</a>
+when operating that binary. In particular, lease-preserving startup and local
+maintenance, coordinated broker shutdown, and the revised managed Receiver
+behavior below are unreleased; see <a href="https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md#unreleased">CHANGELOG.md</a>.
+v0.3.3 is withdrawn and
 unsupported; its public assets and exact image remain available for forensic or
 compatibility inspection and must not be deployed. v0.4.2 retains v0.4.0&#39;s
 retraction of v0.3.3. Upgrading from v0.3.2 or another schema-5 release
@@ -79,7 +84,14 @@ Keep credentials in a restricted environment/secret file.</li>
 snapshot can repeat work whose external side effects already happened. Reuse
 stable <code>MessageID</code>/body, receive <code>AttemptID</code>, and the exact settlement request
 when retrying within their documented retention windows; do not treat an HTTP
-timeout as proof that a write failed. A Peek-Lock AttemptID replays only while
+timeout as proof that a write failed. Send deduplication is off by default:
+enable a positive queue dedup window that covers the retry period before
+relying on <code>MessageID</code>, and keep metadata, TTL and scheduled time stable too.
+Duplicate sends do not extend that window. Settlement receipts expire after
+30 minutes without extension on replay; resource deletion or fixed subscription
+expiry can end replay earlier. Keep an application-side ledger when reconciliation
+must outlive those bounds. A Peek-Lock AttemptID replays only while its saved
+record is unexpired and
 its entire saved batch still owns live leases. A broker restart preserves those
 unexpired leases and tokens; after lease expiry or settlement, the broker
 invalidates a stale response and safely re-evaluates eligible work in a fresh
@@ -139,6 +151,14 @@ snapshot age (RPO), recovery time (RTO), backlog age, and capacity limits. Measu
 restore time with representative data. A successful backup command alone is not a
 restore test.</p>
 <h2 id="graceful-broker-shutdown">Graceful broker shutdown</h2>
+<p>The coordinated shutdown and lease-preserving restart contract below requires
+unreleased <code>main</code>; an installed v0.4.2 broker does not provide these guarantees.
+It also does not drain application consumers. Canceling <code>Receiver.Run</code> cancels
+its in-flight handler contexts. <code>Run</code> still waits for handlers and settlement to
+return, but offers no grace period for handlers to finish before cancellation.
+Interrupted deliveries can consume delivery attempts or reach the DLQ at the
+configured limit. Quiesce and drain consumers at the application layer before
+canceling them when a planned consumer stop must finish its work.</p>
 <p><code>mqlite serve</code> treats the first SIGINT or SIGTERM as a graceful-shutdown request.
 It stops accepting new HTTP connections and closes an internal no-new-claim gate for
 Receive. A call parked between claim rounds wakes with <code>200</code> and an empty message list;
@@ -165,7 +185,18 @@ does not by itself duplicate the message or consume another delivery attempt.
 If the downtime reaches <code>locked_until</code>, startup recovery (or the reaper) applies
 the ordinary expiry rule: the message returns to active below the delivery limit
 or enters the DLQ on its final attempt. Size lock durations and deployment grace
-periods so planned restarts normally finish inside the remaining lease.</p>
+periods so planned restarts normally finish inside the remaining lease.
+Measure the full interval from stopping the old broker until the replacement
+listener is ready, including database open and schema checks. The default lease
+is 30 seconds; use a longer configured lease when measured remote-store restart
+time and renewal/settlement latency need more margin.
+The managed Go clients also have bounded renewal and settlement retry budgets:
+terminal Complete/Abandon cleanup gets up to five seconds in total, including the
+first request and all replays. Returning before lease
+expiry is therefore necessary but not sufficient to preserve a particular
+handler&#39;s settlement; an exhausted retry budget does not resume automatically
+when the broker later returns. Retaining a valid token does not guarantee that an
+external side effect ran only once.</p>
 <p>A stopped broker&#39;s database may be opened by a local CLI inspection or maintenance
 command without revoking an unexpired delivery: every Open preserves live leases by
 default. The local file still has a single owner, so stop the broker first and never
@@ -202,6 +233,65 @@ only about 5 seconds after the worst-case HTTP drain for engine close and proces
 exit; configure at least 40 seconds, and more when measured remote-store close time
 requires it. Keep Turso/libSQL replacement single-active and stop-then-start; this
 shutdown behavior does not make overlapping brokers safe.</p>
+<h2 id="consumer-stops-and-host-interruptions">Consumer stops and host interruptions</h2>
+<p>These boundaries describe unreleased <code>main</code> and both Go clients&#39; managed
+<code>Receiver.Run</code>. The SDK does not install process signal handlers. The host
+application decides how SIGINT/SIGTERM, stdin EOF, and platform grace periods
+affect its contexts; <code>Consumer.Shutdown</code> and a stop-admission-then-drain API are
+not implemented. Ctrl-D normally produces stdin EOF, not a process signal or
+automatic context cancellation; <code>mqlite serve</code> does not read stdin.</p>
+<table>
+<thead>
+<tr>
+<th>Event</th>
+<th>Current behavior and required action</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Broker stops and restarts within the remaining lease</td>
+<td>A live Receiver retries and can reuse the persisted token. Renewal and settlement must also finish inside their retry budgets. Keep a single active broker and leave the Receiver&#39;s controlling context live.</td>
+</tr>
+<tr>
+<td>Broker outage reaches lease expiry</td>
+<td>The original token cannot renew or create a new settlement effect. The delivery returns to active below <code>MaxDeliveryCount</code>, or enters the DLQ at the limit. A retained exact-request receipt can still confirm an earlier committed settlement.</td>
+</tr>
+<tr>
+<td>Application cancels <code>Run</code></td>
+<td>Receive retries stop and handler/renewal contexts are canceled immediately. <code>Run</code> still waits for workers and cleanup. A returning handler&#39;s <code>nil</code> result requests Complete; a non-nil result requests Abandon on a fresh context with up to five seconds, unless terminal renewal failure already made settlement unsafe. Cancellation offers no handler grace period.</td>
+</tr>
+<tr>
+<td>Handler, error callback, or custom transport ignores cancellation</td>
+<td>Shutdown can remain blocked while joining that work. Context cancellation is cooperative; it is not a goroutine kill or a hard return deadline.</td>
+</tr>
+<tr>
+<td>Application calls a Close method</td>
+<td><code>Receiver.Close</code> is a no-op; <code>Client.Close</code> releases only SDK-owned idle HTTP connections. Neither cancels an active Run. <code>Embedded.Close</code> joins admitted database work, not application handlers. Cancel and join the Receiver before closing its client or engine.</td>
+</tr>
+<tr>
+<td>Consumer is killed, SIGSTOPped, or container-paused while the broker stays available</td>
+<td>A killed process cannot settle; a paused process cannot renew. Expired leases follow the ordinary redelivery/DLQ rule. A resumed handler may already have made an external change even though its old token is fenced.</td>
+</tr>
+<tr>
+<td>Broker is killed</td>
+<td>There is no HTTP drain or cleanup guarantee. Local transactions recover atomically; default startup preserves still-valid leases. If the response is lost around a commit, the caller must reconcile the result (for example through the exact-request receipt); process death alone does not prove rollback. <code>:memory:</code> loses all state when its process exits.</td>
+</tr>
+<tr>
+<td>Screen turns off or locks; machine sleeps, freezes, or loses power</td>
+<td>Turning off or locking the screen alone does not signal a process or cancel its contexts; the OS may separately suspend the host. During host sleep or failure, do not assume continued serving, renewal, or cleanup; broker-clock deadlines may be past on resumption. SIGSTOP, container pause/restart, and SIGKILL are process fault models, not proofs of host-sleep or power-loss behavior.</td>
+</tr>
+</tbody></table>
+<p>For a planned consumer stop, arrange application-level admission control and let
+work settle before canceling it, or use an explicit Receive loop whose lifecycle
+the application owns. An interrupted final delivery can reach the DLQ without a
+business-handler failure. Do not repeatedly restart or redrive a non-idempotent
+handler without reconciling its external side effects.</p>
+<p>A successful Send acknowledgement means the transaction committed under the
+configured storage contract. It does not acknowledge completion of a consumer&#39;s
+external work. Local <code>NORMAL</code> protects against process crashes; power-loss
+durability requires <code>FULL</code> and a storage stack that honors flushes. Turso/libSQL
+durability is the remote service&#39;s contract, not a setting proved by a local
+container test. Recovery tests must state which of these failure models they
+actually exercise.</p>
 <h2 id="startup-and-routine-checks">Startup and routine checks</h2>
 <p>Pin the binary checksum or image digest and record its source commit, Go version,
 MQLite version and schema token. Use the same configuration when rehearsing and
