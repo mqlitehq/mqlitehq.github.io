@@ -61,7 +61,7 @@ pre::-webkit-scrollbar-track, figure.fig::-webkit-scrollbar-track,
 .prose table::-webkit-scrollbar-track { background: transparent; }
 pre code { background: none; border: 0; padding: 0; color: var(--ink); }
 
-.wrap { max-width: 1020px; margin: 0 auto; padding: 0 24px; }
+.wrap { max-width: 1020px; margin: 0 auto; padding: 0 24px; overflow-wrap: anywhere; }
 
 /* ── top nav ── */
 nav.top {

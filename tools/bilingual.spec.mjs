@@ -108,6 +108,19 @@ test('Chinese navigation stays on one line at 320px and at 200 percent zoom', as
   expect(errors).toEqual([]);
 });
 
+test('every English and Chinese page contains long identifiers at mobile and tablet widths', async ({ page }) => {
+  test.setTimeout(90_000);
+  for (const file of ['index.html', 'agents.html', ...documents.map((name) => `${name}.html`)]) {
+    for (const locale of ['', 'zh-CN/']) {
+      await page.goto(`/${locale}${file}`);
+      for (const width of [320, 768]) {
+        await page.setViewportSize({ width, height: 900 });
+        await expectNoHorizontalOverflow(page);
+      }
+    }
+  }
+});
+
 test('every document keeps its English heading IDs and literal code examples in Chinese', async ({ page }) => {
   test.setTimeout(90_000);
   for (const name of documents) {
