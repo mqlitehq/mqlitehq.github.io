@@ -35,7 +35,7 @@
   </div>
 </div></nav>
 <div class="wrap">
-  <div class="stamp">Source: <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/api-reference.md">mqlite main · docs/api-reference.md</a> — source v0.4.2. Latest supported release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.2">v0.4.2</a>.
+  <div class="stamp">Source: <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/api-reference.md">mqlite main · docs/api-reference.md</a> — source v0.4.2 with unreleased changes. Latest supported release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.2">v0.4.2</a>.
   These docs track main; use the linked release for published artifacts.</div>
   <main class="prose">
 <h1 id="mqlite-http-api-reference">mqlite HTTP API reference</h1>
@@ -44,9 +44,14 @@
 construction. This document is generated from the wire contract in
 <a href="https://github.com/mqlitehq/mqlite/blob/main/wire/wire.go"><code>wire/wire.go</code></a> (the single source of truth shared by the broker
 and the Go SDK, so the two can&#39;t drift) and the server&#39;s error mapping.</p>
-<p>This reference describes v0.4.2, the latest supported release. v0.3.3 is
-withdrawn and unsupported; use the documentation in the v0.3.2 tag when working
-with its smaller management surface.</p>
+<p>This reference follows <code>main</code>, including unreleased changes. The latest supported
+release is v0.4.2; use the <a href="https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/api-reference.md">v0.4.2 reference</a>
+for that installed broker. The broker time header, revised Go managed Receiver
+retry and renewal behavior, 1-second through 1-hour queue lock-duration bounds,
+lease-preserving startup, and coordinated shutdown responses documented here
+are unreleased; see <a href="https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md#unreleased">CHANGELOG.md</a>. v0.3.3 is withdrawn
+and unsupported; use the documentation in the v0.3.2 tag when working with its
+smaller management surface.</p>
 <p>Every RPC body must be exactly one non-null JSON object, including operations
 whose request is otherwise empty (<code>{}</code>). Unknown fields and data after that object
 are rejected. Repeated fields retain Go&#39;s <code>encoding/json</code> behavior: later scalar
@@ -508,6 +513,12 @@ tokens remain valid until settlement or lease expiry, preventing concurrent
 delivery while the original caller may still be processing them. A replacement
 claim may therefore return fewer messages or different currently eligible work.
 Receive-and-Delete keeps replaying its tokenless saved response for the attempt lifetime.
+For either mode, the saved record expires after the greater of five minutes and
+the queue lock duration at the time it is recorded, capped by a fixed subscription
+expiry. Replaying or renewing a message does not extend that record&#39;s deadline.
+After record expiry the same ID can make a new claim, even if a previously renewed
+token is still live. An attempt ID is therefore a bounded recovery key, not a
+permanent delivery identity.
 A live non-empty saved response also binds that attempt ID to its original
 <code>receive_mode</code>; reusing it with the other mode is <code>400 invalid_argument</code>. Empty
 results are not saved, and an expired record no longer binds the ID.</p>
@@ -554,7 +565,11 @@ New settlement and renewal effects require <code>locked_until_ms &gt; now</code>
 already counts as expired, even if the background reaper has not run. The broker samples
 time after local writer admission and afresh for each statement and remote retry. A
 live exact-request receipt can replay a previously committed settlement after its
-original lease deadline; it cannot authorize a different request or revive a lease.</p>
+original lease deadline; it cannot authorize a different request or revive a lease.
+The receipt expires 30 minutes after it is recorded. Replaying it does not refresh
+that deadline, and resource deletion or fixed subscription expiry can end replay
+earlier. After expiry, <code>lock_lost</code> does not prove the original settlement failed;
+retain application-side evidence when reconciliation must outlive this window.</p>
 <table>
 <thead>
 <tr>
@@ -871,7 +886,7 @@ rejected with <code>409 name_conflict</code> instead of silently taking over
 (<a href="concepts.html#provisioning--what-you-create-vs-what-is-created-for-you">concepts → provisioning</a>).
 <strong>Response</strong> <code>{}</code> (Empty).</p>
 <p><strong>Request</strong> <code>CreateQueueRequest</code>: <code>name</code> (valid UTF-8, 1–128 bytes) + <code>config</code>
-(<code>QueueConfigJSON</code>, all fields optional — omit one to take its default). Every duration is <strong>epoch milliseconds</strong>.
+(<code>QueueConfigJSON</code>, all fields optional — omit one to take its default). Every duration is in <strong>milliseconds</strong>.
 Config is <strong>queue-level</strong>: it&#39;s set here, not per <code>Send</code>/<code>Receive</code>.</p>
 <table>
 <thead>
@@ -1228,16 +1243,29 @@ stays empty (the <em>dedup</em> path, if active, falls back to the body&#39;s SH
 </tr>
 <tr>
 <td><strong>on</strong> (<code>dedup_window_ms &gt; 0</code>)</td>
-<td>within the sliding window, keyed by <strong><code>(queue, message_id)</code></strong>: <br>• same id <strong>+ same body</strong> → collapses to one enqueue (the duplicate is silently dropped; you get the original <code>seq_number</code> back). <br>• same id <strong>+ different body</strong> → a <strong>conflict</strong>: a single <code>Send</code> returns <code>409 already_exists</code> (<code>ErrDedupConflict</code>); in a multi-message <code>Send</code> that one slot comes back as <code>seq 0</code> (skipped) while the rest commit. <br>• empty id → the body&#39;s SHA-256 is the key (content-addressed dedup).</td>
+<td>within the window, keyed by <strong><code>(queue, message_id)</code></strong>: <br>• same id <strong>+ same body</strong> → collapses to one enqueue (the duplicate is silently dropped; you get the original <code>seq_number</code> back). <br>• same id <strong>+ different body</strong> → a <strong>conflict</strong>: a single <code>Send</code> returns <code>409 already_exists</code> (<code>ErrDedupConflict</code>); in a multi-message <code>Send</code> that one slot comes back as <code>seq 0</code> (skipped) while the rest commit. <br>• empty id → the body&#39;s SHA-256 is the key (content-addressed dedup).</td>
 </tr>
 </tbody></table>
 <ul>
-<li><strong>Dedup is per-queue.</strong> The key is <code>(queue, message_id)</code>, so the same <code>message_id</code> in two
+<li><p><strong>The window starts at the last new enqueue for that key.</strong> Duplicate sends do
+not slide or refresh it. At exact window expiry, the key can enqueue a new
+message. Completing the original message does not end the dedup window: a
+duplicate within it still returns the original sequence number, even though
+that message may already be gone.</p>
+</li>
+<li><p><strong>The conflict check compares body bytes.</strong> Subject, properties, routing metadata,
+requested TTL and scheduled time are not part of that comparison. Sending the
+same key and body with different metadata does not update the original message.
+Keep the whole request stable when retrying an uncertain send.</p>
+</li>
+<li><p><strong>Dedup is per-queue.</strong> The key is <code>(queue, message_id)</code>, so the same <code>message_id</code> in two
 different queues — or fanned out to two subscriptions&#39; backing queues — never collides;
-each is independent.</li>
-<li><strong>So &quot;can self-specifying cause a problem?&quot;</strong> Only if (a) the queue has dedup <strong>on</strong> and
+each is independent.</p>
+</li>
+<li><p><strong>So &quot;can self-specifying cause a problem?&quot;</strong> Only if (a) the queue has dedup <strong>on</strong> and
 (b) you reuse an id within the window <strong>with a different body</strong> — that&#39;s the deliberate
-conflict signal. With dedup off (default), or with identical bodies, there is no problem.</li>
+conflict signal. With dedup off (default), or with identical bodies, there is no problem.</p>
+</li>
 </ul>
 <h2 id="errors">Errors</h2>
 <p>Errors are a JSON envelope <code>{&quot;code&quot;: &quot;...&quot;, &quot;message&quot;: &quot;...&quot;}</code> with an HTTP
@@ -1319,7 +1347,7 @@ status. A <code>not_found</code> response may add an optional <code>resource</co
 <tr>
 <td>499</td>
 <td><code>canceled</code></td>
-<td>the request context was canceled. A managed Receiver whose own context is still live treats a received 499 as transient and retries the same Receive attempt; caller cancellation still stops immediately.</td>
+<td>the request context was canceled. A managed Receiver whose own context is still live treats a received 499 as transient and retries the same Receive attempt. Caller cancellation stops Receive retries and cancels handler contexts; <code>Run</code> still joins active handlers, renewals, and bounded cleanup settlement before returning. See <a href="operations.html#consumer-stops-and-host-interruptions">consumer stop boundaries</a>.</td>
 </tr>
 <tr>
 <td>503</td>

@@ -10,7 +10,9 @@ Relative links below resolve against this website.
 NOTE ON VERSIONS: the latest supported release is v0.4.2 (default port 6754,
 schema token 7). v0.3.3 is withdrawn, unsupported and retracted by v0.4.0 and later; its
 public artifacts remain only for forensic or compatibility inspection and must not
-be deployed. This website tracks main, currently source v0.4.2. Runtime access
+be deployed. This website tracks main, currently source v0.4.2 with unreleased changes.
+The source version constant can still match the last release while behavior differs;
+the versioned documentation below is authoritative for an installed release. Runtime access
 keys and key-management tools require v0.3.1 or later.
 Unified Observe, configured monitor
 credentials and the monitoring starter require v0.3.2 or later. Installation commands
@@ -58,10 +60,12 @@ preserving the matching old binary/database pair and starting v0.4.2 with a fres
   empty lock_token and zero locked_until_ms (omitted in JSON), including receive
   attempt replays. The SDK exposes a zero LockedUntil time.
 - Retries: the Nth ordinary Peek-Lock claim at max_delivery_count remains a usable
-  final attempt and may be renewed or completed. Abandon, lock expiry or startup
-  recovery after that failed attempt moves it to the dead-letter state (not a
+  final attempt and may be renewed or completed. Abandon, lock expiry or explicit
+  live-lease reclamation after that failed attempt moves it to the dead-letter state (not a
   separate queue) instead of an ordinary N+1 claim. ReceiveDeferred increments the
   count but currently has no max admission check. Redrive moves dead letters back.
+  Unreleased main preserves unexpired leases on ordinary opens; v0.4.2 still
+  reclaims them at startup. Use the matching release runbook when planning maintenance.
   DLQ age/count/byte settings are asynchronous retention targets, so retained state
   may temporarily exceed them between bounded cleanup passes.
 - Ordering: standard (per-group_id FIFO, cross-group parallel), group_fifo
@@ -113,7 +117,10 @@ preserving the matching old binary/database pair and starting v0.4.2 with a fres
   queue policy. A positive queue default is both the default and ceiling; Renew,
   delayed Abandon and scheduler activation never move the fixed deadline. Mixed
   HTTP batches use messages[].ttl_ms; a uniform batch may use the top-level field.
-  Duplicate detection is by message_id within a window.
+  Duplicate detection is OFF by default. A positive queue dedup_window_ms retains
+  a message_id/body identity from the last new enqueue for that key; a hit does
+  not extend the window. Retry the same ID and body within it; a different
+  body conflicts. This does not deduplicate external business side effects.
 - Transactional outbox (embedded-only): business write + enqueue commit in ONE
   SQLite transaction via mq.Tx.
 - Ops: /ui embedded admin console, opt-in authenticated /metrics Prometheus
