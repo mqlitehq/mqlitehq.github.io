@@ -1,0 +1,564 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>mqlite — a message queue in a single SQLite file</title>
+<meta name="description" content="Peek-Lock delivery, retries, DLQ, scheduling, dedup, FIFO groups and topic fan-out — embedded in your Go process or served as a tiny broker. Pure Go, no CGO, one SQLite file.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/site.css">
+<link rel="stylesheet" href="assets/demo.css">
+<script src="assets/highlight.min.js" defer></script>
+<script src="assets/site.js" defer></script>
+<script src="assets/demo.js" defer></script>
+<style>
+  /* landing-only */
+  .hero { padding: 74px 0 30px; }
+  .hero h1 { font: 700 44px/1.15 var(--mono); color: var(--ink); letter-spacing: -0.03em; display: flex; align-items: center; gap: 16px; }
+  .hero h1 img { width: 52px; height: 52px; }
+  .hero .tag { margin: 18px 0 8px; font-size: 19px; color: var(--ink); max-width: 46em; }
+  .hero .tag b { color: var(--accent); font-weight: 650; }
+  .hero .sub { color: var(--ink2); max-width: 46em; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 20px 0 24px; }
+  .chip { font: 500 12px/1 var(--mono); color: var(--ink2); border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; }
+  .chip.v { color: var(--accent); border-color: rgba(250, 204, 21, 0.35); }
+  .cta { gap: 12px; }
+  .btn { font: 600 14px/1 var(--mono); border-radius: 9px; padding: 12px 18px; display: inline-block; }
+  .btn.primary { background: var(--accent); color: #111; }
+  .btn.primary:hover { text-decoration: none; filter: brightness(1.08); }
+  .btn.ghost { border: 1px solid var(--line); color: var(--ink); }
+  .btn.ghost:hover { text-decoration: none; border-color: var(--accent); }
+  .cta .overflow-more summary { font-size: 14px; line-height: 1; padding: 12px 18px; }
+
+  section.land { padding: 34px 0 6px; }
+
+  .pains { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  @media (max-width: 900px) { .pains { grid-template-columns: 1fr; } }
+  .pain { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px 16px; display: flex; flex-direction: column; }
+  .pain h3 { font: 650 14px/1.55 var(--mono); color: var(--ink); margin-bottom: 8px; }
+  .pain h3::before { content: "✗ "; color: #e66767; }
+  .pain .p { font-size: 12.8px; color: var(--muted); line-height: 1.65; flex: 1; }
+  .pain .a { border-top: 1px solid var(--grid); margin-top: 12px; padding-top: 12px; }
+  .pain .a b { display: block; font: 650 13.5px/1.5 var(--mono); color: var(--accent); margin-bottom: 4px; }
+  .pain .a p { font-size: 12.8px; color: var(--ink2); line-height: 1.65; }
+  section.land > h2 { font: 700 20px/1.4 var(--mono); color: var(--ink); margin-bottom: 4px; }
+  section.land > .lede { color: var(--muted); font-size: 13.5px; margin-bottom: 16px; }
+  section.land h3.subh { font: 650 13.5px/1.6 var(--mono); color: var(--ink2); margin: 26px 0 10px; }
+  section.land h3.subh a { color: var(--link); }
+  section.land :not(pre) > code { overflow-wrap: anywhere; }
+
+  .tabbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+  .tabbar button { font: 600 12.5px/1 var(--mono); color: var(--ink2); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 9px 14px; cursor: pointer; }
+  .tabbar button:hover { color: var(--ink); border-color: var(--accent); }
+  .tabbar button.on { color: #111; background: var(--accent); border-color: var(--accent); }
+  .tabpane { display: none; }
+  .tabpane.on { display: block; }
+  .tabpane > p { font-size: 13.4px; color: var(--ink2); margin: 0 0 10px; }
+
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .why { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; }
+  .why h3 { font: 650 14.5px/1.4 var(--mono); color: var(--ink); margin-bottom: 6px; }
+  .why h3 em { color: var(--accent); font-style: normal; margin-right: 8px; }
+  .why p { font-size: 13.4px; }
+  .why code { font-size: 0.85em; }
+
+  .split { display: grid; grid-template-columns: 5fr 6fr; gap: 22px; align-items: start; }
+  .split > * { min-width: 0; }
+  .split pre { margin: 0; }
+  @media (max-width: 900px) { .grid2, .split { grid-template-columns: 1fr; } .hero h1 { font-size: 34px; } }
+
+  .sem { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  @media (max-width: 900px) { .sem { grid-template-columns: 1fr 1fr; } }
+  .sem a { display: block; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 11px 14px; color: var(--ink2); font-size: 12.6px; line-height: 1.55; }
+  .sem a:hover { text-decoration: none; border-color: var(--accent); }
+  .sem b { display: block; font: 650 12.5px/1.5 var(--mono); color: var(--ink); }
+
+  .numbers { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 6px 18px; overflow-x: auto; }
+  .numbers table { width: 100%; border-collapse: collapse; font-size: 13.2px; }
+  .numbers th { color: var(--muted); font: 600 11.5px/1.5 var(--sans); letter-spacing: 0.4px; text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+  .numbers td { padding: 10px 12px; border-bottom: 1px solid var(--grid); vertical-align: top; }
+  .numbers tr:last-child td { border-bottom: none; }
+  .num { font-family: var(--mono); color: var(--ink); white-space: nowrap; }
+
+  .quote { border-left: 3px solid var(--accent); background: var(--surface); border-radius: 0 10px 10px 0; padding: 14px 18px; margin: 12px 0; font-size: 14px; }
+  .quote b { color: var(--ink); }
+</style>
+<link rel="alternate" hreflang="en" href="index.html">
+<link rel="alternate" hreflang="zh-CN" href="zh-CN/index.html">
+<link rel="alternate" hreflang="x-default" href="index.html">
+</head>
+<body>
+<nav class="top" aria-label="Main navigation"><div class="wrap">
+  <a class="brand" href="./" aria-current="page"><img src="logo.svg" alt="" width="24" height="24"> mqlite</a>
+  <div class="links overflow-nav" data-overflow>
+    <div class="overflow-primary"></div>
+    <details class="language-picker" data-language-picker name="header-menu">
+      <summary aria-label="Language: English" title="Choose language"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.25"><circle cx="8" cy="8" r="6"/><ellipse cx="8" cy="8" rx="2.5" ry="6"/><path d="M2 8h12"/></svg><span>EN</span></summary>
+      <ul class="language-options" aria-label="Available languages">
+<li><a data-language-switch href="index.html" hreflang="en" lang="en" aria-current="true">English</a></li>
+<li><a data-language-switch href="zh-CN/index.html" hreflang="zh-CN" lang="zh-CN">简体中文</a></li>
+      </ul>
+    </details>
+    <details class="overflow-more" name="header-menu">
+      <summary aria-label="More navigation links">More</summary>
+      <div class="overflow-items">
+    <a href="concepts.html">Concepts</a>
+    <a href="internals.html">Internals</a>
+    <a href="api.html">API</a>
+    <a href="cli.html">CLI</a>
+    <a href="access-keys.html">Access keys</a>
+    <a href="deployment.html">Deployment</a>
+    <a href="observability.html">Observability</a>
+    <a href="observability-cloud.html">Cloud monitoring</a>
+    <a href="operations.html">Operations</a>
+    <a href="agents.html">For AI agents</a>
+    <a class="gh" href="https://github.com/mqlitehq/mqlite">GitHub ↗</a>
+      </div>
+    </details>
+  </div>
+</div></nav>
+
+<div class="wrap">
+
+<div class="hero">
+  <h1><img src="logo.svg" alt="mqlite logo">mqlite</h1>
+  <p class="tag">A message queue in a <b>single SQLite file</b>.</p>
+  <p class="sub">Peek-Lock delivery, retries, dead-letter queues, scheduling, dedup,
+  FIFO groups and topic fan-out — <strong>embedded in your Go process</strong> or served as a
+  <strong>tiny HTTP broker</strong>. Same engine, same file, your choice.</p>
+  <div class="chips">
+    <a class="chip v" href="https://github.com/mqlitehq/mqlite/releases/tag/{{LATEST_RELEASE}}">latest supported release {{LATEST_RELEASE}}</a>
+    <span class="chip">main docs · source {{SOURCE_VERSION}}{{SOURCE_STATUS}}</span>
+    <span class="chip">pure Go · no CGO</span>
+    <span class="chip">one binary · one file</span>
+    <span class="chip">JSON over HTTP · curl-able</span>
+    <span class="chip">local SQLite or remote Turso</span>
+    <span class="chip">MIT</span>
+  </div>
+  <p class="sub">This site follows source {{SOURCE_VERSION}}{{SOURCE_STATUS}} on <code>main</code>. The latest
+  supported release is {{LATEST_RELEASE}}; use
+  <a href="https://github.com/mqlitehq/mqlite/tree/{{LATEST_RELEASE}}/docs">the {{LATEST_RELEASE}} documentation</a>
+  with published artifacts. v0.3.3 is withdrawn, unsupported and retracted by
+  v0.4.0 and later; its public artifacts remain only for forensic or compatibility
+  inspection and must not be deployed.</p>
+  <nav class="cta overflow-nav" data-overflow aria-label="Get started">
+    <a class="btn primary" href="#quickstart">Quickstart</a>
+    <div class="overflow-primary"></div>
+    <details class="overflow-more">
+      <summary aria-label="More getting started links">More</summary>
+      <div class="overflow-items">
+    <a class="btn ghost" href="#demo">Watch one message</a>
+    <a class="btn ghost" href="concepts.html">Read the concepts</a>
+    <a class="btn ghost" href="operations.html">Production operations</a>
+    <a class="btn ghost" href="access-keys.html">Access keys</a>
+    <a class="btn ghost" href="agents.html">I'm an AI agent</a>
+      </div>
+    </details>
+  </nav>
+</div>
+
+<section class="land" id="solves">
+  <h2># what it solves</h2>
+  <p class="lede">Three problems that keep re-appearing in every backend.</p>
+  <div class="pains">
+    <div class="pain">
+      <h3>“I need background jobs, not a broker deployment.”</h3>
+      <div class="p">A cluster to operate, an SDK to learn, a bill to pay — for one service.</div>
+      <div class="a"><b>→ a library over one file</b>
+        <p>Zero infrastructure. Want HTTP later? The same engine runs as one ~30 MB process.</p>
+      </div>
+    </div>
+    <div class="pain">
+      <h3>“My DB write and my event can disagree.”</h3>
+      <div class="p">Save the order, publish the event — crash in between and they split. Outbox tables and CDC are yet more machinery.</div>
+      <div class="a"><b>→ one transaction for both</b>
+        <p>The queue <em>is</em> your SQLite DB: business write + enqueue commit atomically.</p>
+      </div>
+    </div>
+    <div class="pain">
+      <h3>“My hand-rolled jobs table became a bad broker.”</h3>
+      <div class="p">A <code>status</code> column and a polling loop slowly regrow locks, retries, dead-letters — untested.</div>
+      <div class="a"><b>→ these semantics come finished</b>
+        <p>Peek-Lock, retries → DLQ + redrive, FIFO groups, delays, dedup — pinned by a conformance suite.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="land">
+  <h2># why mqlite</h2>
+  <p class="lede">Design priorities, in order — when they conflict, the earlier one wins.</p>
+  <div class="grid2">
+    <div class="why"><h3><em>1</em>Lightweight &amp; embeddable</h3>
+      <p>One pure-Go binary over one SQLite file. No broker cluster, no sidecar, no CGO.
+      Start embedded; move the same code to a broker, or the storage to replicated
+      <a href="turso.html">Turso</a>, without rewriting your app.</p></div>
+    <div class="why"><h3><em>2</em>Reliable under concurrency</h3>
+      <p>Default Peek-Lock delivery is honestly <strong>at-least-once</strong>; explicit
+      receive-and-delete chooses at-most-once broker removal. New settlements require a current token and
+      unexpired lease; send deduplication when configured, bounded receive/settlement
+      replay, single-broker crash recovery, and O(log n) claims on a deep backlog.
+      FIFO groups stay ordered even across consumer crashes and lock expiry.</p></div>
+    <div class="why"><h3><em>3</em>Simple, unambiguous interface</h3>
+      <p>Every operation is <strong>one HTTP POST with a JSON body</strong> — {{ROUTE_COUNT}} routes in source {{SOURCE_VERSION}}{{SOURCE_STATUS}}, curl-able by
+      construction, exactly one settlement verb per outcome (<code>Complete</code> /
+      <code>Abandon</code> / <code>Reject</code> / <code>Defer</code>), no aliases. Easy for people; easy for
+      <a href="agents.html">agents</a>.</p></div>
+    <div class="why"><h3><em>4</em>Service Bus flavor, not a clone</h3>
+      <p>Peek-Lock, <code>group_id</code> sessions, DLQ + redrive, scheduling and duplicate detection feel
+      familiar from Azure Service Bus — in an idiomatic-Go shape, with the
+      <a href="concepts.html">whole model documented</a> and its public compatibility
+      invariants pinned by a <a href="conformance.html">conformance suite</a>.</p></div>
+  </div>
+</section>
+
+<section class="land">
+  <h2># the killer feature: a transactional outbox with no outbox</h2>
+  <div class="split">
+    <div>
+      <p>Because the queue <em>is</em> your SQLite database, a business write and its event
+      commit in <strong>one transaction</strong>. Creating the order and its initial queue event
+      succeeds or rolls back together — no dual-write race, no CDC pipeline, no poller.</p>
+      <div class="quote"><b>Embedded-only: this shape avoids a separate broker or Postgres dependency.</b>
+      External brokers can't join your SQLite transaction, and Postgres-based queues need a
+      Postgres. Here the business data and queue share one file.</div>
+    </div>
+    <pre><code class="language-go">package main
+
+import (
+    "context"
+    "log"
+
+    "github.com/mqlitehq/mqlite"
+    "github.com/mqlitehq/mqlite/engine"
+)
+
+func main() {
+    ctx := context.Background()
+    mq, err := mqlite.OpenEmbedded(ctx, "file:./app.db")
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer mq.Close()
+    if err := mq.CreateQueue(ctx, "order-events", mqlite.QueueConfig{}); err != nil {
+        log.Fatal(err)
+    }
+
+    err = mq.Tx(ctx, func(tx *engine.EngineTx) error {
+        // Demo schema; application migrations normally create this table.
+        if _, err := tx.SQL().ExecContext(tx.Context(),
+            `CREATE TABLE IF NOT EXISTS orders(id INTEGER PRIMARY KEY, total INTEGER NOT NULL)`); err != nil {
+            return err
+        }
+        // 1) the business write, on the SAME transaction. Use tx.Context(), not the
+        //    ctx you passed to Tx — a statement interrupted mid-transaction wedges
+        //    a local SQLite database.
+        if _, err := tx.SQL().ExecContext(tx.Context(),
+            `INSERT INTO orders(id, total) VALUES(?, ?)`,
+            42, 1999); err != nil {
+            return err // rollback: nothing enqueued
+        }
+        // 2) enqueue — commits atomically with it:
+        _, err := tx.SendOne("order-events",
+            engine.OutMessage{Body: []byte(`{"order":42}`)})
+        return err
+    })
+    if err != nil {
+        log.Fatal(err)
+    }
+    // A nil result confirms that the order and its event committed together.
+}</code></pre>
+  <p class="sub">The snippet starts with a fresh <code>app.db</code> and inserts order 42 once.
+  Atomicity keeps the business write and enqueue together; it does not make external
+  side effects exactly-once or prove that a timed-out remote commit failed. Reconcile
+  an uncertain outcome before retrying. See <a href="internals.html#8--the-payoff-the-queue-that-lives-inside-your-transaction">transactional enqueue</a>.</p>
+  </div>
+</section>
+
+<section class="land" id="how">
+  <h2># how it works</h2>
+  <p class="lede">Two delivery targets, one storage story: a topic stores nothing — the thing that stores, is consumed, and can dead-letter is always a queue.</p>
+  <section class="product-demo" id="demo" data-demo data-step="0" aria-labelledby="demo-title">
+    <header class="demo-head">
+      <div>
+        <span class="demo-kicker">animated contract · 9 seconds</span>
+        <h3 id="demo-title">one publish · two independent deliveries</h3>
+      </div>
+      <div class="demo-controls" data-demo-controls>
+        <span class="demo-progress" data-demo-progress>step 1 / 8</span>
+        <button type="button" data-demo-toggle>play animation</button>
+        <button type="button" data-demo-replay>replay</button>
+      </div>
+    </header>
+
+    <div class="demo-visual" aria-hidden="true">
+      <div class="demo-graph">
+        <div class="demo-node producer" data-demo-node="producer">
+          <span class="demo-node-kind">publisher</span>
+          <strong>order.created</strong>
+          <small>message_id order-42</small>
+        </div>
+        <div class="demo-edge" data-demo-edge="publish"><span>publish</span></div>
+        <div class="demo-node topic" data-demo-node="topic">
+          <span class="demo-node-kind">implicit topic</span>
+          <strong>events</strong>
+          <small>routes · stores 0</small>
+        </div>
+        <div class="demo-branch" data-demo-edge="fanout"><span>fan-out</span></div>
+        <div class="demo-stack queues">
+          <div class="demo-node queue" data-demo-node="audit-queue">
+            <span class="demo-node-kind">subscription queue</span>
+            <strong>audit</strong>
+            <small data-demo-value="audit-state">waiting for copy</small>
+          </div>
+          <div class="demo-node queue" data-demo-node="fulfillment-queue">
+            <span class="demo-node-kind">subscription queue</span>
+            <strong>fulfillment</strong>
+            <small data-demo-value="fulfillment-state">waiting for copy</small>
+          </div>
+        </div>
+        <div class="demo-edge-stack">
+          <div class="demo-edge" data-demo-edge="audit-claim"><span>receive</span></div>
+          <div class="demo-edge" data-demo-edge="fulfillment-claim"><span>receive</span></div>
+        </div>
+        <div class="demo-stack consumers">
+          <div class="demo-node consumer" data-demo-node="audit-consumer">
+            <span class="demo-node-kind">audit worker</span>
+            <strong data-demo-value="audit-action">waiting</strong>
+            <small>independent settlement</small>
+          </div>
+          <div class="demo-node consumer" data-demo-node="fulfillment-consumer">
+            <span class="demo-node-kind">fulfillment worker</span>
+            <strong data-demo-value="fulfillment-action">waiting</strong>
+            <small>independent settlement</small>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="demo-caption">
+      <span data-demo-step-label>01 · publish</span>
+      <p data-demo-caption>The publisher sends order.created to the implicit events topic.</p>
+    </div>
+
+    <ol class="demo-transcript">
+      <li data-demo-step="0"><b>01 · publish</b><span>The publisher sends <code>order.created</code> to the implicit <code>events</code> topic.</span></li>
+      <li data-demo-step="1"><b>02 · route</b><span>The topic stores nothing. Both subscription filters match this message.</span></li>
+      <li data-demo-step="2"><b>03 · copy</b><span><code>audit</code> and <code>fulfillment</code> each receive an independent backing-queue copy: same message ID, different sequence numbers.</span></li>
+      <li data-demo-step="3"><b>04 · claim</b><span>Each <code>Receive</code> changes its copy from active to locked and increments <code>delivery_count</code> to 1.</span></li>
+      <li data-demo-step="4"><b>05 · settle differently</b><span><code>audit</code> completes, so only its message copy is removed; the subscription remains. Below the delivery limit, <code>fulfillment</code> abandons with delay, moving its copy locked → scheduled without incrementing the count.</span></li>
+      <li data-demo-step="5"><b>06 · due</b><span>The scheduler returns the delayed copy to active. Its delivery count is still 1.</span></li>
+      <li data-demo-step="6"><b>07 · retry</b><span>The next <code>Receive</code> locks the copy and increments <code>delivery_count</code> to 2.</span></li>
+      <li data-demo-step="7"><b>08 · complete</b><span>The retry completes, so that message copy is removed too; both subscriptions remain. Delivery is at-least-once, so handlers must remain idempotent.</span></li>
+    </ol>
+
+    <noscript>
+      <figure class="fig"><img src="assets/fig-overview.svg" alt="mqlite model: publish routes independent copies to subscription backing queues; receive locks a copy and settlement removes or reschedules it." style="width:100%;display:block"></figure>
+    </noscript>
+    <p class="demo-note">Animation timing is illustrative, not broker latency. A final ordinary claim may still renew and complete at the delivery limit. It enters the DLQ if explicitly rejected, or if that final lock is abandoned, expires, or is explicitly reclaimed. The documented source preserves unexpired leases on ordinary opens; v0.4.2 still reclaims them at startup. See <a href="operations.html#graceful-broker-shutdown">shutdown and restart boundaries</a>.</p>
+  </section>
+  <h3 class="subh">the source version described here is covered by the conformance TCK — details in <a href="concepts.html">Concepts</a>; the full construction story (schema, locks, fencing, recovery) is in <a href="internals.html">Internals</a></h3>
+  <div class="sem">
+    <a href="concepts.html"><b>Peek-Lock delivery</b>receive increments the count; renew extends the same attempt; settle before expiry</a>
+    <a href="concepts.html"><b>Retries → DLQ</b>the final ordinary Peek-Lock attempt remains usable; dead-letter only if that attempt fails</a>
+    <a href="concepts.html"><b>FIFO groups</b>standard / group_fifo / strict_fifo; order holds across crashes, lock expiry &amp; delayed retries</a>
+    <a href="concepts.html"><b>Topics + subscription lifecycle</b>filtered fan-out · paged inventory · empty-only or explicit force delete · fixed TTL backstop</a>
+    <a href="api.html#deletequeue"><b>Safe resource deletion</b>queues and subscriptions default to empty-only; explicit force discards retained states; names stay reserved during cleanup</a>
+    <a href="concepts.html"><b>Scheduling &amp; TTL</b>deliver later; cancel a never-delivered scheduled message; TTL starts at initial visibility and is capped by the queue</a>
+    <a href="concepts.html"><b>Duplicate detection</b>opt-in message_id/body window collapses repeated sends; conflicting bodies fail loud (409)</a>
+    <a href="concepts.html"><b>Defer</b>set a message aside, fetch it back by sequence number</a>
+    <a href="observability.html"><b>Ops built in</b>/ui console · unified Observe and /metrics · 26 CLI commands · 22 MCP tools · Grafana starter</a>
+  </div>
+</section>
+
+<section class="land" id="honest">
+  <h2># the honest part</h2>
+  <p class="lede">Published historical measurements from specific workloads; remeasure the current release with your payloads, concurrency and monitoring enabled before sizing production. Methods and limits: <a href="benchmark.html">docs/benchmark.md</a>. Historical Turso environment and comparison: <a href="https://github.com/mqlitehq/mqlite/pull/67">PR #67</a>.</p>
+  <div class="numbers"><table>
+    <tr><th>Setup</th><th>Measured</th><th>Read this as</th></tr>
+    <tr><td>Local file DB, 12-core machine</td>
+        <td class="num">15,926–17,963 msg/s single · 35,146 batched</td>
+        <td>historical local results; rerun the workload before sizing</td></tr>
+    <tr><td>1-vCPU / 256 MB cloud box, embedded engine</td>
+        <td class="num">6.0–6.7k msg/s batched</td>
+        <td>batching amortized commit cost in this measured setup</td></tr>
+    <tr><td>Remote Turso (co-located)</td>
+        <td class="num">~45 ms p50 per single durable send</td>
+        <td>historical co-located run; remote commit latency dominated this path</td></tr>
+    <tr><td>Memory / disk</td>
+        <td class="num">27–34 MB peak RSS · freed DB pages are reusable</td>
+        <td>file reclamation is gradual; size disk for peak backlog and measure your workload</td></tr>
+  </table></div>
+  <h3 class="subh">when NOT to use mqlite — it is a single-writer, single-node queue by design</h3>
+  <div class="numbers"><table>
+    <tr><th>If you need…</th><th>Use instead</th></tr>
+    <tr><td>Log streaming, replay, consumer groups over history</td><td>Kafka · Redpanda · NATS JetStream</td></tr>
+    <tr><td>A clustered, highly-available multi-node broker</td><td>NATS · RabbitMQ</td></tr>
+    <tr><td>A queue inside the Postgres you already run</td><td>pgmq · River</td></tr>
+    <tr><td>Sustained six-figure msg/s on one node</td><td>not this — the single-writer model is the point, not a bug</td></tr>
+    <tr><td>Exactly-once external side effects</td><td>default Peek-Lock delivery is at-least-once; make handlers idempotent</td></tr>
+  </table></div>
+</section>
+
+<section class="land" id="references">
+  <h2># deeper references</h2>
+  <p class="lede">The boundaries, evidence and executable contract behind the overview — rendered from the same source Markdown so people and machines read the same facts in either language.</p>
+  <div class="sem">
+    <a href="turso.html"><b>SQLite ↔ Turso</b>shared business semantics, different latency, availability and storage operations</a>
+    <a href="retention.html"><b>Retention</b>authorized removal, bounded cleanup and disk reclamation</a>
+    <a href="benchmark.html"><b>Benchmark evidence</b>reproducible methods, measured numbers and what they do not prove</a>
+    <a href="conformance.html"><b>Conformance TCK</b>public invariants mapped to the tests that enforce them</a>
+    <a href="dependencies.html"><b>Dependency policy</b>Go {{GO_VERSION}} compatibility, deliberate pins and security scanning</a>
+    <a href="llms-full.txt"><b>Complete machine bundle</b>all reference and specialist documents in one version-stamped Markdown file</a>
+  </div>
+</section>
+
+<section class="land" id="quickstart">
+  <h2># quickstart</h2>
+  <p class="lede">Three ways in — they all drive the same engine. These installation examples use the latest published modules and image; verify the installed version and use its matching release documentation; see <a href="deployment.html">Deployment</a> for installation and runtime settings.</p>
+  <p>Writing a broker-only Go application? The official
+  <a href="https://github.com/mqlitehq/mqlite-go">MQLite Remote Client for Go
+  (<code>mqlite-go</code>)</a> is standard-library-only and keeps a Go 1.13
+  source floor: <code>go get github.com/mqlitehq/mqlite-go@latest</code>. Use
+  the full SDK below for embedded queues, transactional outbox, observation,
+  or managed access-key administration.</p>
+  <div class="tabs">
+    <div class="tabbar">
+      <button class="on" data-t="go">Embedded Go</button>
+      <button data-t="broker">Broker + curl</button>
+      <button data-t="docker">Docker</button>
+    </div>
+    <div class="tabpane on" data-t="go">
+      <p>No server at all: one import, one file — the queue lives inside your process. <code>go get github.com/mqlitehq/mqlite@latest</code> (documented source floor: Go ≥ {{GO_VERSION}}; check the installed release's go.mod).</p>
+      <pre><code class="language-go">package main
+
+import (
+    "context"
+    "fmt"
+    "log"
+    "time"
+
+    "github.com/mqlitehq/mqlite"
+)
+
+func main() {
+    ctx := context.Background()
+    mq, err := mqlite.OpenEmbedded(ctx, "file:./mq.db")
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer mq.Close()
+
+    if err := mq.CreateQueue(ctx, "orders", mqlite.QueueConfig{
+        LockDuration:     30 * time.Second,
+        MaxDeliveryCount: 5,
+    }); err != nil {
+        log.Fatal(err)
+    }
+
+    // produce
+    if _, err := mq.SendOne(ctx, "orders", mqlite.OutMessage{Body: []byte(`{"id":42}`)}); err != nil {
+        log.Fatal(err)
+    }
+
+    // consume (Peek-Lock): receive, do work, then settle
+    msgs, err := mq.Receive(ctx, "orders", mqlite.RecvOpts{Max: 10, Wait: 5 * time.Second})
+    if err != nil {
+        log.Fatal(err)
+    }
+    for _, m := range msgs {
+        fmt.Printf("got: %s\n", m.Body)
+        // Abandon retries below max (DLQ at max); Reject sends directly to DLQ.
+        if err := m.Complete(ctx); err != nil {
+            log.Fatal(err)
+        }
+    }
+}</code></pre>
+    </div>
+    <div class="tabpane" data-t="broker">
+      <p>One tiny process, secure by default: it generates a <code>mqk_…</code> token and prints it if you don't set one. Every operation is one POST.</p>
+      <p>The documented source uses port {{BROKER_PORT}} and schema token {{SCHEMA_VERSION}}. The v0.4.2 release was a same-schema patch over v0.4.1, so that upgrade needs no database rebuild. Schema-5 databases from v0.3.x still require preserving the matching old binary/database pair and starting v0.4.2 with a fresh database. v0.3.3 is withdrawn and unsupported; its public artifacts remain only for forensic or compatibility inspection and must not be deployed.</p>
+      <pre><code class="language-bash">go install github.com/mqlitehq/mqlite/cmd/mqlite@latest   # latest published broker
+
+# start the broker on :{{BROKER_PORT}} with a known token, in the background
+MQLITE_TOKENS=mqk_dev MQLITE_DB=file:./mq.db mqlite serve --addr :{{BROKER_PORT}} &
+export TOKEN=mqk_dev        # (omit MQLITE_TOKENS to have the broker generate + print one)
+
+# create a queue, send, receive — curl-able by construction
+curl -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+     --data '{"name":"orders","config":{}}' \
+     localhost:{{BROKER_PORT}}/mqlite.v1.AdminService/CreateQueue
+
+curl -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+     --data "{\"queue\":\"orders\",\"messages\":[{\"body\":\"$(printf hi | base64)\"}]}" \
+     localhost:{{BROKER_PORT}}/mqlite.v1.QueueService/Send
+
+curl -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+     --data '{"queue":"orders","max_messages":1,"wait_time_ms":5000}' \
+     localhost:{{BROKER_PORT}}/mqlite.v1.QueueService/Receive</code></pre>
+    </div>
+    <div class="tabpane" data-t="docker">
+      <p>A named volume keeps queue data across container replacement. The admin console is available at <code>/ui</code>; in v0.4.2, opening the root URL in a browser enters that console while curl and JSON clients keep the discovery card. The console groups subscriptions by topic and shows permanent or fixed lifetimes against the broker clock; its five-second loop calls only <code>Observe</code>, while lifecycle inventory refreshes on connection, explicit refresh and configuration changes.</p>
+      <p>This example follows the latest published image. Pin a verified tag or digest for reproducible deployments. For production configuration and recovery, follow <a href="deployment.html">Deployment</a> and the <a href="operations.html">operations runbook</a>.</p>
+      <pre><code class="language-bash">docker run -d --name mqlite -p 127.0.0.1:{{BROKER_PORT}}:{{BROKER_PORT}} \
+  -e MQLITE_TOKENS=mqk_dev \
+  -e MQLITE_DB=file:/data/mq.db \
+  -v mqdata:/data \
+  ghcr.io/mqlitehq/mqlite:latest serve --addr :{{BROKER_PORT}}
+
+curl http://localhost:{{BROKER_PORT}}/          # discovery card (no auth)
+# opening that root URL in a browser enters the admin console</code></pre>
+    </div>
+  </div>
+</section>
+
+<section class="land" id="access-keys">
+  <h2># one key for each application</h2>
+  <p class="lede"><strong>Available since v0.3.1.</strong> Keep a configured administrator token and issue separate application keys at runtime, with no broker restart.</p>
+  <div class="sem">
+    <a href="access-keys.html#choose-a-permission"><b>Send</b>send, schedule and cancel scheduled messages</a>
+    <a href="access-keys.html#choose-a-permission"><b>Listen</b>receive, settle, renew, peek and read queue statistics</a>
+    <a href="access-keys.html#choose-a-permission"><b>Manage</b>all application rights, administration and issuing or revoking keys</a>
+    <a href="access-keys.html#rotate-revoke-and-recover"><b>Rotate without a restart</b>create a replacement, switch the application, then revoke the old key</a>
+  </div>
+  <p>Permissions apply across one broker. Tokens are shown once; the database stores only their digests. Manage keys through the Go SDK, HTTP API, CLI, console or MCP.</p>
+  <p><a href="access-keys.html">Read the access key guide →</a></p>
+</section>
+
+<section class="land" id="operations">
+  <h2># run it in production</h2>
+  <p class="lede">Start with one broker over a persistent local SQLite file. Choose a durability setting and rehearse recovery before putting messages into production.</p>
+  <p>Prometheus collection is off by default. Enable <code>--metrics</code> or <code>MQLITE_METRICS=on</code> to serve authenticated <code>/metrics</code> on the API port, and give the collector a separate <code>MQLITE_MONITOR_TOKENS</code> credential. Keep collection on a private network; if the API has public ingress, deny <code>/metrics</code> there. v0.4.0 removes the deprecated <code>mqlite_queue_total</code> and <code>mqlite_queue_oldest_message_age_ms</code> aliases; use <code>mqlite_queue_retained_messages</code> and <code>mqlite_queue_oldest_message_age_seconds</code>. The starter includes Prometheus, Grafana, a dashboard and verification scenarios.</p>
+  <div class="sem">
+    <a href="operations.html"><b>Operations runbook</b>production boundary, backups, restore, upgrades and rollback</a>
+    <a href="deployment.html"><b>Deployment</b>installation, one broker, persistent storage, authentication and TLS</a>
+    <a href="observability.html"><b>Observability</b>one metric contract for SDK, CLI, MCP, console and Prometheus (since v0.3.2)</a>
+    <a href="observability-cloud.html"><b>Cloud monitoring</b>authenticated collection for existing Grafana, Fly.io, Alibaba Cloud, Azure and Kubernetes</a>
+    <a href="conformance.html"><b>Conformance</b>delivery guarantees, recovery contracts and the tests behind them</a>
+  </div>
+</section>
+
+<section class="land">
+  <h2># built for AI agents too</h2>
+  <div class="quote">
+    The API was shaped so a model can drive it without tripping: one POST per operation,
+    one verb per outcome, a machine-readable discovery card at <code>GET /</code>, an
+    <b>MCP server</b> (<code>mqlite-mcp</code>, {{TOOL_COUNT}} tools in the documented source), and
+    <a href="llms.txt"><code>llms.txt</code></a> / <a href="llms-full.txt"><code>llms-full.txt</code></a>
+    for anything that reads the web. Copy-paste prompts and setup:
+    <a href="agents.html"><b>For AI agents →</b></a>
+  </div>
+</section>
+
+</div>
+
+<footer class="site"><div class="wrap">
+  <span>MIT © The MQLite Authors</span>
+  <a href="https://github.com/mqlitehq/mqlite">GitHub</a>
+  <a href="https://github.com/mqlitehq/mqlite-go">Remote Client for Go</a>
+  <a href="https://github.com/mqlitehq/mqlite/releases">Releases</a>
+  <a href="https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md">Changelog</a>
+  <a href="llms.txt">llms.txt</a>
+</div></footer>
+</body>
+</html>

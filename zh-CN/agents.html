@@ -72,9 +72,9 @@
 
 <div class="wrap">
 
-<div class="stamp">本文档跟随 <a href="https://github.com/mqlitehq/mqlite/tree/main">main · 源版本 v0.4.2，含未发布改动</a>。最新受支持版本是
+<div class="stamp">本文档跟随 <a href="https://github.com/mqlitehq/mqlite/tree/main">main · 源版本 v0.4.2（含未发布变更）</a>。最新受支持版本是
   <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.2">v0.4.2</a>
-  （默认端口 6754，schema 令牌 7）；安装示例固定使用该版本。请参阅
+  （当前文档对应源码的默认端口为 6754，schema token 为 7）。安装命令使用 <code>@latest</code>，它解析已发布的模块版本，而不是 <code>main</code>。请使用
   <a href="https://github.com/mqlitehq/mqlite/tree/v0.4.2/docs">v0.4.2 文档</a>
   了解其准确 API。v0.3.3 已撤回、不再受支持，且自 v0.4.0 起被标记为撤销版本；其公开产物仅供取证或兼容性检查，不得部署。</div>
 
@@ -86,8 +86,9 @@
 <section class="blk">
   <h2># 1 · MCP 服务端（推荐）</h2>
   <p class="lede"><code>mqlite-mcp</code> 随同一个仓库提供，是无需依赖的 stdio MCP 服务端，将每次工具调用转换为发往 broker 的一次 HTTP POST。</p>
-  <p>使用以下命令安装受支持的 v0.4.2 版本： <code>go install github.com/mqlitehq/mqlite/cmd/mqlite-mcp@v0.4.2</code>，或者使用 <code>mqlite-mcp</code> （取自
-  <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.2">v0.4.2 发布归档</a>），然后将安装好的二进制文件注册到 MCP 宿主：</p>
+  <p>用一条命令一起安装最新发布的 broker 与 MCP 服务端：</p>
+<pre><code class="language-bash">go install github.com/mqlitehq/mqlite/cmd/mqlite@latest github.com/mqlitehq/mqlite/cmd/mqlite-mcp@latest</code></pre>
+  <p>两个软件包会解析为同一模块版本。运行 <code>mqlite version</code> 来检查 broker 二进制程序的版本；MCP 主机读取 <code>serverInfo.version</code> ，该字段位于 <code>initialize</code>响应中。已有的 broker 通过以下入口报告版本： <code>GET /</code>。使用匹配的版本及该版本文档；需要可复现部署时，应记录确切版本。也可从这里下载同一发布版本的两个二进制程序： <a href="https://github.com/mqlitehq/mqlite/releases/latest">最新发布归档</a>。接着将安装的 MCP 二进制程序注册到主机：</p>
 <pre><code class="language-json">{
   "mcpServers": {
     "mqlite": {
@@ -99,7 +100,7 @@
     }
   }
 }</code></pre>
-  <p>v0.4.2 提供 <strong>22 个工具</strong>；其 broker 提供 <strong>29 条路由</strong> ，CLI 提供 <strong>26 条命令</strong>。下表说明该发布版本提供的接口。请确保 broker 与 <code>mqlite-mcp</code> 来自同一发布版本。 <code>observe</code> 工具要求 broker 与 MCP 服务端均为 v0.3.2 或更高版本。密钥管理工具要求 v0.3.1 或更高版本：</p>
+  <p>当前文档对应的源码提供 <strong>22 个工具</strong>， <strong>29 条路由</strong> 和 <strong>26 条命令</strong>。下表以该源码为准；已发布的二进制可能不包含 main 中尚未发布的变更。请确保 broker 和 <code>mqlite-mcp</code> 来自同一发布版本。 <code>observe</code> 工具要求 broker 与 MCP 服务端均为 v0.3.2 或更高版本。密钥管理工具要求 v0.3.1 或更高版本：</p>
   <div class="tbl"><table>
     <tr><th>工具</th><th>功能</th></tr>
     <tr><td><code>list_queues</code></td><td>列出普通队列与订阅后备队列，包括正在删除的名称</td></tr>
@@ -121,7 +122,7 @@
     <tr><td><code>list_keys</code></td><td>列出公开元数据，使用 <code>after_id</code> / <code>limit</code> / <code>sort</code>，包括已撤销和已过期的密钥</td></tr>
     <tr><td><code>revoke_key</code></td><td>撤销密钥，使用公开字段 <code>id</code>；重复撤销是安全的</td></tr>
   </table></div>
-  <p>密钥工具要求 <code>manage</code>；配置中的管理员和托管的 <code>manage</code> 密钥均可签发新的管理员密钥。请为消息生产者授予 <code>send</code> ，消费者使用 <code>listen</code>。在 v0.4.2 中， <code>listen</code> 还允许在整个 broker 范围创建订阅、更新过滤器和测试过滤器；订阅清单与删除仍要求 <code>manage</code>，无论是否使用 <code>force</code>。消费者可以结算消息，也可以按接收即删除模式消费； <code>listen</code> 并非仅审计角色。</p>
+  <p>密钥工具要求 <code>manage</code>；配置中的管理员和托管的 <code>manage</code> 密钥均可签发新的管理员密钥。请为消息生产者授予 <code>send</code> ，消费者使用 <code>listen</code>。在当前文档对应的源码中， <code>listen</code> 还允许在整个 broker 范围创建订阅、更新过滤器和测试过滤器；订阅清单与删除仍要求 <code>manage</code>，无论是否使用 <code>force</code>。消费者可以结算消息，也可以按接收即删除模式消费； <code>listen</code> 并非仅审计角色。</p>
   <p>若 MCP 连接仅用于监控，请将配置中的 <code>MQLITE_MONITOR_TOKENS</code> 凭据填入客户端的 <code>MQLITE_TOKEN</code>。它可以调用 <code>observe</code>，但不能读取消息正文、消费消息、修改队列或签发密钥。请检查返回的采集状态和可用性字段；不可用的测量值不能视为健康的零值。v0.4.1 增加了 <code>server_time_ms</code> 用于比较生命周期截止时间；请勿替换为缓存的队列采样时间字段 <code>sampled_at_ms</code>。参见 <a href="observability.html">可观测性</a>。 <code>observe</code> 工具独立于可选的 Prometheus 开关工作； <code>--metrics</code> 仅启用经过鉴权的 <code>/metrics</code> 端点，位于 API 端口。v0.4.0 删除了已弃用的 <code>mqlite_queue_total</code> 和 <code>mqlite_queue_oldest_message_age_ms</code> 别名；请使用 <code>mqlite_queue_retained_messages</code> 和 <code>mqlite_queue_oldest_message_age_seconds</code>。</p>
   <h3 class="sub">创建生产者密钥</h3>
   <p>调用工具前，先选择并保留一个唯一的公开 ID，由 32 位小写十六进制字符组成：</p>
@@ -140,23 +141,28 @@
 
 <section class="blk">
   <h2># 2 · 原始 HTTP：可直接粘贴的提示词</h2>
-  <p class="lede">适用于能运行 <code>curl</code> 或发起 HTTP 调用的智能体。此提示词描述受支持的 v0.4.2，包括生命周期操作；请与匹配的 v0.4.2 broker 配套使用。填入两个占位值，将对应说明粘贴到智能体的系统提示词或任务上下文：</p>
+  <p class="lede">适用于能运行 <code>curl</code> 或发起 HTTP 调用的智能体。这份提示词以当前文档对应的源码 API 为准。请核对已部署 broker 的版本和服务发现信息；已发布二进制应使用对应发布版本的文档，未发布二进制则应使用该构建自身的源码文档。填写两个占位符后，将匹配的说明粘贴到智能体的系统提示词或任务上下文中：</p>
   <div class="prompt">
 <pre id="p1"><code>你可以访问一个消息队列（mqlite broker）。
 
 基础 URL： &lt;MQLITE_ENDPOINT&gt;              broker 的源地址，包含端口。
-           直连： http://127.0.0.1:6754   （mqlite 在 TCP 6754 上提供 JSON-over-HTTP，
+           直连： http://127.0.0.1:6754   （示例：broker 已配置在 TCP 6754 端口，
                                              自身不终止 TLS）
            代理： https://mq.example.com  （反向代理在 HTTPS :443 接收请求，
                                              再转发到 broker 内部的 :6754）
            下文端点路径均相对于此源地址。
-认证：     每次调用都需要请求头            Authorization: Bearer &lt;MQLITE_TOKEN&gt;
+认证：     每次 RPC 调用都需要请求头            Authorization: Bearer &lt;MQLITE_TOKEN&gt;
 协议：     每个操作都是一次携带 JSON 请求体的 HTTP POST，目标为
            /mqlite.v1.QueueService/&lt;Method&gt;、/mqlite.v1.AdminService/&lt;Method&gt;，
            或 /mqlite.v1.AuthService/&lt;Method&gt;（v0.3.1 及后续版本）。
-           GET /（无需认证）返回列出所有端点的服务发现信息。
+           GET / 携带 Accept: application/json（无需认证）返回服务发现信息，
+           其中包含 broker 版本和全部端点。
 
 规则：
+- 更改数据前先 GET /，携带 Accept: application/json，读取其 version 和端点清单。
+  仅使用部署中的 broker
+  已记录的 API。已发布二进制应使用其精确发布标签的文档；未发布构建
+  应使用该构建自身的源码文档。
 - 密钥权限：send 允许生产/定时发送/取消消息；listen 允许接收/结算/续锁/查看消息、
   读取队列统计、创建或更新订阅，以及测试过滤条件；manage
   包含上述两类权限，以及管理/签发密钥。查看订阅清单和每一次
@@ -260,7 +266,9 @@
   重复 id 会返回 key_conflict，绝不会再次返回秘密值。
   对 ListKeys：sort 默认为 id_asc。使用 created_desc 可按最新优先排列，
   每页保持相同 sort，并将 next_after_id 作为 after_id 传回。
-完整 v0.4.2 参考：https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/api-reference.md
+API 参考：https://mqlitehq.github.io/api.html
+对于已发布的 broker，应使用其已安装版本的参考文档，
+不要假定尚未发布的 main 行为已经可用。
 </code></pre>
   </div>
   <div class="quote"><b>为什么适合模型使用：</b> 无需管理连接状态，无二进制协议，也无需安装 SDK；每一步都是独立的 POST，响应明确告诉模型下一步应使用哪个令牌。若结算响应丢失，只要回执未过期，就可以安全重试，方法是 <b>重发同一个请求</b>：队列、消息、锁令牌、操作动词以及会改变效果的参数均保持一致。改变这组身份，就会得到 <code>lock_lost</code>，绝不会悄然保留首次调用的效果却返回成功。有效回执可在原租约到期后重放已提交的结算，但不能授权新效果，也不能恢复租约。因此，智能体即使弄错了请求，也会得到明确错误，而不会悄悄执行错误操作。</div>

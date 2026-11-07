@@ -3,9 +3,10 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { Marked } from 'marked';
+import { checkFactPair } from './facts.mjs';
 
 export const sha256 = (text) => createHash('sha256').update(text).digest('hex');
-export const INTERFACE_FILES = ['tools/build.mjs', 'tools/i18n.mjs', 'tools/concept-diagrams.mjs', 'tools/diagrams/manifest.json', 'tools/explanatory-figures.mjs', 'assets/site.js', 'assets/demo.js', 'assets/demo.css'];
+export const INTERFACE_FILES = ['tools/build.mjs', 'tools/i18n.mjs', 'tools/facts.mjs', 'tools/releases.mjs', 'tools/agent-contract.mjs', 'tools/agent-contract.json', 'tools/companion-contract.mjs', 'tools/companion-contract.json', 'tools/site-index.mjs', 'tools/site-index.json', 'tools/site-audit.mjs', 'tools/version-references.mjs', 'tools/version-references.json', 'tools/concept-diagrams.mjs', 'tools/diagrams/manifest.json', 'tools/explanatory-figures.mjs', 'assets/site.js', 'assets/demo.js', 'assets/demo.css'];
 const demand = (ok, message) => { if (!ok) throw new Error(message); };
 const json = (path) => JSON.parse(readFileSync(path, 'utf8'));
 const normalize = (text) => text.replace(/\r\n/g, '\n');
@@ -123,15 +124,17 @@ export function loadTranslations(siteRoot, mq, files) {
   }
   const interfaceSource = readFileSync(resolve(root, 'interface.json'), 'utf8');
   demand(manifest.interfaceSha256 === sha256(interfaceSource), 'interface translations changed; review their source pairing');
-  const englishSummary = readFileSync(resolve(siteRoot, 'llms.txt'), 'utf8');
+  const englishSummary = readFileSync(resolve(siteRoot, 'templates/llms.txt'), 'utf8');
   const summary = readFileSync(resolve(root, 'llms.txt'), 'utf8');
   demand(manifest.summary.sourceSha256 === sha256(englishSummary), 'llms.txt: English summary changed; review Chinese');
   demand(manifest.summary.translationSha256 === sha256(summary), 'llms.txt: Chinese summary changed; review pairing');
+  checkFactPair(englishSummary, summary, 'llms.txt');
   checkMarkdownPair(englishSummary, summary, 'llms.txt');
-  const englishPrompt = agentPromptSource(readFileSync(resolve(siteRoot, 'agents.html'), 'utf8'));
+  const englishPrompt = agentPromptSource(readFileSync(resolve(siteRoot, 'templates/agents.html'), 'utf8'));
   const prompt = readFileSync(resolve(root, 'agent-prompt.txt'), 'utf8');
   demand(manifest.agentPrompt?.sourceSha256 === sha256(englishPrompt), 'agent prompt: English changed; review Chinese');
   demand(manifest.agentPrompt?.translationSha256 === sha256(prompt), 'agent prompt: Chinese changed; review pairing');
+  checkFactPair(englishPrompt, prompt, 'agent prompt');
   checkAgentPrompt(englishPrompt, prompt);
   return { documents, manifest, interface: JSON.parse(interfaceSource), summary, prompt };
 }
@@ -176,7 +179,10 @@ export function translateHandwritten(html, catalog, name) {
   const record = catalog.pages[name];
   demand(record?.sourceSha256 === sha256(html), `${name}: hand-written English changed; review Chinese`);
   const required = handwrittenStrings(html);
-  for (const key of required) demand(typeof catalog.strings[key] === 'string' && catalog.strings[key].trim(), `${name}: untranslated interface text: ${key}`);
+  for (const key of required) {
+    demand(typeof catalog.strings[key] === 'string' && catalog.strings[key].trim(), `${name}: untranslated interface text: ${key}`);
+    checkFactPair(key, catalog.strings[key], name);
+  }
   const translate = (text) => {
     const key = textKey(text);
     if (!key) return text;

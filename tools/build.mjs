@@ -9,6 +9,9 @@ import { gfmHeadingId } from 'marked-gfm-heading-id';
 import { sha256, loadTranslations, keepEnglishHeadingIds, checkNumericPair, translateHandwritten, translateAgentPrompt, localeLinks, languageLinks, languageSwitch, SITE_LANGUAGES } from './i18n.mjs';
 import { DIAGRAM_ASSETS, loadConceptDiagrams, conceptDiagramRenderer } from './concept-diagrams.mjs';
 import { loadExplanatoryFigures, findExplanatoryFigure, renderExplanatoryFigure } from './explanatory-figures.mjs';
+import { sourceAgentFacts, checkAgentContract } from './agent-contract.mjs';
+import { renderFacts } from './facts.mjs';
+import { readReleaseTags, isReleaseTree } from './releases.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const site = resolve(here, '..');
@@ -38,7 +41,7 @@ PAGES.push(
 );
 export const BUNDLE_FILES = PAGES.map(([src]) => src);
 export const GENERATED_FILES = [...PAGES.map(([, out]) => out), 'llms-full.txt', 'site-metadata.json', 'assets/highlight.min.js'];
-export const ALL_GENERATED_FILES = [...GENERATED_FILES, ...PAGES.map(([, out]) => `zh-CN/${out}`), 'zh-CN/index.html', 'zh-CN/agents.html', 'zh-CN/llms.txt', 'zh-CN/llms-full.txt', ...DIAGRAM_ASSETS];
+export const ALL_GENERATED_FILES = [...GENERATED_FILES, ...PAGES.map(([, out]) => `zh-CN/${out}`), 'zh-CN/index.html', 'zh-CN/agents.html', 'zh-CN/llms.txt', 'zh-CN/llms-full.txt', ...DIAGRAM_ASSETS, 'index.html', 'agents.html', 'llms.txt'];
 const ZH = {
   'Concepts': ['核心概念', '队列、主题、订阅、过滤器与完整的消息生命周期。'],
   'Internals': ['内部原理', 'SQLite、单写入者模型、隔离令牌、索引与崩溃恢复。'],
@@ -64,16 +67,24 @@ const requireValue = (condition, message) => {
   if (!condition) throw new Error(message);
 };
 
-export function sourceMetadata(mq) {
+export function sourceMetadata(mq, options = {}) {
   const versions = [...read(mq, 'internal/version/version.go').matchAll(/^const Version = "(\d+\.\d+\.\d+)"$/gm)];
   requireValue(versions.length === 1, 'cannot read the single source version constant');
   const changelog = read(mq, 'CHANGELOG.md');
   const unreleasedSection = /^## Unreleased[ \t]*\r?\n([\s\S]*?)(?=^## |(?![\s\S]))/m.exec(changelog)?.[1] ?? '';
-  const hasUnreleasedChanges = unreleasedSection.replace(/<!--[\s\S]*?-->/g, '')
+  const hasUnreleasedNotes = unreleasedSection.replace(/<!--[\s\S]*?-->/g, '')
     .split('\n').some((line) => line.trim() && !/^\s*#{1,6}\s/.test(line));
+  // Hermetic fixtures can supply a catalog. The CLI always reads existing tags
+  // and tracked source, so a dated heading cannot publish a prepared release.
+  const tags = options.releaseTags ?? readReleaseTags(mq);
+  requireValue(Array.isArray(tags) || tags instanceof Set, 'invalid release tag catalog');
+  const published = new Set(tags);
   const release = [...changelog.matchAll(/^## (v\d+\.\d+\.\d+(?:-rc\.\d+)?)\s+—\s+\d{4}-\d{2}-\d{2}(?:\s+\(([^)]+)\))?\s*$/gm)]
-    .find(([, , status = '']) => !/\b(?:retracted|withdrawn)\b/i.test(status));
-  requireValue(release, 'CHANGELOG.md has no dated release heading');
+    .find(([, tag, status = '']) => published.has(tag) && !tag.includes('-') && !/\b(?:retracted|withdrawn|unsupported)\b/i.test(status));
+  requireValue(release, 'CHANGELOG.md has no dated stable release heading with an available Git tag');
+  const sourceIsReleaseTag = options.sourceIsReleaseTag ?? isReleaseTree(mq, release[1]);
+  requireValue(typeof sourceIsReleaseTag === 'boolean', 'invalid source/release tree state');
+  const hasUnreleasedChanges = hasUnreleasedNotes || !sourceIsReleaseTag || versions[0][1] !== release[1].slice(1);
   const routes = [...read(mq, 'wire/wire.go').matchAll(/^\s*Path\w+\s*=\s*"(\/mqlite\.v1\.[^"]+)"/gm)].map((m) => m[1]);
   const tools = [...read(mq, 'cmd/mqlite-mcp/main.go').matchAll(/^\s+name:\s+"([^"]+)"/gm)].map((m) => m[1]);
   const dispatch = /^\tswitch cmd \{([\s\S]*?)^\t\}/m.exec(read(mq, 'cmd/mqlite/main.go'))?.[1];
@@ -84,6 +95,7 @@ export function sourceMetadata(mq) {
     requireValue(values.length >= 5 && new Set(values).size === values.length, `invalid ${name} source contract`);
   }
   return {
+    ...sourceAgentFacts(mq),
     sourceVersion: versions[0][1],
     latestRelease: release[1],
     hasUnreleasedChanges,
@@ -217,8 +229,9 @@ ${body}
 
 export function renderSite(mq, options = {}) {
   const bilingual = options.bilingual !== false;
-  const metadata = sourceMetadata(mq);
+  const metadata = sourceMetadata(mq, options);
   if (!bilingual) metadata.generatedFiles = GENERATED_FILES;
+  if (bilingual) metadata.agentGuideContract = checkAgentContract(options.translationRoot ?? site, mq);
   const translations = bilingual ? loadTranslations(options.translationRoot ?? site, mq, BUNDLE_FILES) : null;
   if (bilingual) requireValue(translations.manifest.chromeSourceSha256 === sha256(JSON.stringify(PAGES)), 'page titles or descriptions changed; review Chinese chrome');
   const marked = new Marked({ gfm: true });
@@ -256,7 +269,7 @@ export function renderSite(mq, options = {}) {
       outputs.set(`zh-CN/${out}`, page({ title, description, src, out, body: rewriteLinks(zh) }, metadata, true));
     }
     for (const name of ['index.html', 'agents.html']) {
-      const english = read(site, name);
+      const english = read(options.translationRoot ?? site, `templates/${name}`);
       let chinese = translateHandwritten(english, translations.interface, name);
       if (name === 'index.html') chinese = chinese.replace('src="assets/fig-overview.svg"', 'src="assets/zh-CN/fig-overview.svg"');
       if (name === 'agents.html') chinese = translateAgentPrompt(chinese, translations.prompt);
@@ -265,13 +278,16 @@ export function renderSite(mq, options = {}) {
         .replace(/<details\b[^>]*data-language-picker[^>]*>[\s\S]*?<\/details>/, languageSwitch(name, true))
         .replace(/<link rel="alternate"[^>]*>\n?/g, '');
       chinese = chinese.replace('</head>', `${languageLinks(name, true)}\n</head>`);
-      outputs.set(`zh-CN/${name}`, localeLinks(chinese, true));
+      outputs.set(`zh-CN/${name}`, renderFacts(localeLinks(chinese, true), metadata, true));
     }
-    outputs.set('zh-CN/llms.txt', localizeSummary(translations.summary));
+    outputs.set('zh-CN/llms.txt', renderFacts(localizeSummary(translations.summary), metadata, true));
     const zhParts = BUNDLE_FILES.map((file) => `<!-- ===== docs/${file} · 英文与简体中文逐项对应 ===== -->\n\n${rewriteMdLinks(translations.documents.get(file), true)}`);
     outputs.set('zh-CN/llms-full.txt', `mqlite main — 完整简体中文文档。\n源码版本：v${metadata.sourceVersion}。最新受支持版本：[${metadata.latestRelease}](${releaseURL})。\n${sourceStatus ? '源码包含未发布变更。\n' : ''}本文档跟随 main；使用已发布产物时，请核对相应版本说明。\n英文规范来源：${metadata.source}\n\n${zhParts.join('\n\n')}`);
     for (const diagram of diagrams) outputs.set(diagram.asset, diagram.svg);
     for (const diagram of diagrams) outputs.set(diagram.chineseAsset, diagram.chineseSvg);
+    for (const name of HANDWRITTEN_RELEASE_FILES) {
+      outputs.set(name, renderFacts(read(options.translationRoot ?? site, `templates/${name}`), metadata));
+    }
   }
   requireValue(JSON.stringify([...outputs.keys()]) === JSON.stringify(bilingual ? ALL_GENERATED_FILES : GENERATED_FILES), 'generated output inventory drift');
   return { outputs, metadata };
@@ -306,7 +322,7 @@ export function checkClaims(metadata, root = site) {
       requireValue(match[1] === metadata.latestRelease, `${file}: incorrect latest release ${match[1]}`);
     }
     requireValue(!text.includes('mqlitehq.github.io/blob/'), `${file}: private site source link`);
-    for (const line of text.split('\n').filter((line) => line.includes('8080'))) {
+    for (const line of text.split('\n').filter((line) => line.includes('8080') && metadata.brokerPort !== '8080')) {
       requireValue(/0\.2/.test(line), `${file}: legacy port 8080 requires an explicit 0.2 release context`);
     }
   }
@@ -320,6 +336,11 @@ export function checkClaims(metadata, root = site) {
   );
   for (const file of HANDWRITTEN_RELEASE_FILES) {
     requireValue(existsSync(resolve(root, file)), `${file}: missing hand-written release facts`);
+    for (const [command] of read(root, file).matchAll(/\bgo (?:install|get) [^\n<`]+/g)) {
+      for (const [, query] of command.matchAll(/github\.com\/mqlitehq\/(?:mqlite-go|mqlite)(?:\/[\w./-]+)?@([^\s<`]+)/g)) {
+        requireValue(query === 'latest', `${file}: current installation commands must use @latest, not ${query}`);
+      }
+    }
     const visible = read(root, file).replace(/<[^>]*>/g, '').replace(/\*\*/g, '').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ');
     const sourceClaims = [...visible.matchAll(/\bsource\s+(v\d+\.\d+\.\d+(?:-rc\.\d+)?)\b/gi)];
     requireValue(sourceClaims.length > 0, `${file}: missing source version ${source}`);

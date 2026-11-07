@@ -128,7 +128,7 @@
   <strong>tiny HTTP broker</strong>. Same engine, same file, your choice.</p>
   <div class="chips">
     <a class="chip v" href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.2">latest supported release v0.4.2</a>
-    <span class="chip">main docs · source v0.4.2</span>
+    <span class="chip">main docs · source v0.4.2 with unreleased changes</span>
     <span class="chip">pure Go · no CGO</span>
     <span class="chip">one binary · one file</span>
     <span class="chip">JSON over HTTP · curl-able</span>
@@ -200,7 +200,7 @@
       replay, single-broker crash recovery, and O(log n) claims on a deep backlog.
       FIFO groups stay ordered even across consumer crashes and lock expiry.</p></div>
     <div class="why"><h3><em>3</em>Simple, unambiguous interface</h3>
-      <p>Every operation is <strong>one HTTP POST with a JSON body</strong> — 29 routes in source v0.4.2, curl-able by
+      <p>Every operation is <strong>one HTTP POST with a JSON body</strong> — 29 routes in source v0.4.2 with unreleased changes, curl-able by
       construction, exactly one settlement verb per outcome (<code>Complete</code> /
       <code>Abandon</code> / <code>Reject</code> / <code>Defer</code>), no aliases. Easy for people; easy for
       <a href="agents.html">agents</a>.</p></div>
@@ -355,7 +355,7 @@ func main() {
     <noscript>
       <figure class="fig"><img src="assets/fig-overview.svg" alt="mqlite model: publish routes independent copies to subscription backing queues; receive locks a copy and settlement removes or reschedules it." style="width:100%;display:block"></figure>
     </noscript>
-    <p class="demo-note">Animation timing is illustrative, not broker latency. A final ordinary claim may still renew and complete at the delivery limit. It enters the DLQ if explicitly rejected, or if that final lock is abandoned, expires, or is explicitly reclaimed. Unreleased main preserves unexpired leases on ordinary opens; v0.4.2 still reclaims them at startup. See <a href="operations.html#graceful-broker-shutdown">shutdown and restart boundaries</a>.</p>
+    <p class="demo-note">Animation timing is illustrative, not broker latency. A final ordinary claim may still renew and complete at the delivery limit. It enters the DLQ if explicitly rejected, or if that final lock is abandoned, expires, or is explicitly reclaimed. The documented source preserves unexpired leases on ordinary opens; v0.4.2 still reclaims them at startup. See <a href="operations.html#graceful-broker-shutdown">shutdown and restart boundaries</a>.</p>
   </section>
   <h3 class="subh">the source version described here is covered by the conformance TCK — details in <a href="concepts.html">Concepts</a>; the full construction story (schema, locks, fencing, recovery) is in <a href="internals.html">Internals</a></h3>
   <div class="sem">
@@ -415,11 +415,11 @@ func main() {
 
 <section class="land" id="quickstart">
   <h2># quickstart</h2>
-  <p class="lede">Three ways in — they all drive the same engine. These examples pin the supported v0.4.2 release; see <a href="deployment.html">Deployment</a> for installation and runtime settings.</p>
+  <p class="lede">Three ways in — they all drive the same engine. These installation examples use the latest published modules and image; verify the installed version and use its matching release documentation; see <a href="deployment.html">Deployment</a> for installation and runtime settings.</p>
   <p>Writing a broker-only Go application? The official
   <a href="https://github.com/mqlitehq/mqlite-go">MQLite Remote Client for Go
   (<code>mqlite-go</code>)</a> is standard-library-only and keeps a Go 1.13
-  source floor: <code>go get github.com/mqlitehq/mqlite-go@v0.1.1</code>. Use
+  source floor: <code>go get github.com/mqlitehq/mqlite-go@latest</code>. Use
   the full SDK below for embedded queues, transactional outbox, observation,
   or managed access-key administration.</p>
   <div class="tabs">
@@ -429,7 +429,7 @@ func main() {
       <button data-t="docker">Docker</button>
     </div>
     <div class="tabpane on" data-t="go">
-      <p>No server at all: one import, one file — the queue lives inside your process. <code>go get github.com/mqlitehq/mqlite@v0.4.2</code> (Go ≥ 1.21).</p>
+      <p>No server at all: one import, one file — the queue lives inside your process. <code>go get github.com/mqlitehq/mqlite@latest</code> (documented source floor: Go ≥ 1.21; check the installed release's go.mod).</p>
       <pre><code class="language-go">package main
 
 import (
@@ -477,11 +477,11 @@ func main() {
     </div>
     <div class="tabpane" data-t="broker">
       <p>One tiny process, secure by default: it generates a <code>mqk_…</code> token and prints it if you don't set one. Every operation is one POST.</p>
-      <p>The supported v0.4.2 release uses port 6754 and schema token 7. It is a same-schema patch over v0.4.1, so that upgrade needs no database rebuild. Schema-5 databases from v0.3.x still require preserving the matching old binary/database pair and starting v0.4.2 with a fresh database. v0.3.3 is withdrawn and unsupported; its public artifacts remain only for forensic or compatibility inspection and must not be deployed.</p>
-      <pre><code class="language-bash">go install github.com/mqlitehq/mqlite/cmd/mqlite@v0.4.2   # default port 6754
+      <p>The documented source uses port 6754 and schema token 7. The v0.4.2 release was a same-schema patch over v0.4.1, so that upgrade needs no database rebuild. Schema-5 databases from v0.3.x still require preserving the matching old binary/database pair and starting v0.4.2 with a fresh database. v0.3.3 is withdrawn and unsupported; its public artifacts remain only for forensic or compatibility inspection and must not be deployed.</p>
+      <pre><code class="language-bash">go install github.com/mqlitehq/mqlite/cmd/mqlite@latest   # latest published broker
 
 # start the broker on :6754 with a known token, in the background
-MQLITE_TOKENS=mqk_dev MQLITE_DB=file:./mq.db mqlite serve &
+MQLITE_TOKENS=mqk_dev MQLITE_DB=file:./mq.db mqlite serve --addr :6754 &
 export TOKEN=mqk_dev        # (omit MQLITE_TOKENS to have the broker generate + print one)
 
 # create a queue, send, receive — curl-able by construction
@@ -499,12 +499,12 @@ curl -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
     </div>
     <div class="tabpane" data-t="docker">
       <p>A named volume keeps queue data across container replacement. The admin console is available at <code>/ui</code>; in v0.4.2, opening the root URL in a browser enters that console while curl and JSON clients keep the discovery card. The console groups subscriptions by topic and shows permanent or fixed lifetimes against the broker clock; its five-second loop calls only <code>Observe</code>, while lifecycle inventory refreshes on connection, explicit refresh and configuration changes.</p>
-      <p>This example pins the supported v0.4.2 image. For production configuration and recovery, follow <a href="deployment.html">Deployment</a> and the <a href="operations.html">operations runbook</a>.</p>
+      <p>This example follows the latest published image. Pin a verified tag or digest for reproducible deployments. For production configuration and recovery, follow <a href="deployment.html">Deployment</a> and the <a href="operations.html">operations runbook</a>.</p>
       <pre><code class="language-bash">docker run -d --name mqlite -p 127.0.0.1:6754:6754 \
   -e MQLITE_TOKENS=mqk_dev \
   -e MQLITE_DB=file:/data/mq.db \
   -v mqdata:/data \
-  ghcr.io/mqlitehq/mqlite:0.4.2
+  ghcr.io/mqlitehq/mqlite:latest serve --addr :6754
 
 curl http://localhost:6754/          # discovery card (no auth)
 # opening that root URL in a browser enters the admin console</code></pre>
@@ -543,7 +543,7 @@ curl http://localhost:6754/          # discovery card (no auth)
   <div class="quote">
     The API was shaped so a model can drive it without tripping: one POST per operation,
     one verb per outcome, a machine-readable discovery card at <code>GET /</code>, an
-    <b>MCP server</b> (<code>mqlite-mcp</code>, 22 tools in v0.4.2), and
+    <b>MCP server</b> (<code>mqlite-mcp</code>, 22 tools in the documented source), and
     <a href="llms.txt"><code>llms.txt</code></a> / <a href="llms-full.txt"><code>llms-full.txt</code></a>
     for anything that reads the web. Copy-paste prompts and setup:
     <a href="agents.html"><b>For AI agents →</b></a>

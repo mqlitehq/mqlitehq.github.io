@@ -1,0 +1,631 @@
+{
+  "formatVersion": 1,
+  "description": "Every public file has an owner and source mapping. Current facts are generated; literal version references require classified review. This index is the Pages packaging allowlist.",
+  "entries": [
+    {
+      "output": "access-keys.html",
+      "policy": "generated",
+      "owner": "Canonical English product documentation",
+      "locale": "en",
+      "sources": [
+        "mqlite/docs/access-keys.md"
+      ]
+    },
+    {
+      "output": "agents.html",
+      "policy": "generated",
+      "owner": "Source facts plus maintained English entry template",
+      "locale": "en",
+      "sources": [
+        "site/templates/agents.html"
+      ]
+    },
+    {
+      "output": "api.html",
+      "policy": "generated",
+      "owner": "Canonical English product documentation",
+      "locale": "en",
+      "sources": [
+        "mqlite/docs/api-reference.md"
+      ]
+    },
+    {
+      "output": "assets/concepts-filter.svg",
+      "policy": "generated",
+      "owner": "Reviewed concepts source and English SVG geometry",
+      "sources": [
+        "mqlite/docs/concepts.md",
+        "site/tools/diagrams/filter.svg"
+      ]
+    },
+    {
+      "output": "assets/concepts-lifecycle.svg",
+      "policy": "generated",
+      "owner": "Reviewed concepts source and English SVG geometry",
+      "sources": [
+        "mqlite/docs/concepts.md",
+        "site/tools/diagrams/lifecycle.svg"
+      ]
+    },
+    {
+      "output": "assets/demo.css",
+      "policy": "reviewed-static",
+      "owner": "Reviewed hand-maintained site artwork, styling or behavior",
+      "sources": [
+        "site/assets/demo.css"
+      ],
+      "sha256": "b3b94399eda8eae2062aac8dd57de5d77d651e9bff5a47cad2ba61b1ebe58156"
+    },
+    {
+      "output": "assets/demo.js",
+      "policy": "reviewed-static",
+      "owner": "Reviewed hand-maintained site artwork, styling or behavior",
+      "sources": [
+        "site/assets/demo.js"
+      ],
+      "sha256": "3e03abd8259c96f42c03b9122a140bf37cf4e9fa75310f41a0c1ca7cfef5c88e"
+    },
+    {
+      "output": "assets/fig-overview.svg",
+      "policy": "generated",
+      "owner": "Reviewed concepts source and English SVG geometry",
+      "sources": [
+        "mqlite/docs/concepts.md",
+        "site/tools/diagrams/overview.svg"
+      ]
+    },
+    {
+      "output": "assets/highlight.min.js",
+      "policy": "generated",
+      "owner": "Vendored syntax highlighter from locked Node dependency",
+      "sources": [
+        "site/tools/node_modules/@highlightjs/cdn-assets/highlight.min.js"
+      ]
+    },
+    {
+      "output": "assets/site.css",
+      "policy": "reviewed-static",
+      "owner": "Reviewed hand-maintained site artwork, styling or behavior",
+      "sources": [
+        "site/assets/site.css"
+      ],
+      "sha256": "8606d85176661379c3205189f8463ce37531ab5afec3582b3f4b19b40f9160fd"
+    },
+    {
+      "output": "assets/site.js",
+      "policy": "reviewed-static",
+      "owner": "Reviewed hand-maintained site artwork, styling or behavior",
+      "sources": [
+        "site/assets/site.js"
+      ],
+      "sha256": "6619e0ee3a3c89e310ece4ab123cb1bf5d1ce94c8b8b170ad13e75d73a439bf4"
+    },
+    {
+      "output": "assets/zh-CN/concepts-filter.svg",
+      "policy": "generated",
+      "owner": "Reviewed concepts source, shared geometry and Chinese label catalog",
+      "sources": [
+        "mqlite/docs/concepts.md",
+        "site/tools/diagrams/filter.svg",
+        "site/tools/diagrams/zh-CN-filter.json"
+      ]
+    },
+    {
+      "output": "assets/zh-CN/concepts-lifecycle.svg",
+      "policy": "generated",
+      "owner": "Reviewed concepts source, shared geometry and Chinese label catalog",
+      "sources": [
+        "mqlite/docs/concepts.md",
+        "site/tools/diagrams/lifecycle.svg",
+        "site/tools/diagrams/zh-CN-lifecycle.json"
+      ]
+    },
+    {
+      "output": "assets/zh-CN/fig-overview.svg",
+      "policy": "generated",
+      "owner": "Reviewed concepts source, shared geometry and Chinese label catalog",
+      "sources": [
+        "mqlite/docs/concepts.md",
+        "site/tools/diagrams/overview.svg",
+        "site/tools/diagrams/zh-CN-overview.json"
+      ]
+    },
+    {
+      "output": "benchmark.html",
+      "policy": "generated",
+      "owner": "Canonical English product documentation",
+      "locale": "en",
+      "sources": [
+        "mqlite/docs/benchmark.md"
+      ]
+    },
+    {
+      "output": "cli.html",
+      "policy": "generated",
+      "owner": "Canonical English product documentation",
+      "locale": "en",
+      "sources": [
+        "mqlite/docs/cli.md"
+      ]
+    },
+    {
+      "output": "concepts.html",
+      "policy": "generated",
+      "owner": "Canonical English product documentation",
+      "locale": "en",
+      "sources": [
+        "mqlite/docs/concepts.md"
+      ]
+    },
+    {
+      "output": "conformance.html",
+      "policy": "generated",
+      "owner": "Canonical English product documentation",
+      "locale": "en",
+      "sources": [
+        "mqlite/docs/conformance.md"
+      ]
+    },
+    {
+      "output": "dependencies.html",
+      "policy": "generated",
+      "owner": "Canonical English product documentation",
+      "locale": "en",
+      "sources": [
+        "mqlite/docs/dependencies.md"
+      ]
+    },
+    {
+      "output": "deployment.html",
+      "policy": "generated",
+      "owner": "Canonical English product documentation",
+      "locale": "en",
+      "sources": [
+        "mqlite/docs/deployment.md"
+      ]
+    },
+    {
+      "output": "examples.html",
+      "policy": "generated",
+      "owner": "Canonical English product documentation",
+      "locale": "en",
+      "sources": [
+        "mqlite/docs/examples.md"
+      ]
+    },
+    {
+      "output": "favicon.svg",
+      "policy": "reviewed-static",
+      "owner": "Reviewed hand-maintained site artwork, styling or behavior",
+      "sources": [
+        "site/favicon.svg"
+      ],
+      "sha256": "0864c22821fb524010b0e677a470d634d6b10c96142a4f989821fcc12ff78e80"
+    },
+    {
+      "output": "index.html",
+      "policy": "generated",
+      "owner": "Source facts plus maintained English entry template",
+      "locale": "en",
+      "sources": [
+        "site/templates/index.html"
+      ]
+    },
+    {
+      "output": "internals.html",
+      "policy": "generated",
+      "owner": "Canonical English product documentation",
+      "locale": "en",
+      "sources": [
+        "mqlite/docs/internals.md"
+      ]
+    },
+    {
+      "output": "llms-full.txt",
+      "policy": "generated",
+      "owner": "Complete indexed canonical documentation bundle",
+      "locale": "en",
+      "sources": [
+        "mqlite/docs/concepts.md",
+        "mqlite/docs/internals.md",
+        "mqlite/docs/api-reference.md",
+        "mqlite/docs/cli.md",
+        "mqlite/docs/access-keys.md",
+        "mqlite/docs/deployment.md",
+        "mqlite/docs/observability.md",
+        "mqlite/docs/observability-cloud.md",
+        "mqlite/docs/operations.md",
+        "mqlite/docs/turso.md",
+        "mqlite/docs/retention.md",
+        "mqlite/docs/benchmark.md",
+        "mqlite/docs/conformance.md",
+        "mqlite/docs/dependencies.md",
+        "mqlite/docs/mcp.md",
+        "mqlite/docs/examples.md"
+      ]
+    },
+    {
+      "output": "llms.txt",
+      "policy": "generated",
+      "owner": "Source facts plus maintained English entry template",
+      "locale": "en",
+      "sources": [
+        "site/templates/llms.txt"
+      ]
+    },
+    {
+      "output": "logo.svg",
+      "policy": "reviewed-static",
+      "owner": "Reviewed hand-maintained site artwork, styling or behavior",
+      "sources": [
+        "site/logo.svg"
+      ],
+      "sha256": "541feeb3b5002484a7d031187475cf41ba62140d3f413edfc0ba1227ba78cdba"
+    },
+    {
+      "output": "mcp.html",
+      "policy": "generated",
+      "owner": "Canonical English product documentation",
+      "locale": "en",
+      "sources": [
+        "mqlite/docs/mcp.md"
+      ]
+    },
+    {
+      "output": "observability-cloud.html",
+      "policy": "generated",
+      "owner": "Canonical English product documentation",
+      "locale": "en",
+      "sources": [
+        "mqlite/docs/observability-cloud.md"
+      ]
+    },
+    {
+      "output": "observability.html",
+      "policy": "generated",
+      "owner": "Canonical English product documentation",
+      "locale": "en",
+      "sources": [
+        "mqlite/docs/observability.md"
+      ]
+    },
+    {
+      "output": "operations.html",
+      "policy": "generated",
+      "owner": "Canonical English product documentation",
+      "locale": "en",
+      "sources": [
+        "mqlite/docs/operations.md"
+      ]
+    },
+    {
+      "output": "retention.html",
+      "policy": "generated",
+      "owner": "Canonical English product documentation",
+      "locale": "en",
+      "sources": [
+        "mqlite/docs/retention.md"
+      ]
+    },
+    {
+      "output": "site-metadata.json",
+      "policy": "generated",
+      "owner": "Canonical version, tagged release baseline, defaults and API inventories",
+      "sources": [
+        "mqlite/internal/version/version.go",
+        "mqlite/CHANGELOG.md",
+        "mqlite/go.mod",
+        "mqlite/internal/defaults/defaults.go",
+        "mqlite/engine/schema.go",
+        "mqlite/wire/wire.go",
+        "mqlite/cmd/mqlite/main.go",
+        "mqlite/cmd/mqlite-mcp/main.go"
+      ]
+    },
+    {
+      "output": "turso.html",
+      "policy": "generated",
+      "owner": "Canonical English product documentation",
+      "locale": "en",
+      "sources": [
+        "mqlite/docs/turso.md"
+      ]
+    },
+    {
+      "output": "zh-CN/access-keys.html",
+      "policy": "generated",
+      "owner": "Canonical source plus reviewed Simplified Chinese counterpart",
+      "locale": "zh-CN",
+      "sources": [
+        "mqlite/docs/access-keys.md",
+        "site/i18n/zh-CN/docs/access-keys.md"
+      ]
+    },
+    {
+      "output": "zh-CN/agents.html",
+      "policy": "generated",
+      "owner": "Source facts plus reviewed Simplified Chinese entry text",
+      "locale": "zh-CN",
+      "sources": [
+        "site/templates/agents.html",
+        "site/i18n/zh-CN/interface.json",
+        "site/i18n/zh-CN/agent-prompt.txt"
+      ]
+    },
+    {
+      "output": "zh-CN/api.html",
+      "policy": "generated",
+      "owner": "Canonical source plus reviewed Simplified Chinese counterpart",
+      "locale": "zh-CN",
+      "sources": [
+        "mqlite/docs/api-reference.md",
+        "site/i18n/zh-CN/docs/api-reference.md"
+      ]
+    },
+    {
+      "output": "zh-CN/benchmark.html",
+      "policy": "generated",
+      "owner": "Canonical source plus reviewed Simplified Chinese counterpart",
+      "locale": "zh-CN",
+      "sources": [
+        "mqlite/docs/benchmark.md",
+        "site/i18n/zh-CN/docs/benchmark.md"
+      ]
+    },
+    {
+      "output": "zh-CN/cli.html",
+      "policy": "generated",
+      "owner": "Canonical source plus reviewed Simplified Chinese counterpart",
+      "locale": "zh-CN",
+      "sources": [
+        "mqlite/docs/cli.md",
+        "site/i18n/zh-CN/docs/cli.md"
+      ]
+    },
+    {
+      "output": "zh-CN/concepts.html",
+      "policy": "generated",
+      "owner": "Canonical source plus reviewed Simplified Chinese counterpart",
+      "locale": "zh-CN",
+      "sources": [
+        "mqlite/docs/concepts.md",
+        "site/i18n/zh-CN/docs/concepts.md"
+      ]
+    },
+    {
+      "output": "zh-CN/conformance.html",
+      "policy": "generated",
+      "owner": "Canonical source plus reviewed Simplified Chinese counterpart",
+      "locale": "zh-CN",
+      "sources": [
+        "mqlite/docs/conformance.md",
+        "site/i18n/zh-CN/docs/conformance.md"
+      ]
+    },
+    {
+      "output": "zh-CN/dependencies.html",
+      "policy": "generated",
+      "owner": "Canonical source plus reviewed Simplified Chinese counterpart",
+      "locale": "zh-CN",
+      "sources": [
+        "mqlite/docs/dependencies.md",
+        "site/i18n/zh-CN/docs/dependencies.md"
+      ]
+    },
+    {
+      "output": "zh-CN/deployment.html",
+      "policy": "generated",
+      "owner": "Canonical source plus reviewed Simplified Chinese counterpart",
+      "locale": "zh-CN",
+      "sources": [
+        "mqlite/docs/deployment.md",
+        "site/i18n/zh-CN/docs/deployment.md"
+      ]
+    },
+    {
+      "output": "zh-CN/examples.html",
+      "policy": "generated",
+      "owner": "Canonical source plus reviewed Simplified Chinese counterpart",
+      "locale": "zh-CN",
+      "sources": [
+        "mqlite/docs/examples.md",
+        "site/i18n/zh-CN/docs/examples.md"
+      ]
+    },
+    {
+      "output": "zh-CN/index.html",
+      "policy": "generated",
+      "owner": "Source facts plus reviewed Simplified Chinese entry text",
+      "locale": "zh-CN",
+      "sources": [
+        "site/templates/index.html",
+        "site/i18n/zh-CN/interface.json"
+      ]
+    },
+    {
+      "output": "zh-CN/internals.html",
+      "policy": "generated",
+      "owner": "Canonical source plus reviewed Simplified Chinese counterpart",
+      "locale": "zh-CN",
+      "sources": [
+        "mqlite/docs/internals.md",
+        "site/i18n/zh-CN/docs/internals.md"
+      ]
+    },
+    {
+      "output": "zh-CN/llms-full.txt",
+      "policy": "generated",
+      "owner": "Complete indexed canonical documentation bundle",
+      "locale": "zh-CN",
+      "sources": [
+        "mqlite/docs/concepts.md",
+        "site/i18n/zh-CN/docs/concepts.md",
+        "mqlite/docs/internals.md",
+        "site/i18n/zh-CN/docs/internals.md",
+        "mqlite/docs/api-reference.md",
+        "site/i18n/zh-CN/docs/api-reference.md",
+        "mqlite/docs/cli.md",
+        "site/i18n/zh-CN/docs/cli.md",
+        "mqlite/docs/access-keys.md",
+        "site/i18n/zh-CN/docs/access-keys.md",
+        "mqlite/docs/deployment.md",
+        "site/i18n/zh-CN/docs/deployment.md",
+        "mqlite/docs/observability.md",
+        "site/i18n/zh-CN/docs/observability.md",
+        "mqlite/docs/observability-cloud.md",
+        "site/i18n/zh-CN/docs/observability-cloud.md",
+        "mqlite/docs/operations.md",
+        "site/i18n/zh-CN/docs/operations.md",
+        "mqlite/docs/turso.md",
+        "site/i18n/zh-CN/docs/turso.md",
+        "mqlite/docs/retention.md",
+        "site/i18n/zh-CN/docs/retention.md",
+        "mqlite/docs/benchmark.md",
+        "site/i18n/zh-CN/docs/benchmark.md",
+        "mqlite/docs/conformance.md",
+        "site/i18n/zh-CN/docs/conformance.md",
+        "mqlite/docs/dependencies.md",
+        "site/i18n/zh-CN/docs/dependencies.md",
+        "mqlite/docs/mcp.md",
+        "site/i18n/zh-CN/docs/mcp.md",
+        "mqlite/docs/examples.md",
+        "site/i18n/zh-CN/docs/examples.md"
+      ]
+    },
+    {
+      "output": "zh-CN/llms.txt",
+      "policy": "generated",
+      "owner": "Source facts plus reviewed Simplified Chinese entry text",
+      "locale": "zh-CN",
+      "sources": [
+        "site/templates/llms.txt",
+        "site/i18n/zh-CN/llms.txt"
+      ]
+    },
+    {
+      "output": "zh-CN/mcp.html",
+      "policy": "generated",
+      "owner": "Canonical source plus reviewed Simplified Chinese counterpart",
+      "locale": "zh-CN",
+      "sources": [
+        "mqlite/docs/mcp.md",
+        "site/i18n/zh-CN/docs/mcp.md"
+      ]
+    },
+    {
+      "output": "zh-CN/observability-cloud.html",
+      "policy": "generated",
+      "owner": "Canonical source plus reviewed Simplified Chinese counterpart",
+      "locale": "zh-CN",
+      "sources": [
+        "mqlite/docs/observability-cloud.md",
+        "site/i18n/zh-CN/docs/observability-cloud.md"
+      ]
+    },
+    {
+      "output": "zh-CN/observability.html",
+      "policy": "generated",
+      "owner": "Canonical source plus reviewed Simplified Chinese counterpart",
+      "locale": "zh-CN",
+      "sources": [
+        "mqlite/docs/observability.md",
+        "site/i18n/zh-CN/docs/observability.md"
+      ]
+    },
+    {
+      "output": "zh-CN/operations.html",
+      "policy": "generated",
+      "owner": "Canonical source plus reviewed Simplified Chinese counterpart",
+      "locale": "zh-CN",
+      "sources": [
+        "mqlite/docs/operations.md",
+        "site/i18n/zh-CN/docs/operations.md"
+      ]
+    },
+    {
+      "output": "zh-CN/retention.html",
+      "policy": "generated",
+      "owner": "Canonical source plus reviewed Simplified Chinese counterpart",
+      "locale": "zh-CN",
+      "sources": [
+        "mqlite/docs/retention.md",
+        "site/i18n/zh-CN/docs/retention.md"
+      ]
+    },
+    {
+      "output": "zh-CN/turso.html",
+      "policy": "generated",
+      "owner": "Canonical source plus reviewed Simplified Chinese counterpart",
+      "locale": "zh-CN",
+      "sources": [
+        "mqlite/docs/turso.md",
+        "site/i18n/zh-CN/docs/turso.md"
+      ]
+    }
+  ],
+  "versionSources": [
+    "mqlite/docs/access-keys.md",
+    "mqlite/docs/api-reference.md",
+    "mqlite/docs/benchmark.md",
+    "mqlite/docs/cli.md",
+    "mqlite/docs/concepts.md",
+    "mqlite/docs/conformance.md",
+    "mqlite/docs/dependencies.md",
+    "mqlite/docs/deployment.md",
+    "mqlite/docs/examples.md",
+    "mqlite/docs/internals.md",
+    "mqlite/docs/mcp.md",
+    "mqlite/docs/observability-cloud.md",
+    "mqlite/docs/observability.md",
+    "mqlite/docs/operations.md",
+    "mqlite/docs/retention.md",
+    "mqlite/docs/turso.md",
+    "site/assets/demo.css",
+    "site/assets/demo.js",
+    "site/assets/site.css",
+    "site/assets/site.js",
+    "site/favicon.svg",
+    "site/i18n/zh-CN/agent-prompt.txt",
+    "site/i18n/zh-CN/docs/access-keys.md",
+    "site/i18n/zh-CN/docs/api-reference.md",
+    "site/i18n/zh-CN/docs/benchmark.md",
+    "site/i18n/zh-CN/docs/cli.md",
+    "site/i18n/zh-CN/docs/concepts.md",
+    "site/i18n/zh-CN/docs/conformance.md",
+    "site/i18n/zh-CN/docs/dependencies.md",
+    "site/i18n/zh-CN/docs/deployment.md",
+    "site/i18n/zh-CN/docs/examples.md",
+    "site/i18n/zh-CN/docs/internals.md",
+    "site/i18n/zh-CN/docs/mcp.md",
+    "site/i18n/zh-CN/docs/observability-cloud.md",
+    "site/i18n/zh-CN/docs/observability.md",
+    "site/i18n/zh-CN/docs/operations.md",
+    "site/i18n/zh-CN/docs/retention.md",
+    "site/i18n/zh-CN/docs/turso.md",
+    "site/i18n/zh-CN/interface.json",
+    "site/i18n/zh-CN/llms.txt",
+    "site/logo.svg",
+    "site/templates/agents.html",
+    "site/templates/index.html",
+    "site/templates/llms.txt",
+    "site/tools/diagrams/filter.svg",
+    "site/tools/diagrams/lifecycle.svg",
+    "site/tools/diagrams/overview.svg",
+    "site/tools/diagrams/zh-CN-filter.json",
+    "site/tools/diagrams/zh-CN-lifecycle.json",
+    "site/tools/diagrams/zh-CN-overview.json",
+    "site/tools/explanatory-figures.mjs"
+  ],
+  "releaseReview": {
+    "reviewedValue": "v0.4.2",
+    "reason": "Review every indexed page and both languages for the next stable baseline, including exact production images, matching-release links, SDK installation examples and legacy capability boundaries. Do not merely change this value."
+  },
+  "defaultReview": {
+    "values": {
+      "goVersion": "1.21",
+      "brokerPort": "6754",
+      "schemaVersion": "7"
+    },
+    "reason": "Review every literal default, compatibility floor, canonical example and explanatory figure against its actual current or historical context. Generated badges do not review source prose."
+  }
+}

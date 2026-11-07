@@ -6,10 +6,13 @@ import { tmpdir } from 'node:os';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
-import { PAGES, BUNDLE_FILES, GENERATED_FILES, HANDWRITTEN_RELEASE_FILES, sourceMetadata, renderSite as renderBilingualSite, checkOutputs, checkClaims, checkLinks, rewriteLinks, rewriteMdLinks } from './build.mjs';
+import { PAGES, BUNDLE_FILES, GENERATED_FILES, HANDWRITTEN_RELEASE_FILES, sourceMetadata as sourceFacts, renderSite as renderBilingualSite, checkOutputs, checkClaims, checkLinks, rewriteLinks, rewriteMdLinks } from './build.mjs';
 import { createSiteServer } from './serve.mjs';
 
-const renderSite = (mq) => renderBilingualSite(mq, { bilingual: false });
+const fixtureReleases = ['v0.1.0', 'v0.1.1', 'v0.2.0', 'v0.3.0', 'v0.3.1', 'v0.3.2', 'v0.3.3', 'v0.4.0'];
+const fixtureOptions = { bilingual: false, releaseTags: fixtureReleases, sourceIsReleaseTag: true };
+const sourceMetadata = (mq) => sourceFacts(mq, fixtureOptions);
+const renderSite = (mq) => renderBilingualSite(mq, fixtureOptions);
 
 const here = dirname(fileURLToPath(import.meta.url));
 const site = resolve(here, '..');
@@ -90,6 +93,9 @@ function fixture(t) {
   const root = mkdtempSync(resolve(tmpdir(), 'mqlite-site-test-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   put(root, 'internal/version/version.go', 'package version\nconst Version = "0.3.0"\n');
+  put(root, 'go.mod', 'module github.com/mqlitehq/mqlite\n\ngo 1.21\n');
+  put(root, 'engine/schema.go', 'package engine\nconst schemaVersion = "7"\n');
+  put(root, 'internal/defaults/defaults.go', 'package defaults\nconst BrokerPort = "6754"\n');
   put(root, 'CHANGELOG.md', '# Changelog\n\n## Unreleased\n\n### Behavior changes\n\n## v0.2.0 — 2026-07-11\n\n## v0.1.1 — 2026-06-23\n');
   put(root, 'wire/wire.go', Array.from({ length: 5 }, (_, i) => `PathMethod${i} = "/mqlite.v1.QueueService/Method${i}"`).join('\n'));
   put(root, 'cmd/mqlite-mcp/main.go', Array.from({ length: 5 }, (_, i) => `  name: "tool${i}",`).join('\n'));

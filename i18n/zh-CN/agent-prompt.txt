@@ -1,18 +1,23 @@
 你可以访问一个消息队列（mqlite broker）。
 
 基础 URL： <MQLITE_ENDPOINT>              broker 的源地址，包含端口。
-           直连： http://127.0.0.1:6754   （mqlite 在 TCP 6754 上提供 JSON-over-HTTP，
+           直连： http://127.0.0.1:{{BROKER_PORT}}   （示例：broker 已配置在 TCP {{BROKER_PORT}} 端口，
                                              自身不终止 TLS）
            代理： https://mq.example.com  （反向代理在 HTTPS :443 接收请求，
-                                             再转发到 broker 内部的 :6754）
+                                             再转发到 broker 内部的 :{{BROKER_PORT}}）
            下文端点路径均相对于此源地址。
-认证：     每次调用都需要请求头            Authorization: Bearer <MQLITE_TOKEN>
+认证：     每次 RPC 调用都需要请求头            Authorization: Bearer <MQLITE_TOKEN>
 协议：     每个操作都是一次携带 JSON 请求体的 HTTP POST，目标为
            /mqlite.v1.QueueService/<Method>、/mqlite.v1.AdminService/<Method>，
            或 /mqlite.v1.AuthService/<Method>（v0.3.1 及后续版本）。
-           GET /（无需认证）返回列出所有端点的服务发现信息。
+           GET / 携带 Accept: application/json（无需认证）返回服务发现信息，
+           其中包含 broker 版本和全部端点。
 
 规则：
+- 更改数据前先 GET /，携带 Accept: application/json，读取其 version 和端点清单。
+  仅使用部署中的 broker
+  已记录的 API。已发布二进制应使用其精确发布标签的文档；未发布构建
+  应使用该构建自身的源码文档。
 - 密钥权限：send 允许生产/定时发送/取消消息；listen 允许接收/结算/续锁/查看消息、
   读取队列统计、创建或更新订阅，以及测试过滤条件；manage
   包含上述两类权限，以及管理/签发密钥。查看订阅清单和每一次
@@ -116,4 +121,6 @@
   重复 id 会返回 key_conflict，绝不会再次返回秘密值。
   对 ListKeys：sort 默认为 id_asc。使用 created_desc 可按最新优先排列，
   每页保持相同 sort，并将 next_after_id 作为 after_id 传回。
-完整 v0.4.2 参考：https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/api-reference.md
+API 参考：https://mqlitehq.github.io/api.html
+对于已发布的 broker，应使用其已安装版本的参考文档，
+不要假定尚未发布的 main 行为已经可用。
