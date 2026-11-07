@@ -4,7 +4,7 @@
   "type": "module",
   "description": "Regenerates the site's doc pages from the mqlite repo (see build.mjs)",
   "scripts": {
-    "test": "node --test build.test.mjs && playwright test --config playwright.config.mjs"
+    "test": "node --test *.test.mjs && playwright test --config playwright.config.mjs"
   },
   "dependencies": {
     "@highlightjs/cdn-assets": "^11.11.1",

@@ -6,6 +6,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Operations · mqlite</title>
 <meta name="description" content="Back up, restore, upgrade, and operate a single-broker deployment.">
+<link rel="alternate" hreflang="en" href="operations.html">
+<link rel="alternate" hreflang="zh-CN" href="zh-CN/operations.html">
+<link rel="alternate" hreflang="x-default" href="operations.html">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="assets/site.css">
 <script src="assets/highlight.min.js" defer></script>
@@ -16,8 +19,14 @@
   <a class="brand" href="./"><img src="logo.svg" alt="" width="24" height="24"> mqlite</a>
   <div class="links overflow-nav" data-overflow>
     <div class="overflow-primary"></div>
-    <a class="gh" href="https://github.com/mqlitehq/mqlite">GitHub ↗</a>
-    <details class="overflow-more has-current">
+    <details class="language-picker" data-language-picker name="header-menu">
+      <summary aria-label="Language: English" title="Choose language"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.25"><circle cx="8" cy="8" r="6"/><ellipse cx="8" cy="8" rx="2.5" ry="6"/><path d="M2 8h12"/></svg><span>EN</span></summary>
+      <ul class="language-options" aria-label="Available languages">
+<li><a data-language-switch href="operations.html" hreflang="en" lang="en" aria-current="true">English</a></li>
+<li><a data-language-switch href="zh-CN/operations.html" hreflang="zh-CN" lang="zh-CN">简体中文</a></li>
+      </ul>
+    </details>
+    <details class="overflow-more has-current" name="header-menu">
       <summary aria-label="More navigation links">More</summary>
       <div class="overflow-items">
     <a href="concepts.html">Concepts</a>
@@ -30,13 +39,13 @@
     <a href="observability-cloud.html">Cloud monitoring</a>
     <a href="operations.html" aria-current="page">Operations</a>
     <a href="agents.html">For AI agents</a>
+    <a class="gh" href="https://github.com/mqlitehq/mqlite">GitHub ↗</a>
       </div>
     </details>
   </div>
 </div></nav>
 <div class="wrap">
-  <div class="stamp">Source: <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/operations.md">mqlite main · docs/operations.md</a> — source v0.4.2 with unreleased changes. Latest supported release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.2">v0.4.2</a>.
-  These docs track main; use the linked release for published artifacts.</div>
+  <div class="stamp">Source: <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/operations.md">mqlite main · docs/operations.md</a> — source v0.4.2 with unreleased changes. Latest supported release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.2">v0.4.2</a>. These docs track main; use the linked release for published artifacts.</div>
   <main class="prose">
 <h1 id="production-operations">Production operations</h1>
 <p>This runbook follows <code>main</code>, including unreleased changes. The latest supported
@@ -221,8 +230,15 @@ work committed before shutdown began. Quiesce
 consumers before a planned broker replacement when even that in-flight boundary
 matters.</p>
 <p>Set the platform&#39;s outer termination grace longer than:</p>
+<figure class="concept-diagram explanatory-figure" data-explanatory-figure="shutdown-budget" aria-labelledby="explanatory-shutdown-budget-caption">
+<figcaption id="explanatory-shutdown-budget-caption">The outer termination grace must exceed this total</figcaption>
+<div class="explanatory-viewport" role="region" tabindex="0" aria-label="The outer termination grace must exceed this total" style="overflow-x:auto;padding:1rem;border:1px solid var(--line, #777);border-radius:8px"><p class="explanatory-formula" style="margin:0;line-height:2"><span style="display:inline-block">25s HTTP drain</span> <span>+</span> <span style="display:inline-block"><code>Engine.Close</code> duration</span> <span>+</span> <span style="display:inline-block">Log and process-exit margin</span></p></div>
+
+<details class="diagram-source"><summary>View the original English text figure</summary>
 <pre><code class="language-text">25s HTTP drain + Engine.Close duration + log and process-exit margin
 </code></pre>
+</details>
+</figure>
 <p><code>Engine.Close</code> deliberately waits for admitted work and has no unsafe timeout that
 releases ownership while a write may still be running. The outer platform deadline
 is therefore the final hard bound. The repository&#39;s <code>docker-compose.yml</code> sets
@@ -377,7 +393,7 @@ connections concurrently writing/checkpointing. A local MQLite database has one
 connection that may write or checkpoint plus one observation reader opened with
 SQLite <code>mode=ro</code> and <code>query_only</code>; the reader cannot write or checkpoint. That
 division and this backup restriction avoid the affected topology. See
-<a href="https://github.com/mqlitehq/mqlite/blob/main/docs/dependencies.md">dependency policy</a>.</p>
+<a href="dependencies.html">dependency policy</a>.</p>
 <h3 id="offline-directory-copy">Offline directory copy</h3>
 <p>Stop producers and consumers, then stop the broker and confirm it has exited.
 Copy the complete data directory while no process can change it; include the main

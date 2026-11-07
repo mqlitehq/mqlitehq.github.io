@@ -61,7 +61,7 @@ pre::-webkit-scrollbar-track, figure.fig::-webkit-scrollbar-track,
 .prose table::-webkit-scrollbar-track { background: transparent; }
 pre code { background: none; border: 0; padding: 0; color: var(--ink); }
 
-.wrap { max-width: 1020px; margin: 0 auto; padding: 0 24px; }
+.wrap { max-width: 1020px; margin: 0 auto; padding: 0 24px; overflow-wrap: anywhere; }
 
 /* ── top nav ── */
 nav.top {
@@ -174,13 +174,24 @@ footer.site .wrap { padding: 22px 24px; display: flex; flex-wrap: wrap; gap: 8px
 footer.site a { color: var(--muted); }
 footer.site a:hover { color: var(--ink2); }
 
-/* ── landing-page figure; generated docs preserve their canonical ASCII diagrams ── */
+/* ── landing-page illustration ── */
 figure.fig {
   background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
   padding: 18px 18px 10px; margin: 16px 0;
   overflow-x: auto; /* narrow screens scroll the figure instead of shrinking its labels */
 }
 figure.fig svg, figure.fig img { width: 100%; min-width: 640px; height: auto; display: block; }
+
+/* Reviewed concepts illustrations; wide diagrams scroll within their own region. */
+.concept-diagram { margin: 20px 0; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.concept-diagram figcaption { padding: 14px 18px; color: var(--ink); font-weight: 650; border-bottom: 1px solid var(--line); }
+.diagram-viewport { max-width: 100%; overflow-x: auto; scrollbar-width: thin; scrollbar-color: #555 var(--surface); }
+.diagram-viewport:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.prose .diagram-viewport img { display: block; width: 100%; max-width: none; min-width: 820px; height: auto; }
+.concept-diagram .diagram-hint { margin: 0; padding: 8px 18px; color: var(--muted); font-size: 12px; }
+.diagram-source { padding: 8px 18px 14px; border-top: 1px solid var(--line); }
+.diagram-source summary { cursor: pointer; color: var(--link); font-size: 13px; }
+.diagram-source pre { margin-bottom: 0; }
 
 /* ── code blocks: copy button · line-number gutter · highlight theme ── */
 .codebox { position: relative; margin: 14px 0; }
@@ -235,3 +246,38 @@ figure.fig svg, figure.fig img { width: 100%; min-width: 640px; height: auto; di
 }
 .expandbtn:hover { color: var(--ink); border-color: var(--accent); }
 .codebox.clip .coderow, .codebox.clip > pre { border-radius: 10px 10px 0 0; }
+
+/* Chinese prose uses local system fonts; no font download or layout dependency. */
+:lang(zh-CN) { --sans: system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif; }
+html:lang(zh-CN) .prose :is(h1,h2,h3,h4), html:lang(zh-CN) nav.top .links a,
+html:lang(zh-CN) .overflow-more summary, html:lang(zh-CN) .overflow-items a { font-family: var(--sans); }
+.language-picker { position: relative; flex: none; white-space: nowrap; }
+.language-picker summary {
+  display: flex; align-items: center; gap: 5px; list-style: none;
+  border: 1px solid var(--line); border-radius: 7px; padding: 5px 7px;
+  color: var(--ink2); font: 500 12px/1.5 var(--sans); cursor: pointer; user-select: none;
+}
+.language-picker summary::-webkit-details-marker { display: none; }
+.language-picker summary svg { flex: none; }
+.language-picker summary::after {
+  content: ""; width: 5px; height: 5px; margin: -3px 1px 0 2px;
+  border-right: 1px solid currentColor; border-bottom: 1px solid currentColor; transform: rotate(45deg);
+}
+.language-picker[open] summary, .language-picker summary:hover { color: var(--ink); border-color: var(--accent); }
+.language-options {
+  position: absolute; z-index: 21; top: calc(100% + 8px); right: 0;
+  list-style: none; min-width: 10rem; max-width: calc(100vw - 32px);
+  max-height: min(70vh, 420px); overflow-y: auto; padding: 5px;
+  border: 1px solid var(--grid); border-radius: 9px; background: var(--surface);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
+}
+nav.top .language-options a {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 8px 10px; border-radius: 4px; font: 500 13px/1.5 var(--sans); color: var(--ink2);
+}
+nav.top .language-options a:hover { background: var(--surface2); color: var(--ink); }
+nav.top .language-options a[aria-current="true"] { color: var(--accent); }
+.language-options a[aria-current="true"]::after {
+  content: ""; width: 5px; height: 9px; margin: -3px 3px 0 0;
+  border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg);
+}

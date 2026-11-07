@@ -1,0 +1,541 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>mqlite：存储于单个 SQLite 文件的消息队列</title>
+<meta name="description" content="Peek-Lock 投递、重试、DLQ、调度、去重、FIFO 分组和主题扇出：可嵌入 Go 进程，也可作为小型 broker 运行。纯 Go、无需 CGO，只需一个 SQLite 文件。">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/site.css">
+<link rel="stylesheet" href="../assets/demo.css">
+<script src="../assets/highlight.min.js" defer></script>
+<script src="../assets/site.js" defer></script>
+<script src="../assets/demo.js" defer></script>
+<style>
+  /* landing-only */
+  .hero { padding: 74px 0 30px; }
+  .hero h1 { font: 700 44px/1.15 var(--mono); color: var(--ink); letter-spacing: -0.03em; display: flex; align-items: center; gap: 16px; }
+  .hero h1 img { width: 52px; height: 52px; }
+  .hero .tag { margin: 18px 0 8px; font-size: 19px; color: var(--ink); max-width: 46em; }
+  .hero .tag b { color: var(--accent); font-weight: 650; }
+  .hero .sub { color: var(--ink2); max-width: 46em; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 20px 0 24px; }
+  .chip { font: 500 12px/1 var(--mono); color: var(--ink2); border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; }
+  .chip.v { color: var(--accent); border-color: rgba(250, 204, 21, 0.35); }
+  .cta { gap: 12px; }
+  .btn { font: 600 14px/1 var(--mono); border-radius: 9px; padding: 12px 18px; display: inline-block; }
+  .btn.primary { background: var(--accent); color: #111; }
+  .btn.primary:hover { text-decoration: none; filter: brightness(1.08); }
+  .btn.ghost { border: 1px solid var(--line); color: var(--ink); }
+  .btn.ghost:hover { text-decoration: none; border-color: var(--accent); }
+  .cta .overflow-more summary { font-size: 14px; line-height: 1; padding: 12px 18px; }
+
+  section.land { padding: 34px 0 6px; }
+
+  .pains { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  @media (max-width: 900px) { .pains { grid-template-columns: 1fr; } }
+  .pain { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px 16px; display: flex; flex-direction: column; }
+  .pain h3 { font: 650 14px/1.55 var(--mono); color: var(--ink); margin-bottom: 8px; }
+  .pain h3::before { content: "✗ "; color: #e66767; }
+  .pain .p { font-size: 12.8px; color: var(--muted); line-height: 1.65; flex: 1; }
+  .pain .a { border-top: 1px solid var(--grid); margin-top: 12px; padding-top: 12px; }
+  .pain .a b { display: block; font: 650 13.5px/1.5 var(--mono); color: var(--accent); margin-bottom: 4px; }
+  .pain .a p { font-size: 12.8px; color: var(--ink2); line-height: 1.65; }
+  section.land > h2 { font: 700 20px/1.4 var(--mono); color: var(--ink); margin-bottom: 4px; }
+  section.land > .lede { color: var(--muted); font-size: 13.5px; margin-bottom: 16px; }
+  section.land h3.subh { font: 650 13.5px/1.6 var(--mono); color: var(--ink2); margin: 26px 0 10px; }
+  section.land h3.subh a { color: var(--link); }
+  section.land :not(pre) > code { overflow-wrap: anywhere; }
+
+  .tabbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+  .tabbar button { font: 600 12.5px/1 var(--mono); color: var(--ink2); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 9px 14px; cursor: pointer; }
+  .tabbar button:hover { color: var(--ink); border-color: var(--accent); }
+  .tabbar button.on { color: #111; background: var(--accent); border-color: var(--accent); }
+  .tabpane { display: none; }
+  .tabpane.on { display: block; }
+  .tabpane > p { font-size: 13.4px; color: var(--ink2); margin: 0 0 10px; }
+
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .why { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; }
+  .why h3 { font: 650 14.5px/1.4 var(--mono); color: var(--ink); margin-bottom: 6px; }
+  .why h3 em { color: var(--accent); font-style: normal; margin-right: 8px; }
+  .why p { font-size: 13.4px; }
+  .why code { font-size: 0.85em; }
+
+  .split { display: grid; grid-template-columns: 5fr 6fr; gap: 22px; align-items: start; }
+  .split > * { min-width: 0; }
+  .split pre { margin: 0; }
+  @media (max-width: 900px) { .grid2, .split { grid-template-columns: 1fr; } .hero h1 { font-size: 34px; } }
+
+  .sem { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  @media (max-width: 900px) { .sem { grid-template-columns: 1fr 1fr; } }
+  .sem a { display: block; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 11px 14px; color: var(--ink2); font-size: 12.6px; line-height: 1.55; }
+  .sem a:hover { text-decoration: none; border-color: var(--accent); }
+  .sem b { display: block; font: 650 12.5px/1.5 var(--mono); color: var(--ink); }
+
+  .numbers { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 6px 18px; overflow-x: auto; }
+  .numbers table { width: 100%; border-collapse: collapse; font-size: 13.2px; }
+  .numbers th { color: var(--muted); font: 600 11.5px/1.5 var(--sans); letter-spacing: 0.4px; text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+  .numbers td { padding: 10px 12px; border-bottom: 1px solid var(--grid); vertical-align: top; }
+  .numbers tr:last-child td { border-bottom: none; }
+  .num { font-family: var(--mono); color: var(--ink); white-space: nowrap; }
+
+  .quote { border-left: 3px solid var(--accent); background: var(--surface); border-radius: 0 10px 10px 0; padding: 14px 18px; margin: 12px 0; font-size: 14px; }
+  .quote b { color: var(--ink); }
+</style>
+<link rel="alternate" hreflang="en" href="../index.html">
+<link rel="alternate" hreflang="zh-CN" href="index.html">
+<link rel="alternate" hreflang="x-default" href="../index.html">
+</head>
+<body>
+<nav class="top" aria-label="主导航"><div class="wrap">
+  <a class="brand" href="./" aria-current="page"><img src="../logo.svg" alt="" width="24" height="24"> mqlite</a>
+  <div class="links overflow-nav" data-overflow>
+    <div class="overflow-primary"></div>
+    <details class="language-picker" data-language-picker name="header-menu">
+      <summary aria-label="语言：简体中文" title="选择语言"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.25"><circle cx="8" cy="8" r="6"/><ellipse cx="8" cy="8" rx="2.5" ry="6"/><path d="M2 8h12"/></svg><span>中文</span></summary>
+      <ul class="language-options" aria-label="可用语言">
+<li><a data-language-switch href="../index.html" hreflang="en" lang="en">English</a></li>
+<li><a data-language-switch href="../zh-CN/index.html" hreflang="zh-CN" lang="zh-CN" aria-current="true">简体中文</a></li>
+      </ul>
+    </details>
+    <details class="overflow-more" name="header-menu">
+      <summary aria-label="更多导航链接">更多</summary>
+      <div class="overflow-items">
+    <a href="concepts.html">核心概念</a>
+    <a href="internals.html">内部原理</a>
+    <a href="api.html">API</a>
+    <a href="cli.html">CLI</a>
+    <a href="access-keys.html">访问密钥</a>
+    <a href="deployment.html">部署</a>
+    <a href="observability.html">可观测性</a>
+    <a href="observability-cloud.html">云端监控</a>
+    <a href="operations.html">运维</a>
+    <a href="agents.html">面向 AI 智能体</a>
+    <a class="gh" href="https://github.com/mqlitehq/mqlite">GitHub ↗</a>
+      </div>
+    </details>
+  </div>
+</div></nav>
+
+<div class="wrap">
+
+<div class="hero">
+  <h1><img src="../logo.svg" alt="mqlite 标志">mqlite</h1>
+  <p class="tag">消息队列，存储于 <b>单个 SQLite 文件</b>。</p>
+  <p class="sub">Peek-Lock 投递、重试、死信队列、调度、去重、FIFO 分组和主题扇出： <strong>嵌入 Go 进程</strong> 或运行成一个
+  <strong>小型 HTTP broker</strong>。同一引擎、同一文件，由你选择。</p>
+  <div class="chips">
+    <a class="chip v" href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.2">最新受支持版本 v0.4.2</a>
+    <span class="chip">main 文档 · 源版本 v0.4.2</span>
+    <span class="chip">纯 Go · 无需 CGO</span>
+    <span class="chip">一个二进制文件 · 一个数据文件</span>
+    <span class="chip">JSON over HTTP · 可用 curl 调用</span>
+    <span class="chip">本地 SQLite 或远程 Turso</span>
+    <span class="chip">MIT</span>
+  </div>
+  <p class="sub">本网站跟随源版本 v0.4.2，其中包含以下分支上的未发布改动： <code>main</code>。最新受支持版本为 v0.4.2；请使用
+  <a href="https://github.com/mqlitehq/mqlite/tree/v0.4.2/docs">v0.4.2 文档</a>
+  与已发布产物配套使用。v0.3.3 已撤回、不再受支持，且自 v0.4.0 起被标记为撤销版本；其公开产物仅供取证或兼容性检查，不得部署。</p>
+  <nav class="cta overflow-nav" data-overflow aria-label="开始使用">
+    <a class="btn primary" href="#quickstart">快速入门</a>
+    <div class="overflow-primary"></div>
+    <details class="overflow-more">
+      <summary aria-label="更多入门链接">更多</summary>
+      <div class="overflow-items">
+    <a class="btn ghost" href="#demo">观察一条消息</a>
+    <a class="btn ghost" href="concepts.html">阅读核心概念</a>
+    <a class="btn ghost" href="operations.html">生产环境运维</a>
+    <a class="btn ghost" href="access-keys.html">访问密钥</a>
+    <a class="btn ghost" href="agents.html">我是 AI 智能体</a>
+      </div>
+    </details>
+  </nav>
+</div>
+
+<section class="land" id="solves">
+  <h2># 解决哪些问题</h2>
+  <p class="lede">每个后端反复遇到的三个问题。</p>
+  <div class="pains">
+    <div class="pain">
+      <h3>“我需要后台任务，不想部署 broker。”</h3>
+      <div class="p">只为一个服务，却要运维集群、学习 SDK，还要付费。</div>
+      <div class="a"><b>→ 一个库，基于一个文件运行</b>
+        <p>无需额外基础设施。之后需要 HTTP？同一引擎可作为约 30 MB 的单个进程运行。</p>
+      </div>
+    </div>
+    <div class="pain">
+      <h3>“数据库写入与事件可能不一致。”</h3>
+      <div class="p">保存订单，再发布事件；两步之间崩溃就会使二者不一致。发件箱表和 CDC 又增加一层设施。</div>
+      <div class="a"><b>→ 两者使用同一事务</b>
+        <p>队列 <em>就是</em> 你的 SQLite 数据库：业务写入与入队一起原子提交。</p>
+      </div>
+    </div>
+    <div class="pain">
+      <h3>“手写的任务表变成了一个不可靠的 broker。”</h3>
+      <div class="p">一个 <code>status</code> 列和轮询循环，会逐渐衍生出未经测试的锁、重试与死信机制。</div>
+      <div class="a"><b>→ 直接提供完整语义</b>
+        <p>Peek-Lock、重试 → DLQ 与重新投递、FIFO 分组、延迟、去重：均由一致性测试集固定其行为。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="land">
+  <h2># 为什么选择 mqlite</h2>
+  <p class="lede">以下为设计优先级；发生冲突时，顺序靠前的优先。</p>
+  <div class="grid2">
+    <div class="why"><h3><em>1</em>轻量、可嵌入</h3>
+      <p>一个纯 Go 二进制文件，基于一个 SQLite 文件运行。无需 broker 集群、sidecar 或 CGO。可以先嵌入进程，再将同样的代码迁至 broker，或将存储迁至具有复制能力的
+      <a href="turso.html">Turso</a>，无需重写应用。</p></div>
+    <div class="why"><h3><em>2</em>并发下可靠</h3>
+      <p>默认 Peek-Lock 投递如实承诺 <strong>至少一次（at-least-once）</strong>；显式的接收即删除模式则选择在 broker 侧至多删除一次（at-most-once）。新的结算要求当前令牌和未过期租约；支持按配置启用发送去重、有界的接收与结算重放、单 broker 崩溃恢复，以及深积压下 O(log n) 的领取。即使消费者崩溃或锁到期，FIFO 组仍保持顺序。</p></div>
+    <div class="why"><h3><em>3</em>简单、无歧义的接口</h3>
+      <p>每项操作都是 <strong>携带 JSON 正文的单次 HTTP POST</strong> ；源版本 v0.4.2 有 29 条路由，设计上均可用 curl 调用，每种结算结果只有一个动词（<code>Complete</code> /
+      <code>Abandon</code> / <code>Reject</code> / <code>Defer</code>），没有别名。人易于使用，也方便
+      <a href="agents.html">智能体</a>。</p></div>
+    <div class="why"><h3><em>4</em>借鉴 Service Bus，保持自身设计</h3>
+      <p>Peek-Lock、 <code>group_id</code> 会话、DLQ 与重新投递、调度和重复检测，借鉴 Azure Service Bus 的熟悉机制，并采用符合 Go 习惯的形式；
+      <a href="concepts.html">完整模型已有文档说明</a> ，公开的兼容性不变量由以下测试集固定： <a href="conformance.html">一致性测试集</a>。</p></div>
+  </div>
+</section>
+
+<section class="land">
+  <h2># 核心特性：无需独立发件箱的事务发件箱</h2>
+  <div class="split">
+    <div>
+      <p>由于队列 <em>就是</em> 你的 SQLite 数据库，业务写入与其事件可以通过 <strong>同一事务提交</strong>。创建订单与初始队列事件一起成功或回滚，不存在双写竞态，无需 CDC 流水线或轮询器。</p>
+      <div class="quote"><b>仅限嵌入式模式：这种方式不依赖独立 broker 或 Postgres。</b>
+      外部 broker 无法参与 SQLite 事务，而基于 Postgres 的队列需要 Postgres。在这里，业务数据与队列共享同一文件。</div>
+    </div>
+    <pre><code class="language-go">package main
+
+import (
+    "context"
+    "log"
+
+    "github.com/mqlitehq/mqlite"
+    "github.com/mqlitehq/mqlite/engine"
+)
+
+func main() {
+    ctx := context.Background()
+    mq, err := mqlite.OpenEmbedded(ctx, "file:./app.db")
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer mq.Close()
+    if err := mq.CreateQueue(ctx, "order-events", mqlite.QueueConfig{}); err != nil {
+        log.Fatal(err)
+    }
+
+    err = mq.Tx(ctx, func(tx *engine.EngineTx) error {
+        // Demo schema; application migrations normally create this table.
+        if _, err := tx.SQL().ExecContext(tx.Context(),
+            `CREATE TABLE IF NOT EXISTS orders(id INTEGER PRIMARY KEY, total INTEGER NOT NULL)`); err != nil {
+            return err
+        }
+        // 1) the business write, on the SAME transaction. Use tx.Context(), not the
+        //    ctx you passed to Tx — a statement interrupted mid-transaction wedges
+        //    a local SQLite database.
+        if _, err := tx.SQL().ExecContext(tx.Context(),
+            `INSERT INTO orders(id, total) VALUES(?, ?)`,
+            42, 1999); err != nil {
+            return err // rollback: nothing enqueued
+        }
+        // 2) enqueue — commits atomically with it:
+        _, err := tx.SendOne("order-events",
+            engine.OutMessage{Body: []byte(`{"order":42}`)})
+        return err
+    })
+    if err != nil {
+        log.Fatal(err)
+    }
+    // A nil result confirms that the order and its event committed together.
+}</code></pre>
+  <p class="sub">示例使用一个全新的 <code>app.db</code> ，并仅插入一次订单 42。原子性保证业务写入与入队一起提交；它不保证外部副作用恰好发生一次，也不能证明超时的远程提交已失败。重试前请先核对不确定结果。参见 <a href="internals.html#8--the-payoff-the-queue-that-lives-inside-your-transaction">事务入队</a>。</p>
+  </div>
+</section>
+
+<section class="land" id="how">
+  <h2># 工作原理</h2>
+  <p class="lede">两类投递目标，同一存储模型：主题不存储消息；负责存储、供消费并可能产生死信的，始终是队列。</p>
+  <section class="product-demo" id="demo" data-demo data-step="0" aria-labelledby="demo-title">
+    <header class="demo-head">
+      <div>
+        <span class="demo-kicker">契约动画 · 9 秒</span>
+        <h3 id="demo-title">一次发布 · 两次独立投递</h3>
+      </div>
+      <div class="demo-controls" data-demo-controls>
+        <span class="demo-progress" data-demo-progress>第 1 / 8 步</span>
+        <button type="button" data-demo-toggle>播放动画</button>
+        <button type="button" data-demo-replay>重播</button>
+      </div>
+    </header>
+
+    <div class="demo-visual" aria-hidden="true">
+      <div class="demo-graph">
+        <div class="demo-node producer" data-demo-node="producer">
+          <span class="demo-node-kind">发布者（publisher）</span>
+          <strong>order.created</strong>
+          <small>message_id order-42</small>
+        </div>
+        <div class="demo-edge" data-demo-edge="publish"><span>发布（Publish）</span></div>
+        <div class="demo-node topic" data-demo-node="topic">
+          <span class="demo-node-kind">隐式主题（implicit topic）</span>
+          <strong>events</strong>
+          <small>仅路由 · 存储 0 条</small>
+        </div>
+        <div class="demo-branch" data-demo-edge="fanout"><span>扇出（fan-out）</span></div>
+        <div class="demo-stack queues">
+          <div class="demo-node queue" data-demo-node="audit-queue">
+            <span class="demo-node-kind">订阅队列（subscription queue）</span>
+            <strong>audit</strong>
+            <small data-demo-value="audit-state">等待消息副本</small>
+          </div>
+          <div class="demo-node queue" data-demo-node="fulfillment-queue">
+            <span class="demo-node-kind">订阅队列（subscription queue）</span>
+            <strong>fulfillment</strong>
+            <small data-demo-value="fulfillment-state">等待消息副本</small>
+          </div>
+        </div>
+        <div class="demo-edge-stack">
+          <div class="demo-edge" data-demo-edge="audit-claim"><span>接收（Receive）</span></div>
+          <div class="demo-edge" data-demo-edge="fulfillment-claim"><span>接收（Receive）</span></div>
+        </div>
+        <div class="demo-stack consumers">
+          <div class="demo-node consumer" data-demo-node="audit-consumer">
+            <span class="demo-node-kind">audit 消费者（worker）</span>
+            <strong data-demo-value="audit-action">等待中</strong>
+            <small>独立结算（settlement）</small>
+          </div>
+          <div class="demo-node consumer" data-demo-node="fulfillment-consumer">
+            <span class="demo-node-kind">fulfillment 消费者（worker）</span>
+            <strong data-demo-value="fulfillment-action">等待中</strong>
+            <small>独立结算（settlement）</small>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="demo-caption">
+      <span data-demo-step-label>01 · 发布（Publish）</span>
+      <p data-demo-caption>发布者（publisher）将 order.created 发布至隐式主题（implicit topic）events。</p>
+    </div>
+
+    <ol class="demo-transcript">
+      <li data-demo-step="0"><b>01 · 发布（Publish）</b><span>发布者（publisher）发布 <code>order.created</code> ，目标为隐式主题（implicit topic） <code>events</code> 。</span></li>
+      <li data-demo-step="1"><b>02 · 路由</b><span>主题（topic）不存储消息。两个订阅（subscription）的过滤条件（filter）均匹配该消息。</span></li>
+      <li data-demo-step="2"><b>03 · 复制</b><span><code>audit</code> 和 <code>fulfillment</code> 各获得独立的支撑队列（backing queue）副本：消息 ID 相同，序号不同。</span></li>
+      <li data-demo-step="3"><b>04 · 领取（Receive）</b><span>每次 <code>Receive</code> 将对应副本从就绪（active）改为已锁定（locked），并将 <code>delivery_count</code> 增加到 1。</span></li>
+      <li data-demo-step="4"><b>05 · 分别结算</b><span><code>audit</code> 完成（Complete），只删除自己的消息副本，订阅仍保留。未达到投递上限时， <code>fulfillment</code> 带延迟放弃（Abandon）消息，将自己的副本由已锁定（locked）移至待调度（scheduled），不增加投递计数。</span></li>
+      <li data-demo-step="5"><b>06 · 到期可用</b><span>调度器将延迟副本恢复为就绪（active），其投递计数仍为 1。</span></li>
+      <li data-demo-step="6"><b>07 · 重试</b><span>下一次 <code>Receive</code> 将副本置为已锁定（locked），并将 <code>delivery_count</code> 增加到 2。</span></li>
+      <li data-demo-step="7"><b>08 · 完成（Complete）</b><span>重试完成（Complete）后，这份消息副本也被删除；两个订阅都仍保留。投递为至少一次（at-least-once），因此消息处理函数（handler）必须保持幂等。</span></li>
+    </ol>
+
+    <noscript>
+      <figure class="fig"><img src="../assets/zh-CN/fig-overview.svg" alt="mqlite 模型：发布（Publish）将独立副本路由到订阅的支撑队列；接收（Receive）锁定一个副本，结算（settlement）将其删除或重新调度。" style="width:100%;display:block"></figure>
+    </noscript>
+    <p class="demo-note">动画时序仅作演示，不代表 broker 延迟。即使达到投递次数上限，最后一次普通领取仍可续锁和完成。只有显式拒绝，或最后这次锁被放弃、到期或显式回收，消息才进入 DLQ。未发布的 main 在普通打开时保留未过期租约；v0.4.2 启动时仍会回收这些租约。参见 <a href="operations.html#graceful-broker-shutdown">关停与重启边界</a>。</p>
+  </section>
+  <h3 class="subh">此处描述的源版本由一致性测试集（TCK）覆盖，详情见 <a href="concepts.html">核心概念</a>；完整的构建原理（schema、锁、令牌隔离、恢复）见 <a href="internals.html">内部原理</a></h3>
+  <div class="sem">
+    <a href="concepts.html"><b>Peek-Lock 投递</b>领取增加计数；续锁延长同一次尝试；到期前结算</a>
+    <a href="concepts.html"><b>重试 → DLQ</b>最后一次普通 Peek-Lock 尝试仍可正常使用；只有这次尝试失败才转为死信</a>
+    <a href="concepts.html"><b>FIFO 分组</b>standard / group_fifo / strict_fifo；跨崩溃、锁到期和延迟重试仍保持顺序</a>
+    <a href="concepts.html"><b>主题与订阅生命周期</b>过滤扇出 · 分页清单 · 默认仅空资源可删，或显式强制删除 · 固定 TTL 兜底</a>
+    <a href="api.html#deletequeue"><b>安全删除资源</b>队列与订阅默认仅允许删除空资源；显式强制删除会丢弃保留状态；清理期间仍保留名称</a>
+    <a href="concepts.html"><b>调度与 TTL</b>延后投递；取消尚未投递的计划消息；TTL 从首次可见时开始计算，且受队列上限约束</a>
+    <a href="concepts.html"><b>重复检测</b>按需启用 message_id/正文去重窗口，合并重复发送；正文冲突明确报错（409）</a>
+    <a href="concepts.html"><b>延后处理（Defer）</b>暂存消息，再按序号取回</a>
+    <a href="observability.html"><b>内置运维能力</b>/ui 控制台 · 统一 Observe 与 /metrics · 26 条 CLI 命令 · 22 个 MCP 工具 · Grafana 入门套件</a>
+  </div>
+</section>
+
+<section class="land" id="honest">
+  <h2># 真实边界</h2>
+  <p class="lede">这些是已公布的特定工作负载下的历史测量结果；规划生产容量前，请用当前版本、实际消息大小和并发量，在启用监控后重新测量。方法与限制见： <a href="benchmark.html">docs/benchmark.md</a>。历史 Turso 环境与对照结果见： <a href="https://github.com/mqlitehq/mqlite/pull/67">PR #67</a>。</p>
+  <div class="numbers"><table>
+    <tr><th>测试配置</th><th>实测结果</th><th>如何理解</th></tr>
+    <tr><td>本地文件数据库，12 核机器</td>
+        <td class="num">单条 15,926–17,963 条/秒 · 批量 35,146 条/秒</td>
+        <td>本地历史结果；规划容量前应重跑工作负载</td></tr>
+    <tr><td>1 vCPU / 256 MB 云主机，嵌入式引擎</td>
+        <td class="num">批量 6.0–6.7 千条/秒</td>
+        <td>该配置下，批处理摊薄了提交成本</td></tr>
+    <tr><td>远程 Turso（同地域部署）</td>
+        <td class="num">单条持久化发送的 p50 约 45 ms</td>
+        <td>同地域历史测试；该路径主要受远程提交延迟影响</td></tr>
+    <tr><td>内存 / 磁盘</td>
+        <td class="num">RSS 峰值 27–34 MB · 释放的数据库页可复用</td>
+        <td>文件空间回收是渐进的；磁盘需按积压峰值规划，并实测自己的工作负载</td></tr>
+  </table></div>
+  <h3 class="subh">何时不应使用 mqlite：它是按单写入者、单节点队列设计的</h3>
+  <div class="numbers"><table>
+    <tr><th>如果你需要……</th><th>更合适的选择</th></tr>
+    <tr><td>日志流、历史回放、面向历史记录的消费组</td><td>Kafka · Redpanda · NATS JetStream</td></tr>
+    <tr><td>具备集群与高可用能力的多节点 broker</td><td>NATS · RabbitMQ</td></tr>
+    <tr><td>已有 Postgres 内的队列</td><td>pgmq · River</td></tr>
+    <tr><td>单节点持续达到每秒十万条以上</td><td>不适合；单写入者模型是设计选择，而非缺陷</td></tr>
+    <tr><td>外部副作用恰好一次（exactly-once）</td><td>默认 Peek-Lock 投递为至少一次；handler 应保持幂等</td></tr>
+  </table></div>
+</section>
+
+<section class="land" id="references">
+  <h2># 深入参考</h2>
+  <p class="lede">概览背后的边界、依据与可执行契约：从同一份源 Markdown 渲染，使人和机器以两种语言读到相同事实。</p>
+  <div class="sem">
+    <a href="turso.html"><b>SQLite ↔ Turso</b>业务语义相同，延迟、可用性与存储运维不同</a>
+    <a href="retention.html"><b>保留策略</b>授权删除、有界清理与磁盘回收</a>
+    <a href="benchmark.html"><b>基准测试依据</b>可复现的方法、实测数据及这些数据无法证明的事项</a>
+    <a href="conformance.html"><b>一致性测试集（TCK）</b>公开不变量及验证它们的对应测试</a>
+    <a href="dependencies.html"><b>依赖策略</b>Go 1.21 兼容性、有意固定的依赖版本与安全扫描</a>
+    <a href="llms-full.txt"><b>完整机器可读文档包</b>所有参考与专题文档合为一份带版本标识的 Markdown 文件</a>
+  </div>
+</section>
+
+<section class="land" id="quickstart">
+  <h2># 快速入门</h2>
+  <p class="lede">三种使用方式，驱动同一引擎。以下示例固定使用受支持的 v0.4.2；参见 <a href="deployment.html">部署</a> 了解安装与运行时设置。</p>
+  <p>只连接 broker 的 Go 应用？官方的
+  <a href="https://github.com/mqlitehq/mqlite-go">MQLite Go 远程客户端（<code>mqlite-go</code>）</a> 仅依赖标准库，源码最低要求为 Go 1.13： <code>go get github.com/mqlitehq/mqlite-go@v0.1.1</code>。若需要嵌入式队列、事务发件箱、观测功能或托管访问密钥管理，请使用下方的完整 SDK。</p>
+  <div class="tabs">
+    <div class="tabbar">
+      <button class="on" data-t="go">嵌入式 Go</button>
+      <button data-t="broker">Broker + curl</button>
+      <button data-t="docker">Docker</button>
+    </div>
+    <div class="tabpane on" data-t="go">
+      <p>完全无需服务端：引入一个包，使用一个文件，队列就运行在你的进程内。 <code>go get github.com/mqlitehq/mqlite@v0.4.2</code> （Go ≥ 1.21）。</p>
+      <pre><code class="language-go">package main
+
+import (
+    "context"
+    "fmt"
+    "log"
+    "time"
+
+    "github.com/mqlitehq/mqlite"
+)
+
+func main() {
+    ctx := context.Background()
+    mq, err := mqlite.OpenEmbedded(ctx, "file:./mq.db")
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer mq.Close()
+
+    if err := mq.CreateQueue(ctx, "orders", mqlite.QueueConfig{
+        LockDuration:     30 * time.Second,
+        MaxDeliveryCount: 5,
+    }); err != nil {
+        log.Fatal(err)
+    }
+
+    // produce
+    if _, err := mq.SendOne(ctx, "orders", mqlite.OutMessage{Body: []byte(`{"id":42}`)}); err != nil {
+        log.Fatal(err)
+    }
+
+    // consume (Peek-Lock): receive, do work, then settle
+    msgs, err := mq.Receive(ctx, "orders", mqlite.RecvOpts{Max: 10, Wait: 5 * time.Second})
+    if err != nil {
+        log.Fatal(err)
+    }
+    for _, m := range msgs {
+        fmt.Printf("got: %s\n", m.Body)
+        // Abandon retries below max (DLQ at max); Reject sends directly to DLQ.
+        if err := m.Complete(ctx); err != nil {
+            log.Fatal(err)
+        }
+    }
+}</code></pre>
+    </div>
+    <div class="tabpane" data-t="broker">
+      <p>一个小进程，默认安全：若未配置令牌，它会生成 <code>mqk_…</code> 令牌并打印。每项操作都是一次 POST。</p>
+      <p>受支持的 v0.4.2 使用端口 6754 和 schema 令牌 7。它是基于 v0.4.1 的同 schema 补丁版本，因此此次升级无需重建数据库。对于 v0.3.x 的 schema-5 数据库，仍需保留配套的旧二进制与数据库，并让 v0.4.2 使用全新数据库启动。v0.3.3 已撤回且不再受支持；公开产物仅供取证或兼容性检查，不得部署。</p>
+      <pre><code class="language-bash">go install github.com/mqlitehq/mqlite/cmd/mqlite@v0.4.2   # default port 6754
+
+# start the broker on :6754 with a known token, in the background
+MQLITE_TOKENS=mqk_dev MQLITE_DB=file:./mq.db mqlite serve &
+export TOKEN=mqk_dev        # (omit MQLITE_TOKENS to have the broker generate + print one)
+
+# create a queue, send, receive — curl-able by construction
+curl -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+     --data '{"name":"orders","config":{}}' \
+     localhost:6754/mqlite.v1.AdminService/CreateQueue
+
+curl -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+     --data "{\"queue\":\"orders\",\"messages\":[{\"body\":\"$(printf hi | base64)\"}]}" \
+     localhost:6754/mqlite.v1.QueueService/Send
+
+curl -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+     --data '{"queue":"orders","max_messages":1,"wait_time_ms":5000}' \
+     localhost:6754/mqlite.v1.QueueService/Receive</code></pre>
+    </div>
+    <div class="tabpane" data-t="docker">
+      <p>命名卷会在容器替换后保留队列数据。管理控制台位于 <code>/ui</code>；在 v0.4.2 中，用浏览器打开根 URL 会进入该控制台，而 curl 和 JSON 客户端仍收到发现卡片。控制台按主题分组显示订阅，并以 broker 时钟展示永久或固定生命周期；每五秒的循环仅调用 <code>Observe</code>；生命周期清单则在连接、显式刷新和配置变更时更新。</p>
+      <p>此示例固定使用受支持的 v0.4.2 镜像。生产配置与恢复请遵循 <a href="deployment.html">部署</a> 和 <a href="operations.html">运维手册</a>。</p>
+      <pre><code class="language-bash">docker run -d --name mqlite -p 127.0.0.1:6754:6754 \
+  -e MQLITE_TOKENS=mqk_dev \
+  -e MQLITE_DB=file:/data/mq.db \
+  -v mqdata:/data \
+  ghcr.io/mqlitehq/mqlite:0.4.2
+
+curl http://localhost:6754/          # discovery card (no auth)
+# opening that root URL in a browser enters the admin console</code></pre>
+    </div>
+  </div>
+</section>
+
+<section class="land" id="access-keys">
+  <h2># 每个应用一把密钥</h2>
+  <p class="lede"><strong>自 v0.3.1 起提供。</strong> 保留一个配置中的管理员令牌，并在运行时为各应用签发独立密钥，无需重启 broker。</p>
+  <div class="sem">
+    <a href="access-keys.html#choose-a-permission"><b>发送（Send）</b>发送、调度与取消计划消息</a>
+    <a href="access-keys.html#choose-a-permission"><b>消费（Listen）</b>接收、结算、续锁、浏览及读取队列统计</a>
+    <a href="access-keys.html#choose-a-permission"><b>管理（Manage）</b>全部应用权限、管理能力，以及密钥签发与撤销</a>
+    <a href="access-keys.html#rotate-revoke-and-recover"><b>无需重启即可轮换</b>创建替代密钥，切换应用，再撤销旧密钥</a>
+  </div>
+  <p>权限作用于整个 broker。令牌只显示一次，数据库仅保存其摘要。可通过 Go SDK、HTTP API、CLI、控制台或 MCP 管理密钥。</p>
+  <p><a href="access-keys.html">阅读访问密钥指南 →</a></p>
+</section>
+
+<section class="land" id="operations">
+  <h2># 生产环境运行</h2>
+  <p class="lede">从一个 broker 和持久化的本地 SQLite 文件开始。投产前选择耐久性设置，并演练恢复。</p>
+  <p>Prometheus 采集默认关闭。启用 <code>--metrics</code> 或 <code>MQLITE_METRICS=on</code> 以提供经过鉴权的 <code>/metrics</code> ；它位于 API 端口，并为采集器配置独立的 <code>MQLITE_MONITOR_TOKENS</code> 凭据。采集应置于私有网络；若 API 有公网入口，请在该入口禁止访问 <code>/metrics</code> 。v0.4.0 删除了已弃用的 <code>mqlite_queue_total</code> 和 <code>mqlite_queue_oldest_message_age_ms</code> 别名；请使用 <code>mqlite_queue_retained_messages</code> 和 <code>mqlite_queue_oldest_message_age_seconds</code>。入门套件包含 Prometheus、Grafana、仪表盘和验证场景。</p>
+  <div class="sem">
+    <a href="operations.html"><b>运维手册</b>生产边界、备份、恢复、升级与回退</a>
+    <a href="deployment.html"><b>部署</b>安装、单 broker、持久存储、鉴权与 TLS</a>
+    <a href="observability.html"><b>可观测性</b>SDK、CLI、MCP、控制台与 Prometheus 共用一套指标契约（自 v0.3.2 起）</a>
+    <a href="observability-cloud.html"><b>云端监控</b>为已有 Grafana、Fly.io、阿里云、Azure 和 Kubernetes 提供经过鉴权的采集</a>
+    <a href="conformance.html"><b>一致性规范</b>投递保证、恢复契约及其验证测试</a>
+  </div>
+</section>
+
+<section class="land">
+  <h2># 同样为 AI 智能体设计</h2>
+  <div class="quote">
+    API 的设计便于模型准确使用：每项操作一次 POST，每种结果一个动词，在以下地址提供机器可读的发现卡片： <code>GET /</code>；还提供一个
+    <b>MCP 服务端</b> （<code>mqlite-mcp</code>，v0.4.2 中提供 22 个工具），以及
+    <a href="llms.txt"><code>llms.txt</code></a> / <a href="llms-full.txt"><code>llms-full.txt</code></a>
+    供任何阅读网页的工具使用。可直接粘贴的提示词与配置见：
+    <a href="agents.html"><b>面向 AI 智能体 →</b></a>
+  </div>
+</section>
+
+</div>
+
+<footer class="site"><div class="wrap">
+  <span>MIT © MQLite 作者</span>
+  <a href="https://github.com/mqlitehq/mqlite">GitHub</a>
+  <a href="https://github.com/mqlitehq/mqlite-go">Go 远程客户端</a>
+  <a href="https://github.com/mqlitehq/mqlite/releases">发布版本</a>
+  <a href="https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md">变更日志</a>
+  <a href="llms.txt">llms.txt</a>
+</div></footer>
+</body>
+</html>

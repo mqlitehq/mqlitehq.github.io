@@ -1,0 +1,66 @@
+<svg lang="zh-CN" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 580" role="img" aria-labelledby="filter-title filter-description" font-family="system-ui, -apple-system, Segoe UI, sans-serif">
+  <title id="filter-title">订阅过滤器（filter）：Subscribe 时编译，Publish 时求值</title>
+  <desc id="filter-description">Subscribe 编译订阅过滤条件并进行类型检查，缓存有效程序。无效表达式立即被拒绝，返回 HTTP 400 invalid_argument。发布消息时，针对每个订阅执行已缓存的程序；结果为 true 时，将副本路由到该订阅的支撑队列（backing queue）；结果为 false 时，不为该订阅创建副本。</desc>
+  <defs><marker id="filter-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 10 5 0 10Z" fill="#b9b8ad"/></marker></defs>
+  <rect width="1000" height="580" rx="12" fill="#141413"/>
+  <text x="28" y="40" fill="#facc15" font-size="20" font-weight="650">1 · 订阅时编译过滤条件</text>
+  <g data-node="subscribe">
+    <rect x="28" y="86" width="168" height="70" rx="9" fill="#242422" stroke="#6d6d63" stroke-width="1.5"/>
+    <text x="112" y="130" text-anchor="middle" fill="#f2f1ea" font-size="19" font-weight="600" style="font-size:18px">订阅 Subscribe</text>
+  </g>
+  <g data-edge="subscribe-compile"><path d="M196 121H282" fill="none" stroke="#b9b8ad" stroke-width="2" marker-end="url(#filter-arrow)"/></g>
+  <g data-node="compile-and-type-check">
+    <rect x="284" y="86" width="266" height="70" rx="9" fill="#302c17" stroke="#facc15" stroke-width="1.5"/>
+    <text x="417" y="115" text-anchor="middle" fill="#f2f1ea" font-size="18" font-weight="600">编译（compile）</text>
+    <text x="417" y="142" text-anchor="middle" fill="#b9b8ad" font-size="17">+ 类型检查（type-check）</text>
+  </g>
+  <g data-edge="cache-valid-program">
+    <path d="M550 121H640" fill="none" stroke="#b9b8ad" stroke-width="2" marker-end="url(#filter-arrow)"/>
+    <text x="595" y="108" text-anchor="middle" fill="#34d399" font-size="15">有效</text>
+  </g>
+  <g data-node="cached-program">
+    <rect x="642" y="86" width="326" height="70" rx="9" fill="#173028" stroke="#34d399" stroke-width="1.5"/>
+    <text x="805" y="130" text-anchor="middle" fill="#f2f1ea" font-size="19" font-weight="600">缓存编译结果</text>
+  </g>
+  <g data-edge="reject-invalid-expression">
+    <path d="M417 156V196" fill="none" stroke="#b9b8ad" stroke-width="2" marker-end="url(#filter-arrow)"/>
+    <text x="432" y="184" fill="#e88787" font-size="15">无效</text>
+  </g>
+  <g data-node="invalid-expression">
+    <rect x="298" y="198" width="238" height="58" rx="9" fill="#352322" stroke="#e88787" stroke-width="1.5"/>
+    <text x="417" y="234" text-anchor="middle" fill="#f2f1ea" font-size="17" font-weight="600" style="font-size:14px">400 参数无效 invalid_argument</text>
+  </g>
+  <text x="805" y="198" text-anchor="middle" fill="#b9b8ad" font-size="15">编译后缓存，后续消息复用。</text>
+  <path d="M28 282H968" stroke="#454540" stroke-width="1"/>
+  <text x="28" y="318" fill="#facc15" font-size="20" font-weight="650">2 · 为每条发布消息执行过滤</text>
+  <g data-node="publish">
+    <rect x="28" y="356" width="168" height="70" rx="9" fill="#242422" stroke="#6d6d63" stroke-width="1.5"/>
+    <text x="112" y="400" text-anchor="middle" fill="#f2f1ea" font-size="19" font-weight="600" style="font-size:18px">发布 Publish</text>
+  </g>
+  <g data-edge="publish-evaluate"><path d="M196 391H282" fill="none" stroke="#b9b8ad" stroke-width="2" marker-end="url(#filter-arrow)"/></g>
+  <g data-node="evaluate-per-subscription">
+    <rect x="284" y="338" width="334" height="106" rx="9" fill="#302c17" stroke="#facc15" stroke-width="1.5"/>
+    <text x="451" y="368" text-anchor="middle" fill="#b9b8ad" font-size="17">逐个订阅（subscription）</text>
+    <text x="451" y="401" text-anchor="middle" fill="#f2f1ea" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="17" font-weight="600">执行 program(message)</text>
+    <text x="451" y="428" text-anchor="middle" fill="#b9b8ad" font-size="15">使用已缓存的程序</text>
+  </g>
+  <g data-edge="route-when-true">
+    <path d="M618 370H736" fill="none" stroke="#b9b8ad" stroke-width="2" marker-end="url(#filter-arrow)"/>
+    <text x="677" y="357" text-anchor="middle" fill="#34d399" font-size="15">匹配（true）</text>
+  </g>
+  <g data-node="matching-queue-copy">
+    <rect x="738" y="338" width="230" height="66" rx="9" fill="#173028" stroke="#34d399" stroke-width="1.5"/>
+    <text x="853" y="364" text-anchor="middle" fill="#f2f1ea" font-size="17" font-weight="600">为该订阅复制消息</text>
+    <text x="853" y="389" text-anchor="middle" fill="#f2f1ea" font-size="17" font-weight="600" style="font-size:15px">支撑队列（backing queue）</text>
+  </g>
+  <g data-edge="no-copy-when-false">
+    <path d="M618 410H674V489H736" fill="none" stroke="#b9b8ad" stroke-width="2" marker-end="url(#filter-arrow)"/>
+    <text x="687" y="450" fill="#e88787" font-size="15">不匹配（false）</text>
+  </g>
+  <g data-node="nonmatching-subscription">
+    <rect x="738" y="456" width="230" height="66" rx="9" fill="#352322" stroke="#e88787" stroke-width="1.5"/>
+    <text x="853" y="482" text-anchor="middle" fill="#f2f1ea" font-size="17" font-weight="600">该订阅（subscription）</text>
+    <text x="853" y="507" text-anchor="middle" fill="#f2f1ea" font-size="17" font-weight="600">不获得消息副本</text>
+  </g>
+  <text x="28" y="560" fill="#b9b8ad" font-size="15">空过滤条件（filter）匹配所有消息。</text>
+</svg>

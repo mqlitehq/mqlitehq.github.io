@@ -6,6 +6,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Internals · mqlite</title>
 <meta name="description" content="SQLite, the single-writer model, fencing tokens, indexes, and crash recovery.">
+<link rel="alternate" hreflang="en" href="internals.html">
+<link rel="alternate" hreflang="zh-CN" href="zh-CN/internals.html">
+<link rel="alternate" hreflang="x-default" href="internals.html">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="assets/site.css">
 <script src="assets/highlight.min.js" defer></script>
@@ -16,8 +19,14 @@
   <a class="brand" href="./"><img src="logo.svg" alt="" width="24" height="24"> mqlite</a>
   <div class="links overflow-nav" data-overflow>
     <div class="overflow-primary"></div>
-    <a class="gh" href="https://github.com/mqlitehq/mqlite">GitHub ↗</a>
-    <details class="overflow-more has-current">
+    <details class="language-picker" data-language-picker name="header-menu">
+      <summary aria-label="Language: English" title="Choose language"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.25"><circle cx="8" cy="8" r="6"/><ellipse cx="8" cy="8" rx="2.5" ry="6"/><path d="M2 8h12"/></svg><span>EN</span></summary>
+      <ul class="language-options" aria-label="Available languages">
+<li><a data-language-switch href="internals.html" hreflang="en" lang="en" aria-current="true">English</a></li>
+<li><a data-language-switch href="zh-CN/internals.html" hreflang="zh-CN" lang="zh-CN">简体中文</a></li>
+      </ul>
+    </details>
+    <details class="overflow-more has-current" name="header-menu">
       <summary aria-label="More navigation links">More</summary>
       <div class="overflow-items">
     <a href="concepts.html">Concepts</a>
@@ -30,13 +39,13 @@
     <a href="observability-cloud.html">Cloud monitoring</a>
     <a href="operations.html">Operations</a>
     <a href="agents.html">For AI agents</a>
+    <a class="gh" href="https://github.com/mqlitehq/mqlite">GitHub ↗</a>
       </div>
     </details>
   </div>
 </div></nav>
 <div class="wrap">
-  <div class="stamp">Source: <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/internals.md">mqlite main · docs/internals.md</a> — source v0.4.2 with unreleased changes. Latest supported release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.2">v0.4.2</a>.
-  These docs track main; use the linked release for published artifacts.</div>
+  <div class="stamp">Source: <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/internals.md">mqlite main · docs/internals.md</a> — source v0.4.2 with unreleased changes. Latest supported release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.2">v0.4.2</a>. These docs track main; use the linked release for published artifacts.</div>
   <main class="prose">
 <h1 id="how-mqlite-works--building-a-reliable-queue-on-one-sqlite-file">How mqlite works — building a reliable queue on one SQLite file</h1>
 <p>This document follows <code>main</code>, including unreleased changes. For an installed
@@ -47,7 +56,7 @@ see <a href="https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md#unrelease
 decision by decision — and <em>why</em> this construction yields a queue you can trust.
 Nothing here is required to use mqlite; all of it helps you predict what it will
 do. Companion reading: <a href="concepts.html">concepts.md</a> (the model from the outside),
-<a href="https://github.com/mqlitehq/mqlite/blob/main/docs/conformance.md">conformance.md</a> (every promise below, pinned as a test).</p>
+<a href="conformance.html">conformance.md</a> (every promise below, pinned as a test).</p>
 </blockquote>
 <hr>
 <h2 id="1--the-bet-a-queue-is-rows-plus-discipline">1 · The bet: a queue is rows plus discipline</h2>
@@ -471,11 +480,11 @@ outbox pattern with no outbox table, no poller, and no CDC pipeline.</p>
 <code>ctx.Err()</code> between business statements and return promptly when it is cancelled.
 Cancellation observed before commit rolls back both the business writes and the enqueue,
 even if the callback returns nil; it cannot stop a callback that keeps running. See the
-<a href="https://github.com/mqlitehq/mqlite/blob/main/docs/conformance.md#13--cancellation-context-deadlines">cancellation contract</a>.</p>
+<a href="conformance.html#13--cancellation-context-deadlines">cancellation contract</a>.</p>
 <h2 id="9--what-keeps-it-true">9 · What keeps it true</h2>
 <p>Every claim in this document is enforced by something that fails loudly:</p>
 <ul>
-<li><strong>The conformance suite</strong> (<a href="https://github.com/mqlitehq/mqlite/blob/main/docs/conformance.md">conformance.md</a>) — the invariants
+<li><strong>The conformance suite</strong> (<a href="conformance.html">conformance.md</a>) — the invariants
 (fencing, ordering across lock expiry, recovery bounds, idempotent replays,
 namespace disjointness…) each cite the hermetic test that pins them; CI runs
 them with the race detector on three OSes.</li>
@@ -596,7 +605,7 @@ protects. A store that can&#39;t put the receipt in the same commit turns
 guard</strong> (§3&#39;s advisory lock) — or a documented equivalent for each.</li>
 </ul>
 <p><strong>The good news: your migration test suite already exists.</strong> The
-<a href="https://github.com/mqlitehq/mqlite/blob/main/docs/conformance.md">conformance TCK</a> is written against behavior, not against
+<a href="conformance.html">conformance TCK</a> is written against behavior, not against
 SQLite — a store that passes it (with the race detector on) has proven G1–G7.
 Two things do <em>not</em> port and must be re-invented per engine: the plan-pinning
 tests (§5&#39;s <code>EXPLAIN QUERY PLAN</code> assertions are SQLite&#39;s dialect — you owe your
@@ -627,7 +636,7 @@ with the conformance suite as the judge.</p>
 <hr>
 <p><em>Want the view from outside? <a href="concepts.html">concepts.md</a>. The wire-level details?
 <a href="api.html">api-reference.md</a>. The receipts for the performance claims?
-<a href="https://github.com/mqlitehq/mqlite/blob/main/docs/benchmark.md">benchmark.md</a>.</em></p>
+<a href="benchmark.html">benchmark.md</a>.</em></p>
 
   </main>
 </div>

@@ -1,0 +1,47 @@
+[
+  {
+    "id": "overview",
+    "sourceSha256": "1d8e1831721e906fbf023acf01421960cd9341c149251ee30c82feeb98183faf",
+    "title": {
+      "en": "Two delivery targets: direct queue and topic fan-out",
+      "zh-CN": "两条投递路径：直接发往队列，或经主题扇出"
+    },
+    "description": {
+      "en": "A direct Send goes to the orders queue. A topic stores no messages; each matching subscription gets an independent backing-queue copy. Dead-lettered messages remain a state within their own queue.",
+      "zh-CN": "直接发送的消息进入 orders 队列。主题本身不存储消息，每个匹配订阅在独立支撑队列中获得副本。死信仍是各自队列内部的状态。"
+    },
+    "artworkSha256": "6167fac31917aeaa9d8c3f1cf134cc86869646d1e2b3dbcca179b0d43ae18e50",
+    "documentSha256": "93d4de5f0fccd7acc54ff091564aacc5ba1fc30bc46d091bdb75c57de65c6bde",
+    "translationSha256": "f60f68050a9037ef300f2238aae2fc03952eef141f935c873993d710d3bf6f88"
+  },
+  {
+    "id": "lifecycle",
+    "sourceSha256": "f2ec91415bf270c669b89114c47c6fd79d4fba3152bb27e605b410bf71911a05",
+    "title": {
+      "en": "The message lifecycle: claims, settlement and recovery",
+      "zh-CN": "消息生命周期：领取、结算与恢复"
+    },
+    "description": {
+      "en": "The states scheduled, active, locked, deferred and dead_lettered belong to one queue. The diagram lists delivery counts, retries, renewal, expiry and removal conditions. Removed means row deletion, not another state.",
+      "zh-CN": "scheduled、active、locked、deferred 和 dead_lettered 都属于同一队列。图中列出投递计数、重试、续锁、过期与删除条件；removed 表示行已删除，并非另一种消息状态。"
+    },
+    "artworkSha256": "fbc5dfac9b6d291d10533f005cc6f3a34deb8641b2a862b4f17d49c499c7d572",
+    "documentSha256": "93d4de5f0fccd7acc54ff091564aacc5ba1fc30bc46d091bdb75c57de65c6bde",
+    "translationSha256": "5ad85385d856e2c8a8722c8033445f969d9abac06fb22053eaf302c6dcf23417"
+  },
+  {
+    "id": "filter",
+    "sourceSha256": "302a79942d12400379635eddbf69897c9ab52ae5b2ddd2f34923637f87f71b17",
+    "title": {
+      "en": "Subscription filters: compile once, evaluate on publish",
+      "zh-CN": "订阅过滤：订阅时编译，发布时逐订阅执行"
+    },
+    "description": {
+      "en": "Subscribe compiles and type-checks the filter, caching the valid program or rejecting an invalid expression with HTTP 400. Publish evaluates the cached program for each subscription and creates a copy only when it matches.",
+      "zh-CN": "Subscribe 编译并检查过滤表达式的类型，有效程序会被缓存，无效表达式返回 HTTP 400。Publish 按订阅执行已缓存的程序，仅在匹配时创建消息副本。"
+    },
+    "artworkSha256": "0c849ad79cd77a764d427e49cb9883525d36762bcfb198a1df1f206d77336f25",
+    "documentSha256": "93d4de5f0fccd7acc54ff091564aacc5ba1fc30bc46d091bdb75c57de65c6bde",
+    "translationSha256": "0d4d1434967a8b2b779f916f4b02e3a6e316f8dbaca492ffed066fdcb3ee2a78"
+  }
+]

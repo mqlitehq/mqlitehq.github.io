@@ -35,14 +35,23 @@
   p { margin: 8px 0; }
   strong { color: var(--ink); font-weight: 650; }
 </style>
+<link rel="alternate" hreflang="en" href="agents.html">
+<link rel="alternate" hreflang="zh-CN" href="zh-CN/agents.html">
+<link rel="alternate" hreflang="x-default" href="agents.html">
 </head>
 <body>
 <nav class="top" aria-label="Main navigation"><div class="wrap">
   <a class="brand" href="./"><img src="logo.svg" alt="" width="24" height="24"> mqlite</a>
   <div class="links overflow-nav" data-overflow>
     <div class="overflow-primary"></div>
-    <a class="gh" href="https://github.com/mqlitehq/mqlite">GitHub ↗</a>
-    <details class="overflow-more has-current">
+    <details class="language-picker" data-language-picker name="header-menu">
+      <summary aria-label="Language: English" title="Choose language"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.25"><circle cx="8" cy="8" r="6"/><ellipse cx="8" cy="8" rx="2.5" ry="6"/><path d="M2 8h12"/></svg><span>EN</span></summary>
+      <ul class="language-options" aria-label="Available languages">
+<li><a data-language-switch href="agents.html" hreflang="en" lang="en" aria-current="true">English</a></li>
+<li><a data-language-switch href="zh-CN/agents.html" hreflang="zh-CN" lang="zh-CN">简体中文</a></li>
+      </ul>
+    </details>
+    <details class="overflow-more has-current" name="header-menu">
       <summary aria-label="More navigation links">More</summary>
       <div class="overflow-items">
     <a href="concepts.html">Concepts</a>
@@ -55,6 +64,7 @@
     <a href="observability-cloud.html">Cloud monitoring</a>
     <a href="operations.html">Operations</a>
     <a href="agents.html" aria-current="page">For AI agents</a>
+    <a class="gh" href="https://github.com/mqlitehq/mqlite">GitHub ↗</a>
       </div>
     </details>
   </div>
@@ -133,7 +143,7 @@
 }</code></pre>
   <p>Save the returned <code>mqk_</code> + 64 lowercase hex token securely; it appears once in the tool result and may be retained by the MCP host. Keep the public ID for listing and revocation. After a lost creation response, reconcile that ID and revoke a possibly-created key before issuing another; retrying the same ID cannot recover its secret. Follow <code>next_after_id</code> through <code>list_keys</code> pages. See <a href="access-keys.html">Access keys</a> for expiry, rotation and recovery.</p>
   <p>Lists default to <code>sort: "id_asc"</code>. Use <code>sort: "created_desc"</code> for newest-created keys first, with descending public ID for timestamp ties; keep the same sort on each page. Creation-order cursors must identify an existing key. Default ID order also accepts absent predecessor IDs for lost-response reconciliation.</p>
-  <p>Details: <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/mcp.md">docs/mcp.md</a>.</p>
+  <p>Details: <a href="mcp.html">docs/mcp.md</a>.</p>
 </section>
 
 <section class="blk">

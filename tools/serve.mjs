@@ -39,7 +39,7 @@ export function createSiteServer(root) {
       return;
     }
     try {
-      const path = await realpath(resolve(base, '.' + (pathname === '/' ? '/index.html' : pathname)));
+      const path = await realpath(resolve(base, '.' + (pathname.endsWith('/') ? pathname + 'index.html' : pathname)));
       if (!path.startsWith(base + sep) ||
           path.slice(base.length + 1).split(sep).some((part) => part.startsWith('.'))) {
         reject(403);
