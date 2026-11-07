@@ -225,9 +225,16 @@ single-static-binary goal that defines this project.</li>
 decision only when a maintained pure-Go driver satisfies synchronous
 read-your-writes semantics, the Go 1.21 floor and every supported release target.</p>
 <h2 id="validation-status">Validation status</h2>
+<figure class="concept-diagram explanatory-figure" data-explanatory-figure="validation" aria-labelledby="explanatory-validation-caption">
+<figcaption id="explanatory-validation-caption">Turso validation lanes and their entry points</figcaption>
+<div class="explanatory-viewport" role="region" tabindex="0" aria-label="Turso validation lanes and their entry points" style="overflow-x:auto;padding:1rem;border:1px solid var(--line, #777);border-radius:8px"><table style="width:100%;min-width:760px;border-collapse:collapse"><thead><tr><th scope="col">Lane</th><th scope="col">Run conditions</th><th scope="col">Entry point</th><th scope="col">Coverage</th></tr></thead><tbody><tr><th scope="row">Hermetic</th><td>Always, including CI</td><td><code style="white-space:nowrap">engine/storage_test.go</code></td><td>Connection-error retry classifier</td></tr><tr><th scope="row">Live</th><td>Credentials-gated, nightly</td><td><code style="white-space:nowrap">engine/turso_test.go</code></td><td>Full lifecycle against real Turso</td></tr></tbody></table></div>
+<p class="diagram-hint">On narrow screens, scroll inside the table or focus it and use the arrow keys.</p>
+<details class="diagram-source"><summary>View the original English text figure</summary>
 <pre><code>hermetic (always, in CI)   engine/storage_test.go    conn-error retry classifier
 live  (creds-gated, nightly) engine/turso_test.go     full lifecycle vs real Turso
 </code></pre>
+</details>
+</figure>
 <p>Run the live suite only against a dedicated, disposable test database. <code>TestMain</code>
 drops every MQLite-managed table before the selected tests begin, including when
 <code>-run</code> selects one test, so the reset requires an explicit confirmation:</p>

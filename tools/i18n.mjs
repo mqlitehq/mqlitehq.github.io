@@ -5,7 +5,7 @@ import { resolve } from 'node:path';
 import { Marked } from 'marked';
 
 export const sha256 = (text) => createHash('sha256').update(text).digest('hex');
-export const INTERFACE_FILES = ['tools/build.mjs', 'tools/i18n.mjs', 'tools/concept-diagrams.mjs', 'tools/diagrams/manifest.json', 'assets/site.js', 'assets/demo.js'];
+export const INTERFACE_FILES = ['tools/build.mjs', 'tools/i18n.mjs', 'tools/concept-diagrams.mjs', 'tools/diagrams/manifest.json', 'tools/explanatory-figures.mjs', 'assets/site.js', 'assets/demo.js', 'assets/demo.css'];
 const demand = (ok, message) => { if (!ok) throw new Error(message); };
 const json = (path) => JSON.parse(readFileSync(path, 'utf8'));
 const normalize = (text) => text.replace(/\r\n/g, '\n');

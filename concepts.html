@@ -400,11 +400,18 @@ name addresses its active subscription rows; any other name returns
 broker. A valid name can never be both a queue and a topic, so a
 <code>Send</code> is never silently rerouted.</li>
 </ul>
+<figure class="concept-diagram explanatory-figure" data-explanatory-figure="creation" aria-labelledby="explanatory-creation-caption">
+<figcaption id="explanatory-creation-caption">Two explicit creation operations</figcaption>
+<div class="explanatory-viewport" role="region" tabindex="0" aria-label="Two explicit creation operations" style="overflow-x:auto;padding:1rem;border:1px solid var(--line, #777);border-radius:8px"><table style="width:100%;min-width:600px;border-collapse:collapse"><thead><tr><th scope="col">Explicit operation</th><th scope="col">Result</th></tr></thead><tbody><tr><th scope="row"><code>CreateQueue(name)</code></th><td>Create one independent work queue, which must exist before Send.</td></tr><tr><th scope="row"><code>Subscribe(topic, sub, filter)</code></th><td>Auto-create backing queue=sub and attach the subscription to topic; the topic comes into being as a side effect.</td></tr></tbody></table></div>
+<p class="diagram-hint">On narrow screens, scroll inside the table or focus it and use the arrow keys.</p>
+<details class="diagram-source"><summary>View the original English text figure</summary>
 <pre><code>You only ever do two kinds of &quot;create&quot;:
   CreateQueue(name)             -&gt; one independent work queue (must exist before Send)
   Subscribe(topic, sub, filter) -&gt; auto-creates backing queue=sub + attaches to topic
                                     (the topic comes into being as a side effect)
 </code></pre>
+</details>
+</figure>
 <blockquote>
 <p>Difference from ASB: in ASB both the Topic and the Subscription are created
 explicitly; MQLite makes &quot;create topic&quot; implicit and &quot;create the subscription&#39;s

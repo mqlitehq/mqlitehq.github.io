@@ -224,8 +224,15 @@ work committed before shutdown began. Quiesce
 consumers before a planned broker replacement when even that in-flight boundary
 matters.</p>
 <p>Set the platform&#39;s outer termination grace longer than:</p>
+<figure class="concept-diagram explanatory-figure" data-explanatory-figure="shutdown-budget" aria-labelledby="explanatory-shutdown-budget-caption">
+<figcaption id="explanatory-shutdown-budget-caption">The outer termination grace must exceed this total</figcaption>
+<div class="explanatory-viewport" role="region" tabindex="0" aria-label="The outer termination grace must exceed this total" style="overflow-x:auto;padding:1rem;border:1px solid var(--line, #777);border-radius:8px"><p class="explanatory-formula" style="margin:0;line-height:2"><span style="display:inline-block">25s HTTP drain</span> <span>+</span> <span style="display:inline-block"><code>Engine.Close</code> duration</span> <span>+</span> <span style="display:inline-block">Log and process-exit margin</span></p></div>
+
+<details class="diagram-source"><summary>View the original English text figure</summary>
 <pre><code class="language-text">25s HTTP drain + Engine.Close duration + log and process-exit margin
 </code></pre>
+</details>
+</figure>
 <p><code>Engine.Close</code> deliberately waits for admitted work and has no unsafe timeout that
 releases ownership while a write may still be running. The outer platform deadline
 is therefore the final hard bound. The repository&#39;s <code>docker-compose.yml</code> sets

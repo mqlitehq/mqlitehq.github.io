@@ -79,13 +79,18 @@
   var caption = root.querySelector('[data-demo-caption]');
   var transcript = Array.from(root.querySelectorAll('[data-demo-step]'));
   var chinese = document.documentElement.lang === 'zh-CN';
+  if (chinese) root.querySelectorAll('[data-demo-edge] > span').forEach(function (element) {
+    // Keep the translated operation and its exact English name on two lines.
+    // A 45px arrow slot cannot fit a full parenthesized bilingual label.
+    element.textContent = element.textContent.replace(/^(.+?)（(.+?)）$/, '$1\n$2');
+  });
   var stateTranslations = {
-    'waiting for copy': '等待消息副本', 'filter matched': '过滤器匹配',
-    'active · seq 1041': 'active · 序号 1041', 'active · seq 1042': 'active · 序号 1042',
-    'locked · delivery 1': 'locked · 第 1 次投递', 'locked · delivery 2': 'locked · 第 2 次投递',
-    'scheduled · delivery 1': 'scheduled · 第 1 次投递', 'active · delivery 1': 'active · 第 1 次投递',
+    'waiting for copy': '等待消息副本', 'filter matched': '过滤条件匹配',
+    'active · seq 1041': '就绪（active）· 序号 1041', 'active · seq 1042': '就绪（active）· 序号 1042',
+    'locked · delivery 1': '已锁定（locked）· 投递 1', 'locked · delivery 2': '已锁定（locked）· 投递 2',
+    'scheduled · delivery 1': '待调度（scheduled）· 投递 1', 'active · delivery 1': '就绪（active）· 投递 1',
     'copy removed · queue remains': '副本已删除 · 队列保留', 'waiting': '等待中',
-    'processing': '处理中', 'complete ✓': '完成 ✓', 'abandon + delay': '放弃并延迟重投',
+    'processing': '处理中', 'complete ✓': '完成（Complete）✓', 'abandon + delay': '放弃（Abandon）· 延迟重投',
     'ready to retry': '等待重试', 'processing retry': '重试处理中'
   };
   if (chinese) transcript.forEach(function (item, index) {

@@ -52,12 +52,19 @@ credential, give only that credential to the collector, and keep administrator
 credentials out of monitoring configuration. See <a href="observability.html">observability.md</a>
 for the metric contract and the runnable local stack.</p>
 <h2 id="common-integration">Common integration</h2>
+<figure class="concept-diagram explanatory-figure" data-explanatory-figure="monitoring" aria-labelledby="explanatory-monitoring-caption">
+<figcaption id="explanatory-monitoring-caption">Metrics collection, storage and dashboards</figcaption>
+<div class="explanatory-viewport" role="region" tabindex="0" aria-label="Metrics collection, storage and dashboards" style="overflow-x:auto;padding:1rem;border:1px solid var(--line, #777);border-radius:8px"><ol class="explanatory-flow" style="margin:0;padding-left:1.5em"><li style="padding:0.6em 0"><strong>Collector</strong><p>Scrape <code>MQLite :6754/metrics</code> over a private route with a monitor Bearer token.</p><div aria-hidden="true" style="margin-top:0.5em">↓</div></li><li style="padding:0.6em 0"><strong>Prometheus-compatible storage</strong><div aria-hidden="true" style="margin-top:0.5em">↓</div></li><li style="padding:0.6em 0"><strong>Existing Grafana + rules</strong></li></ol></div>
+
+<details class="diagram-source"><summary>View the original English text figure</summary>
 <pre><code class="language-text">MQLite :6754/metrics &lt;-- private route + monitor Bearer token -- collector
                                                           |
                                               Prometheus-compatible storage
                                                           |
                                                existing Grafana + rules
 </code></pre>
+</details>
+</figure>
 <ol>
 <li>Locate the collector in the broker&#39;s private network, or provide a TLS route
 reachable only from approved collectors. Configure the correct CA; do not

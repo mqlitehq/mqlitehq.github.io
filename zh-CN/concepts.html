@@ -50,9 +50,9 @@
 <h2 id="1-the-whole-picture-in-one-diagram">1. 用一张图理解全貌</h2>
 <figure class="concept-diagram" data-concept-diagram="overview" aria-labelledby="diagram-overview-caption">
 <figcaption id="diagram-overview-caption">两条投递路径：直接发往队列，或经主题扇出</figcaption>
-<div class="diagram-viewport" role="region" tabindex="0" aria-label="两条投递路径：直接发往队列，或经主题扇出"><img src="../assets/fig-overview.svg" width="1000" height="794" alt="直接发送的消息进入 orders 队列。主题本身不存储消息，每个匹配订阅在独立支撑队列中获得副本。死信仍是各自队列内部的状态。"></div>
-<p class="diagram-hint">窄屏下可在图内左右滑动，或聚焦后用方向键滚动。图中术语保留英文。</p>
-<details class="diagram-source"><summary>查看文字版示意图</summary>
+<div class="diagram-viewport" role="region" tabindex="0" aria-label="两条投递路径：直接发往队列，或经主题扇出"><img src="../assets/zh-CN/fig-overview.svg" width="1000" height="794" alt="直接发送的消息进入 orders 队列。主题本身不存储消息，每个匹配订阅在独立支撑队列中获得副本。死信仍是各自队列内部的状态。"></div>
+<p class="diagram-hint">窄屏下可在图内左右滑动，或聚焦后用方向键滚动。关键术语同时标注英文。</p>
+<details class="diagram-source"><summary>查看英文原始文字示意图</summary>
 <pre><code>  ┌──────────────────────────── two delivery targets ─────────────────────────┐
   │                                                                            │
   │   A) send straight to a Queue        B) publish to a Topic, fan out        │
@@ -83,9 +83,9 @@
 <p>队列是有名称的消息容器，也是唯一真正存储消息的实体。消息遵循以下状态机；一行记录在任一时刻恰好处于一种状态。图中的 <code>count</code> = <code>delivery_count</code>，<code>max</code> = 队列的 <code>max_delivery_count</code>，<code>✗ removed</code> 表示记录已从数据库删除：</p>
 <figure class="concept-diagram" data-concept-diagram="lifecycle" aria-labelledby="diagram-lifecycle-caption">
 <figcaption id="diagram-lifecycle-caption">消息生命周期：领取、结算与恢复</figcaption>
-<div class="diagram-viewport" role="region" tabindex="0" aria-label="消息生命周期：领取、结算与恢复"><img src="../assets/concepts-lifecycle.svg" width="1000" height="1100" alt="scheduled、active、locked、deferred 和 dead_lettered 都属于同一队列。图中列出投递计数、重试、续锁、过期与删除条件；removed 表示行已删除，并非另一种消息状态。"></div>
-<p class="diagram-hint">窄屏下可在图内左右滑动，或聚焦后用方向键滚动。图中术语保留英文。</p>
-<details class="diagram-source"><summary>查看文字版示意图</summary>
+<div class="diagram-viewport" role="region" tabindex="0" aria-label="消息生命周期：领取、结算与恢复"><img src="../assets/zh-CN/concepts-lifecycle.svg" width="1000" height="1100" alt="scheduled、active、locked、deferred 和 dead_lettered 都属于同一队列。图中列出投递计数、重试、续锁、过期与删除条件；removed 表示行已删除，并非另一种消息状态。"></div>
+<p class="diagram-hint">窄屏下可在图内左右滑动，或聚焦后用方向键滚动。关键术语同时标注英文。</p>
+<details class="diagram-source"><summary>查看英文原始文字示意图</summary>
 <pre><code>                   ┌───────────┐
   Send(scheduled)  │ scheduled │   scheduler, when due ─► active
   ───────────────► └─────┬─────┘   cancel ─► ✗ removed (never-delivered only)
@@ -304,11 +304,18 @@
 <li><strong>命名空间是扁平的，并按设计保证不同类别互不重叠。</strong> 普通队列名、订阅名（即支撑队列名）和主题名绝不重叠；创建时的双向冲突都会明确返回 <code>ErrNameConflict</code>（HTTP 409）：<code>Subscribe</code> 会拒绝以下情况：<strong>主题名</strong>已属于队列或订阅；<strong>订阅名</strong>已属于普通队列、其他主题的订阅或有效主题；以及 <code>topic == name</code> 的退化情况。<code>CreateQueue</code> 会拒绝当前作为主题使用的名称，也会拒绝<strong>跨类型 upsert</strong>（在订阅支撑队列上创建普通 <code>CreateQueue</code>，或以 <code>kind=subscription</code> 覆盖普通队列）；有意进行的同类型重配置仍然允许。（ASB 也是如此：队列和主题共享实体命名空间，同名创建会冲突，不会悄然改变发送路由。）这些保护及其创建事务共同维持此不变量。手工修改数据库造成队列/主题名称冲突，属于公开契约不支持的状态；对于这种无效内部状态，不规定路由行为。</li>
 <li>在受支持的命名空间中，发布/发送时的名称解析没有歧义：有效普通队列或支撑队列的名称定位该队列；隐式主题名定位其有效订阅记录；其他名称返回 <code>ErrQueueNotFound</code>。借助 <code>errors.Is</code>，该哨兵错误同时匹配更宽泛的 <code>ErrNotFound</code>；嵌入式模式和支持资源类型标识的远程 broker 行为一致。有效名称绝不会同时是队列和主题，因此 <code>Send</code> 不会被悄然改道。</li>
 </ul>
+<figure class="concept-diagram explanatory-figure" data-explanatory-figure="creation" aria-labelledby="explanatory-creation-caption">
+<figcaption id="explanatory-creation-caption">两种显式创建操作</figcaption>
+<div class="explanatory-viewport" role="region" tabindex="0" aria-label="两种显式创建操作" style="overflow-x:auto;padding:1rem;border:1px solid var(--line, #777);border-radius:8px"><table style="width:100%;min-width:600px;border-collapse:collapse"><thead><tr><th scope="col">显式操作</th><th scope="col">创建结果</th></tr></thead><tbody><tr><th scope="row"><code>CreateQueue(name)</code></th><td>创建一个独立工作队列（Queue）；调用 <code>Send</code> 前，该队列必须已存在。</td></tr><tr><th scope="row"><code>Subscribe(topic, sub, filter)</code></th><td>自动创建名为 <code>sub</code> 的支撑队列（backing queue），并将订阅挂接到 <code>topic</code>；主题（Topic）随之隐式形成。</td></tr></tbody></table></div>
+<p class="diagram-hint">窄屏下可在表格内左右滑动，或聚焦后用方向键滚动。</p>
+<details class="diagram-source"><summary>查看英文原始文字示意图</summary>
 <pre><code>You only ever do two kinds of &quot;create&quot;:
   CreateQueue(name)             -&gt; one independent work queue (must exist before Send)
   Subscribe(topic, sub, filter) -&gt; auto-creates backing queue=sub + attaches to topic
                                     (the topic comes into being as a side effect)
 </code></pre>
+</details>
+</figure>
 <blockquote>
 <p>与 ASB 的区别：ASB 的主题和订阅都需要显式创建；MQLite 将“创建主题”设为隐式操作，将“创建订阅队列”设为自动操作，少了两个步骤。</p>
 </blockquote>
@@ -502,9 +509,9 @@
 <p><strong>空过滤器匹配所有消息。</strong> 表达式在<strong>订阅时进行一次类型检查和编译</strong>，无效表达式会立即返回 <code>400 invalid_argument</code>；随后在<strong>发布时逐消息执行一次</strong>，作为第 1–3 节主题扇出中的逐消息判定：</p>
 <figure class="concept-diagram" data-concept-diagram="filter" aria-labelledby="diagram-filter-caption">
 <figcaption id="diagram-filter-caption">订阅过滤：订阅时编译，发布时逐订阅执行</figcaption>
-<div class="diagram-viewport" role="region" tabindex="0" aria-label="订阅过滤：订阅时编译，发布时逐订阅执行"><img src="../assets/concepts-filter.svg" width="1000" height="580" alt="Subscribe 编译并检查过滤表达式的类型，有效程序会被缓存，无效表达式返回 HTTP 400。Publish 按订阅执行已缓存的程序，仅在匹配时创建消息副本。"></div>
-<p class="diagram-hint">窄屏下可在图内左右滑动，或聚焦后用方向键滚动。图中术语保留英文。</p>
-<details class="diagram-source"><summary>查看文字版示意图</summary>
+<div class="diagram-viewport" role="region" tabindex="0" aria-label="订阅过滤：订阅时编译，发布时逐订阅执行"><img src="../assets/zh-CN/concepts-filter.svg" width="1000" height="580" alt="Subscribe 编译并检查过滤表达式的类型，有效程序会被缓存，无效表达式返回 HTTP 400。Publish 按订阅执行已缓存的程序，仅在匹配时创建消息副本。"></div>
+<p class="diagram-hint">窄屏下可在图内左右滑动，或聚焦后用方向键滚动。关键术语同时标注英文。</p>
+<details class="diagram-source"><summary>查看英文原始文字示意图</summary>
 <pre><code> Subscribe ──► compile + type-check ──► cache the program     (bad expr → 400)
  Publish   ──► for each subscription: run program(message) ──► route when true
 </code></pre>

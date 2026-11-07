@@ -48,6 +48,11 @@
 </blockquote>
 <h2 id="sizing--deployment-flyio">容量规划与部署（Fly.io）</h2>
 <p>下面的历史样本在一台 256 MB 的 Fly 机器上运行单个 broker。这些测量值只能作为针对具体工作负载开展容量测试的起点；它们并未确定安全的积压阈值，也不代表当前版本的镜像大小。</p>
+<figure class="concept-diagram explanatory-figure" data-explanatory-figure="capacity" aria-labelledby="explanatory-capacity-caption">
+<figcaption id="explanatory-capacity-caption">历史部署容量样本（Fly.io）</figcaption>
+<div class="explanatory-viewport" role="region" tabindex="0" aria-label="历史部署容量样本（Fly.io）" style="overflow-x:auto;padding:1rem;border:1px solid var(--line, #777);border-radius:8px"><table style="width:100%;min-width:600px;border-collapse:collapse"><thead><tr><th scope="col">资源（resource）</th><th scope="col">历史实测（1 broker）</th><th scope="col">Fly 配置与容量考量</th></tr></thead><tbody><tr><th scope="row">内存（memory）</th><td>空闲时 19 MB；积压 50k 条消息时为 38 MB</td><td>历史测试使用 256 MB；先验证当前峰值内存，不存在通用的积压阈值</td></tr><tr><th scope="row">磁盘（disk）</th><td>每条 256 B 消息约需 0.4 KB；本次测试另有约 4 MB WAL</td><td>1 GB 卷（规划约 1.1M 条消息）；容量 = 积压消息数（backlog）× 0.6 KB × 1.5</td></tr><tr><th scope="row">虚拟 CPU（vCPU）</th><td>单次操作开销很小；批处理为每秒数千次（1000s/s）</td><td>实测环境使用 1 个共享 vCPU</td></tr><tr><th scope="row">镜像（image）</th><td>10.9 MiB 静态二进制；无需 CGO（CGO-free）</td><td>distroless/scratch 镜像约 15 MB；冷启动 &lt; 1 s，可缩容至零（scale-to-zero）</td></tr></tbody></table></div>
+<p class="diagram-hint">窄屏下可在表格内左右滑动，或聚焦后用方向键滚动。</p>
+<details class="diagram-source"><summary>查看英文原始文字示意图</summary>
 <pre><code>┌─────────────┬──────────────────────────┬──────────────────────────────────────┐
 │ resource    │ measured (1 broker)      │ Fly choice                            │
 ├─────────────┼──────────────────────────┼──────────────────────────────────────┤
@@ -61,6 +66,8 @@
 │             │   (CGO-free)             │   cold start &lt; 1 s (scale-to-zero ok) │
 └─────────────┴──────────────────────────┴──────────────────────────────────────┘
 </code></pre>
+</details>
+</figure>
 <p><strong>拓扑：<strong>mqlite 采用</strong>单写入者</strong>模型：每个数据库运行一个 broker 或一个嵌入式 <code>Engine</code>。本地进程持有文件锁，因此每个卷只运行一台机器，不要让多台机器通过水平扩容共同使用同一个 SQLite 文件。Turso/libSQL 提供托管远程存储，但这不意味着多个 broker 可以安全地重叠运行；参见 <a href="turso.html">turso.md</a>。</p>
 <p>积压消息的峰值深度是磁盘容量规划的主要输入，而不是整个生命周期的吞吐总量（<code>Complete</code>/<code>Purge</code> 会删除行）。还要为 WAL 增长、SQLite 页面和索引开销、回收滞后、延迟检查点的读操作以及备份留出空间。后台 <code>incremental_vacuum</code> 会随时间将空闲页面归还给操作系统（见 §3），但这并不能让积压估算成为文件大小的硬上限：</p>
 <table>

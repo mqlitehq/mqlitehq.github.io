@@ -270,66 +270,66 @@ func main() {
     <div class="demo-visual" aria-hidden="true">
       <div class="demo-graph">
         <div class="demo-node producer" data-demo-node="producer">
-          <span class="demo-node-kind">发布者</span>
+          <span class="demo-node-kind">发布者（publisher）</span>
           <strong>order.created</strong>
           <small>message_id order-42</small>
         </div>
-        <div class="demo-edge" data-demo-edge="publish"><span>发布</span></div>
+        <div class="demo-edge" data-demo-edge="publish"><span>发布（Publish）</span></div>
         <div class="demo-node topic" data-demo-node="topic">
-          <span class="demo-node-kind">隐式主题</span>
+          <span class="demo-node-kind">隐式主题（implicit topic）</span>
           <strong>events</strong>
-          <small>负责路由 · 存储 0 条</small>
+          <small>仅路由 · 存储 0 条</small>
         </div>
-        <div class="demo-branch" data-demo-edge="fanout"><span>扇出</span></div>
+        <div class="demo-branch" data-demo-edge="fanout"><span>扇出（fan-out）</span></div>
         <div class="demo-stack queues">
           <div class="demo-node queue" data-demo-node="audit-queue">
-            <span class="demo-node-kind">订阅队列</span>
+            <span class="demo-node-kind">订阅队列（subscription queue）</span>
             <strong>audit</strong>
-            <small data-demo-value="audit-state">等待副本</small>
+            <small data-demo-value="audit-state">等待消息副本</small>
           </div>
           <div class="demo-node queue" data-demo-node="fulfillment-queue">
-            <span class="demo-node-kind">订阅队列</span>
+            <span class="demo-node-kind">订阅队列（subscription queue）</span>
             <strong>fulfillment</strong>
-            <small data-demo-value="fulfillment-state">等待副本</small>
+            <small data-demo-value="fulfillment-state">等待消息副本</small>
           </div>
         </div>
         <div class="demo-edge-stack">
-          <div class="demo-edge" data-demo-edge="audit-claim"><span>接收</span></div>
-          <div class="demo-edge" data-demo-edge="fulfillment-claim"><span>接收</span></div>
+          <div class="demo-edge" data-demo-edge="audit-claim"><span>接收（Receive）</span></div>
+          <div class="demo-edge" data-demo-edge="fulfillment-claim"><span>接收（Receive）</span></div>
         </div>
         <div class="demo-stack consumers">
           <div class="demo-node consumer" data-demo-node="audit-consumer">
-            <span class="demo-node-kind">audit 工作进程</span>
+            <span class="demo-node-kind">audit 消费者（worker）</span>
             <strong data-demo-value="audit-action">等待中</strong>
-            <small>独立结算</small>
+            <small>独立结算（settlement）</small>
           </div>
           <div class="demo-node consumer" data-demo-node="fulfillment-consumer">
-            <span class="demo-node-kind">fulfillment 工作进程</span>
+            <span class="demo-node-kind">fulfillment 消费者（worker）</span>
             <strong data-demo-value="fulfillment-action">等待中</strong>
-            <small>独立结算</small>
+            <small>独立结算（settlement）</small>
           </div>
         </div>
       </div>
     </div>
 
     <div class="demo-caption">
-      <span data-demo-step-label>01 · 发布</span>
-      <p data-demo-caption>发布者将 order.created 发送至隐式主题 events。</p>
+      <span data-demo-step-label>01 · 发布（Publish）</span>
+      <p data-demo-caption>发布者（publisher）将 order.created 发布至隐式主题（implicit topic）events。</p>
     </div>
 
     <ol class="demo-transcript">
-      <li data-demo-step="0"><b>01 · 发布</b><span>发布者发送 <code>order.created</code> ，目标是隐式主题 <code>events</code> 。</span></li>
-      <li data-demo-step="1"><b>02 · 路由</b><span>主题不存储消息。两个订阅的过滤器均匹配该消息。</span></li>
-      <li data-demo-step="2"><b>03 · 复制</b><span><code>audit</code> 和 <code>fulfillment</code> 各获得一份独立的后备队列副本：消息 ID 相同，序号不同。</span></li>
-      <li data-demo-step="3"><b>04 · 领取</b><span>每次 <code>Receive</code> 将对应副本从 active 改为 locked，并将 <code>delivery_count</code> 增加到 1。</span></li>
-      <li data-demo-step="4"><b>05 · 分别结算</b><span><code>audit</code> 完成处理，只删除自己的消息副本，订阅仍然存在。未达到投递上限时， <code>fulfillment</code> 带延迟放弃消息，将自己的副本由 locked 移至 scheduled，不增加计数。</span></li>
-      <li data-demo-step="5"><b>06 · 到期可用</b><span>调度器将延迟副本恢复为 active，其投递计数仍为 1。</span></li>
-      <li data-demo-step="6"><b>07 · 重试</b><span>下一次 <code>Receive</code> 锁定副本，并将 <code>delivery_count</code> 增加到 2。</span></li>
-      <li data-demo-step="7"><b>08 · 完成</b><span>重试处理完成后，这份消息副本也被删除；两个订阅都仍然存在。投递为至少一次，因此 handler 必须保持幂等。</span></li>
+      <li data-demo-step="0"><b>01 · 发布（Publish）</b><span>发布者（publisher）发布 <code>order.created</code> ，目标为隐式主题（implicit topic） <code>events</code> 。</span></li>
+      <li data-demo-step="1"><b>02 · 路由</b><span>主题（topic）不存储消息。两个订阅（subscription）的过滤条件（filter）均匹配该消息。</span></li>
+      <li data-demo-step="2"><b>03 · 复制</b><span><code>audit</code> 和 <code>fulfillment</code> 各获得独立的支撑队列（backing queue）副本：消息 ID 相同，序号不同。</span></li>
+      <li data-demo-step="3"><b>04 · 领取（Receive）</b><span>每次 <code>Receive</code> 将对应副本从就绪（active）改为已锁定（locked），并将 <code>delivery_count</code> 增加到 1。</span></li>
+      <li data-demo-step="4"><b>05 · 分别结算</b><span><code>audit</code> 完成（Complete），只删除自己的消息副本，订阅仍保留。未达到投递上限时， <code>fulfillment</code> 带延迟放弃（Abandon）消息，将自己的副本由已锁定（locked）移至待调度（scheduled），不增加投递计数。</span></li>
+      <li data-demo-step="5"><b>06 · 到期可用</b><span>调度器将延迟副本恢复为就绪（active），其投递计数仍为 1。</span></li>
+      <li data-demo-step="6"><b>07 · 重试</b><span>下一次 <code>Receive</code> 将副本置为已锁定（locked），并将 <code>delivery_count</code> 增加到 2。</span></li>
+      <li data-demo-step="7"><b>08 · 完成（Complete）</b><span>重试完成（Complete）后，这份消息副本也被删除；两个订阅都仍保留。投递为至少一次（at-least-once），因此消息处理函数（handler）必须保持幂等。</span></li>
     </ol>
 
     <noscript>
-      <figure class="fig"><img src="../assets/fig-overview.svg" alt="mqlite 模型：发布将独立副本路由到订阅后备队列；接收锁定一个副本，结算将其删除或重新调度。" style="width:100%;display:block"></figure>
+      <figure class="fig"><img src="../assets/zh-CN/fig-overview.svg" alt="mqlite 模型：发布（Publish）将独立副本路由到订阅的支撑队列；接收（Receive）锁定一个副本，结算（settlement）将其删除或重新调度。" style="width:100%;display:block"></figure>
     </noscript>
     <p class="demo-note">动画时序仅作演示，不代表 broker 延迟。即使达到投递次数上限，最后一次普通领取仍可续锁和完成。只有显式拒绝，或最后这次锁被放弃、到期或显式回收，消息才进入 DLQ。未发布的 main 在普通打开时保留未过期租约；v0.4.2 启动时仍会回收这些租约。参见 <a href="operations.html#graceful-broker-shutdown">关停与重启边界</a>。</p>
   </section>

@@ -60,6 +60,11 @@ selecting a memory or CPU limit.</p>
 <p>The historical sample below ran a single broker on a 256 MB Fly machine. Treat
 these measurements as starting points for a workload-specific sizing test; they
 do not establish a safe backlog threshold or the current release image size.</p>
+<figure class="concept-diagram explanatory-figure" data-explanatory-figure="capacity" aria-labelledby="explanatory-capacity-caption">
+<figcaption id="explanatory-capacity-caption">Historical deployment sizing sample (Fly.io)</figcaption>
+<div class="explanatory-viewport" role="region" tabindex="0" aria-label="Historical deployment sizing sample (Fly.io)" style="overflow-x:auto;padding:1rem;border:1px solid var(--line, #777);border-radius:8px"><table style="width:100%;min-width:600px;border-collapse:collapse"><thead><tr><th scope="col">Resource</th><th scope="col">Measured (1 broker)</th><th scope="col">Fly choice</th></tr></thead><tbody><tr><th scope="row">Memory</th><td>19 MB idle; 38 MB @ 50k messages queued</td><td>256 MB used in the historical test; validate current peak memory first; no universal backlog threshold</td></tr><tr><th scope="row">Disk</th><td>~0.4 KB / 256 B message; + ~4 MB WAL in this run</td><td>1 GB volume (~1.1M planned messages); size = backlog × 0.6 KB × 1.5</td></tr><tr><th scope="row">vCPU</th><td>Tiny/op; 1000s/s batched</td><td>1 shared vCPU in the measured setup</td></tr><tr><th scope="row">Image</th><td>10.9 MiB static binary (CGO-free)</td><td>distroless/scratch ≈ 15 MB image; cold start &lt; 1 s (scale-to-zero ok)</td></tr></tbody></table></div>
+<p class="diagram-hint">On narrow screens, scroll inside the table or focus it and use the arrow keys.</p>
+<details class="diagram-source"><summary>View the original English text figure</summary>
 <pre><code>┌─────────────┬──────────────────────────┬──────────────────────────────────────┐
 │ resource    │ measured (1 broker)      │ Fly choice                            │
 ├─────────────┼──────────────────────────┼──────────────────────────────────────┤
@@ -73,6 +78,8 @@ do not establish a safe backlog threshold or the current release image size.</p>
 │             │   (CGO-free)             │   cold start &lt; 1 s (scale-to-zero ok) │
 └─────────────┴──────────────────────────┴──────────────────────────────────────┘
 </code></pre>
+</details>
+</figure>
 <p><strong>Topology:</strong> mqlite is <strong>single-writer</strong>: run one broker or embedded <code>Engine</code> per
 database. A local process holds a file lock, so run one machine per volume and do
 not horizontally scale several machines onto the same SQLite file. Turso/libSQL

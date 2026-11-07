@@ -394,6 +394,7 @@ test('the real Pages package contains the complete static inventory with identic
     'llms-full.txt', 'llms.txt', 'logo.svg', 'observability.html', 'observability-cloud.html', 'operations.html',
     'site-metadata.json', 'turso.html', 'retention.html', 'benchmark.html', 'conformance.html', 'dependencies.html', 'mcp.html', 'examples.html',
     'assets/concepts-lifecycle.svg', 'assets/concepts-filter.svg',
+    'assets/zh-CN/fig-overview.svg', 'assets/zh-CN/concepts-lifecycle.svg', 'assets/zh-CN/concepts-filter.svg',
     ...['index.html', 'agents.html', 'concepts.html', 'internals.html', 'api.html', 'cli.html', 'access-keys.html', 'deployment.html', 'observability.html', 'observability-cloud.html', 'operations.html', 'turso.html', 'retention.html', 'benchmark.html', 'conformance.html', 'dependencies.html', 'mcp.html', 'examples.html', 'llms.txt', 'llms-full.txt'].map((name) => `zh-CN/${name}`),
   ].sort();
   assert.deepEqual(files(output).sort(), expected);

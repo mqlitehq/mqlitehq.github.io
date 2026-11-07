@@ -1,0 +1,37 @@
+{
+  "Subscription filters: compile on Subscribe, evaluate on Publish": "订阅过滤器（filter）：Subscribe 时编译，Publish 时求值",
+  "Subscribe compiles and type-checks the subscription filter, caching a valid program. An invalid expression is rejected immediately with HTTP 400 invalid_argument. At publish time the cached program runs for each subscription against the message. A true result routes a copy to that subscription's backing queue; a false result creates no copy for that subscription.": "Subscribe 编译订阅过滤条件并进行类型检查，缓存有效程序。无效表达式立即被拒绝，返回 HTTP 400 invalid_argument。发布消息时，针对每个订阅执行已缓存的程序；结果为 true 时，将副本路由到该订阅的支撑队列（backing queue）；结果为 false 时，不为该订阅创建副本。",
+  "1 · Compile when subscribing": "1 · 订阅时编译过滤条件",
+  "Subscribe": {
+    "text": "订阅 Subscribe",
+    "fontSize": 18
+  },
+  "compile": "编译（compile）",
+  "+ type-check": "+ 类型检查（type-check）",
+  "valid": "有效",
+  "cache the program": "缓存编译结果",
+  "invalid": "无效",
+  "400 invalid_argument": {
+    "text": "400 参数无效 invalid_argument",
+    "fontSize": 14
+  },
+  "Compile once; reuse for later messages.": "编译后缓存，后续消息复用。",
+  "2 · Evaluate each published message": "2 · 为每条发布消息执行过滤",
+  "Publish": {
+    "text": "发布 Publish",
+    "fontSize": 18
+  },
+  "for each subscription": "逐个订阅（subscription）",
+  "run program(message)": "执行 program(message)",
+  "using the cached program": "使用已缓存的程序",
+  "true": "匹配（true）",
+  "copy to this": "为该订阅复制消息",
+  "backing queue": {
+    "text": "支撑队列（backing queue）",
+    "fontSize": 15
+  },
+  "false": "不匹配（false）",
+  "no copy for this": "该订阅（subscription）",
+  "subscription": "不获得消息副本",
+  "An empty filter matches every message.": "空过滤条件（filter）匹配所有消息。"
+}

@@ -146,7 +146,10 @@
     "zh-CN/llms-full.txt",
     "assets/fig-overview.svg",
     "assets/concepts-lifecycle.svg",
-    "assets/concepts-filter.svg"
+    "assets/concepts-filter.svg",
+    "assets/zh-CN/fig-overview.svg",
+    "assets/zh-CN/concepts-lifecycle.svg",
+    "assets/zh-CN/concepts-filter.svg"
   ],
   "locales": [
     "en",

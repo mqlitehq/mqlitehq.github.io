@@ -189,9 +189,16 @@ broker 是唯一逻辑所有者，因此为自身写入使用读取副本并无�
 或每个地域运行相互独立的 broker + 数据库组合。只有在有受维护的纯 Go 驱动同时满足
 同步写后读语义、Go 1.21 下限和所有受支持发布目标时，才重新评估这个决定。</p>
 <h2 id="validation-status">验证状态</h2>
+<figure class="concept-diagram explanatory-figure" data-explanatory-figure="validation" aria-labelledby="explanatory-validation-caption">
+<figcaption id="explanatory-validation-caption">Turso 验证分层与测试入口</figcaption>
+<div class="explanatory-viewport" role="region" tabindex="0" aria-label="Turso 验证分层与测试入口" style="overflow-x:auto;padding:1rem;border:1px solid var(--line, #777);border-radius:8px"><table style="width:100%;min-width:760px;border-collapse:collapse"><thead><tr><th scope="col">测试层级</th><th scope="col">运行条件</th><th scope="col">测试入口</th><th scope="col">验证范围</th></tr></thead><tbody><tr><th scope="row">隔离测试（hermetic）</th><td>始终运行，包含 CI</td><td><code style="white-space:nowrap">engine/storage_test.go</code></td><td>连接错误的重试分类器（conn-error retry classifier）</td></tr><tr><th scope="row">在线测试（live）</th><td>须配置测试凭据（creds-gated）；夜间任务（nightly）</td><td><code style="white-space:nowrap">engine/turso_test.go</code></td><td>对真实 Turso 验证完整生命周期（full lifecycle）</td></tr></tbody></table></div>
+<p class="diagram-hint">窄屏下可在表格内左右滑动，或聚焦后用方向键滚动。</p>
+<details class="diagram-source"><summary>查看英文原始文字示意图</summary>
 <pre><code>hermetic (always, in CI)   engine/storage_test.go    conn-error retry classifier
 live  (creds-gated, nightly) engine/turso_test.go     full lifecycle vs real Turso
 </code></pre>
+</details>
+</figure>
 <p>仅可在专用、可丢弃的测试数据库上运行真实远程测试。
 即使 <code>-run</code> 仅选择一个测试，<code>TestMain</code> 也会在选中的测试开始前删除所有 MQLite 管理的表，
 因此重置必须得到显式确认：</p>

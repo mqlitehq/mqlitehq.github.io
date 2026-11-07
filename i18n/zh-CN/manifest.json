@@ -67,19 +67,21 @@
       "translationSha256": "a96495c9d2ff8a47d9bd011631ae4abe654ca96cc374d40bc4ffe149a62914d2"
     }
   },
-  "interfaceSha256": "fa7f4ea2aa636446996d89f0bbfaa05fb3f90b7f3f49bfea9c38d157613f36e8",
+  "interfaceSha256": "385a107875c62182a508d3f36b27f58e42fb7db6139f170faf715ea7db2c2d17",
   "summary": {
     "sourceSha256": "2d18cd67b062abd7a79f58236c2dc1e0220e0cc53b3d208c7668b1ec099c62c9",
     "translationSha256": "e5c28ec16da9311d5507eb6ca77d71082586d455d4e4e3818bbf54ace6dea7e2"
   },
   "chromeSourceSha256": "339d4d3c2b93b8b5a1f3c13d720094155f42b3400eff530e28f7f4fc2602e372",
   "runtimeSources": {
-    "tools/build.mjs": "c43e83b1097317ce95fac368be069472d2bc458f27ca73e40f6f5602bbc4a78d",
-    "tools/i18n.mjs": "9e40754be67bddb5bf2c525e00406b2bbec4b51bba0571f2d4ddfa0b12580860",
-    "tools/concept-diagrams.mjs": "0dce9d4256e104fbeb1ee84bc29c40a0a675540c1deddb56d02cb1071833a2bf",
-    "tools/diagrams/manifest.json": "a216508a88d8bde44e22d11263a0ffefea589b3f3615a408bf86f9d3a8881c32",
+    "tools/build.mjs": "ea6b0b6ec51533770d6607dc8ffb994140557b8a0375f30c3cafd8024c8072cf",
+    "tools/i18n.mjs": "ef1ae7fdeecda32ea755c3546794bd7931661fa18a8c96253cb8bbc4e47f925f",
+    "tools/concept-diagrams.mjs": "698e90f2e74e292c7d4b0cde8f52b78c66c7275db1f7ecdc9c51d68e1c905e1d",
+    "tools/diagrams/manifest.json": "87de686f673ffed13edf487ecfbca4707631adebea42c46a0b6ee5ea422c419d",
+    "tools/explanatory-figures.mjs": "816b47b58b5912866a925d230bfef61e8ce18a5c37033e8fa91f41c030d67c25",
     "assets/site.js": "2c61ae5e131f97e9bb77d50657ff7a1c63e8b073717495808877aa451f6adb9c",
-    "assets/demo.js": "1a916e737341db031451acf1297cbcf5a8e6f6225963ead959e6b0b599dea2ed"
+    "assets/demo.js": "3e03abd8259c96f42c03b9122a140bf37cf4e9fa75310f41a0c1ca7cfef5c88e",
+    "assets/demo.css": "b3b94399eda8eae2062aac8dd57de5d77d651e9bff5a47cad2ba61b1ebe58156"
   },
   "agentPrompt": {
     "sourceSha256": "1a487369a62783c8d02dbd6d7966f5d0a5c6736c8192cd92baf361379df023d4",

@@ -170,8 +170,15 @@ Ctrl-D 是终端输入 EOF，不是关停信号；broker 不读取 stdin。</p>
 已获准的领取事务保留调用方请求上下文，可能返回在关停开始前已经提交的工作。
 如果连这一在途边界也必须严格控制，应在计划替换 broker 前先暂停消费者活动。</p>
 <p>平台外层终止宽限期应大于：</p>
+<figure class="concept-diagram explanatory-figure" data-explanatory-figure="shutdown-budget" aria-labelledby="explanatory-shutdown-budget-caption">
+<figcaption id="explanatory-shutdown-budget-caption">外层终止宽限期必须大于以下总和</figcaption>
+<div class="explanatory-viewport" role="region" tabindex="0" aria-label="外层终止宽限期必须大于以下总和" style="overflow-x:auto;padding:1rem;border:1px solid var(--line, #777);border-radius:8px"><p class="explanatory-formula" style="margin:0;line-height:2"><span style="display:inline-block">25s HTTP 排空（HTTP drain）</span> <span>+</span> <span style="display:inline-block"><code>Engine.Close</code> 耗时</span> <span>+</span> <span style="display:inline-block">日志与进程退出余量</span></p></div>
+
+<details class="diagram-source"><summary>查看英文原始文字示意图</summary>
 <pre><code class="language-text">25s HTTP drain + Engine.Close duration + log and process-exit margin
 </code></pre>
+</details>
+</figure>
 <p><code>Engine.Close</code> 会有意等待已获准工作结束，不会用不安全的超时在写入可能仍运行时释放所有权。
 因此，平台外层截止时间是最终硬上限。仓库的 <code>docker-compose.yml</code> 设置
 <code>stop_grace_period: 40s</code>；普通 Docker 默认只等待 10 秒，可能在刻意停滞的请求

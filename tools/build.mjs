@@ -8,6 +8,7 @@ import { Marked } from 'marked';
 import { gfmHeadingId } from 'marked-gfm-heading-id';
 import { sha256, loadTranslations, keepEnglishHeadingIds, checkNumericPair, translateHandwritten, translateAgentPrompt, localeLinks, languageLinks, languageSwitch } from './i18n.mjs';
 import { DIAGRAM_ASSETS, loadConceptDiagrams, conceptDiagramRenderer } from './concept-diagrams.mjs';
+import { loadExplanatoryFigures, findExplanatoryFigure, renderExplanatoryFigure } from './explanatory-figures.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const site = resolve(here, '..');
@@ -223,10 +224,16 @@ export function renderSite(mq, options = {}) {
   const marked = new Marked({ gfm: true });
   marked.use(gfmHeadingId());
   const diagrams = bilingual ? loadConceptDiagrams(read(mq, 'docs/concepts.md')) : null;
+  const explanations = bilingual ? loadExplanatoryFigures(new Map(PAGES.map(([source]) => [source, read(mq, `docs/${source}`)]))) : [];
   const parse = (markdown, source, chinese = false) => {
-    if (source !== 'concepts.md' || !diagrams) return marked.parse(markdown);
+    if (!diagrams) return marked.parse(markdown);
     const illustrated = new Marked({ gfm: true });
-    illustrated.use(gfmHeadingId(), { renderer: conceptDiagramRenderer(diagrams, chinese) });
+    const concepts = conceptDiagramRenderer(source === 'concepts.md' ? diagrams : [], chinese);
+    const figures = explanations.filter((record) => record.file === source);
+    illustrated.use(gfmHeadingId(), { renderer: { code(token) {
+      const figure = findExplanatoryFigure(figures, token);
+      return figure ? renderExplanatoryFigure(figure, chinese) : concepts.code(token);
+    } } });
     return illustrated.parse(markdown);
   };
   const outputs = new Map();
@@ -251,6 +258,7 @@ export function renderSite(mq, options = {}) {
     for (const name of ['index.html', 'agents.html']) {
       const english = read(site, name);
       let chinese = translateHandwritten(english, translations.interface, name);
+      if (name === 'index.html') chinese = chinese.replace('src="assets/fig-overview.svg"', 'src="assets/zh-CN/fig-overview.svg"');
       if (name === 'agents.html') chinese = translateAgentPrompt(chinese, translations.prompt);
       checkNumericPair(english, chinese, name);
       chinese = chinese.replace('<html lang="en">', '<html lang="zh-CN">')
@@ -263,6 +271,7 @@ export function renderSite(mq, options = {}) {
     const zhParts = BUNDLE_FILES.map((file) => `<!-- ===== docs/${file} · 英文与简体中文逐项对应 ===== -->\n\n${rewriteMdLinks(translations.documents.get(file), true)}`);
     outputs.set('zh-CN/llms-full.txt', `mqlite main — 完整简体中文文档。\n源码版本：v${metadata.sourceVersion}。最新受支持版本：[${metadata.latestRelease}](${releaseURL})。\n${sourceStatus ? '源码包含未发布变更。\n' : ''}本文档跟随 main；使用已发布产物时，请核对相应版本说明。\n英文规范来源：${metadata.source}\n\n${zhParts.join('\n\n')}`);
     for (const diagram of diagrams) outputs.set(diagram.asset, diagram.svg);
+    for (const diagram of diagrams) outputs.set(diagram.chineseAsset, diagram.chineseSvg);
   }
   requireValue(JSON.stringify([...outputs.keys()]) === JSON.stringify(bilingual ? ALL_GENERATED_FILES : GENERATED_FILES), 'generated output inventory drift');
   return { outputs, metadata };

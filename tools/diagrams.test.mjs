@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { Marked } from 'marked';
 import { sha256 } from './i18n.mjs';
-import { DIAGRAM_ASSETS, loadConceptDiagrams, conceptDiagramRenderer } from './concept-diagrams.mjs';
+import { DIAGRAM_ASSETS, EN_DIAGRAM_ASSETS, loadConceptDiagrams, localizeDiagram, conceptDiagramRenderer } from './concept-diagrams.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const canonical = [resolve(here, '../../mqlite'), resolve(here, '../mqlite-src')].find((root) => existsSync(resolve(root, 'docs/concepts.md')));
@@ -20,11 +20,39 @@ function fixture(t) {
 
 test('all three concepts illustrations have an exact source pairing and a bounded asset budget', () => {
   const diagrams = loadConceptDiagrams(markdown());
-  assert.deepEqual(diagrams.map((d) => d.asset), DIAGRAM_ASSETS);
+  assert.deepEqual(diagrams.map((d) => d.asset), EN_DIAGRAM_ASSETS);
+  assert.deepEqual([...diagrams.map((d) => d.asset), ...diagrams.map((d) => d.chineseAsset)], DIAGRAM_ASSETS);
   assert.ok(diagrams.reduce((sum, d) => sum + Buffer.byteLength(d.svg), 0) < 40 * 1024);
   assert.ok(diagrams[0].svg.includes('data-node="orders-queue"'));
   assert.ok(diagrams[1].svg.includes('data-state="dead_lettered"'));
   assert.ok(diagrams[2].svg.includes('data-edge="reject-invalid-expression"'));
+});
+
+test('Chinese diagrams translate every label while preserving the exact drawing and protocol terms', () => {
+  const geometry = (svg) => svg.replace(/<(title|desc|text)\b[\s\S]*?<\/\1>/g, '').replace(' lang="zh-CN"', '');
+  const required = [['Receive', 'Complete', 'active', 'locked', 'dead_lettered', 'orders', 'events', 'audit', 'billing'],
+    ['ReceiveDeferred', 'RenewBatch', 'delivery_count', 'max_delivery_count', 'dead_letter_on_expire', 'Cancel', 'Redrive'],
+    ['Subscribe', 'Publish', 'true', 'false', '400', 'invalid_argument', 'program(message)']];
+  loadConceptDiagrams(markdown()).forEach((diagram, index) => {
+    assert.notEqual(diagram.svg, diagram.chineseSvg);
+    assert.equal(geometry(diagram.svg), geometry(diagram.chineseSvg), diagram.id);
+    for (const term of required[index]) assert.ok(diagram.chineseSvg.includes(term), `${diagram.id}: ${term}`);
+    assert.match(diagram.chineseSvg, /lang="zh-CN"/);
+    assert.match(diagram.chineseSvg, /[\u3400-\u9fff]/);
+  });
+});
+
+test('missing, stale or unreviewed diagram translations block generation', (t) => {
+  const root = fixture(t);
+  const file = resolve(root, 'zh-CN-filter.json');
+  writeFileSync(file, readFileSync(file, 'utf8').replace('无效表达式', '有效表达式'));
+  assert.throws(() => loadConceptDiagrams(markdown(), root), /translation changed/);
+  rmSync(file);
+  assert.throws(() => loadConceptDiagrams(markdown(), root));
+  const svg = '<svg viewBox="0 0 100 100"><text x="1" y="2">valid</text></svg>';
+  assert.throws(() => localizeDiagram(svg, {}, 'fixture'), /inventory differs/);
+  assert.throws(() => localizeDiagram(svg, { valid: { text: '有效', fontSize: 9 } }, 'fixture'), /font size/);
+  assert.ok(localizeDiagram(svg, { valid: '<script>有效</script>' }, 'fixture').includes('&lt;script&gt;'));
 });
 
 test('a changed source diagram blocks rendering even when its old keywords remain', () => {
