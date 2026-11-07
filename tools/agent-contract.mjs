@@ -1,4 +1,4 @@
-// A review gate for the source behind the hand-written agent guidance. This is
+// A review gate for the source behind the hand-written website guidance. This is
 // deliberately read-only: regenerating fingerprints is not a semantic review.
 import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync, lstatSync } from 'node:fs';
@@ -6,10 +6,25 @@ import { resolve } from 'node:path';
 
 const FORMAT_VERSION = 1;
 const SOURCE_DIRECTORIES = ['engine', 'server', 'wire', 'cmd/mqlite-mcp', 'cmd/mqlite', 'internal'];
+// console.go embeds all:web. Its built runtime can change independently of Go,
+// so every asset path and byte belongs to the reviewed production inventory.
+const ASSET_DIRECTORIES = ['server/web'];
 const DOCUMENTS = [
   'docs/mcp.md', 'docs/api-reference.md', 'docs/access-keys.md',
   'docs/concepts.md', 'docs/operations.md', 'docs/conformance.md',
   'docs/retention.md', 'docs/dependencies.md', 'docs/cli.md', 'docs/internals.md',
+  'docs/deployment.md', 'docs/observability.md', 'docs/observability-cloud.md',
+  'docs/turso.md', 'docs/benchmark.md', 'docs/examples.md',
+];
+// These public repository inputs define the documented floor, build targets,
+// packaging, release checks and local deployment. No environment files belong
+// here. Review helper implementations too: an unchanged workflow is insufficient
+// when the script it invokes changes the release policy.
+const BUILD_AND_RELEASE_FILES = [
+  'Dockerfile', 'docker-compose.yml', 'Makefile', '.goreleaser.yaml',
+  '.github/dependabot.yml', '.github/workflows/ci.yml',
+  '.github/workflows/release.yml', '.github/workflows/release-image.yml',
+  '.github/scripts/release_guard.py', '.github/scripts/image_candidate.py',
 ];
 const EXCLUDED_VERSION_SOURCE = 'internal/version/version.go';
 const digest = (bytes) => createHash('sha256').update(bytes).digest('hex');
@@ -40,9 +55,9 @@ export function sourceAgentFacts(mq) {
 }
 
 function sourceInventory(mq) {
-  const files = [];
+  const files = new Set();
   const productionGo = (file) => file.endsWith('.go') && !file.endsWith('_test.go') && file !== EXCLUDED_VERSION_SOURCE;
-  function directory(relative, recursive) {
+  function directory(relative, recursive, include = productionGo) {
     let entries;
     try {
       demand(lstatSync(resolve(mq, relative)).isDirectory(), `expected a regular source directory: ${relative || '.'}`);
@@ -54,14 +69,15 @@ function sourceInventory(mq) {
     for (const entry of entries) {
       const file = relative ? `${relative}/${entry.name}` : entry.name;
       if (entry.isSymbolicLink()) {
-        demand(!recursive && !productionGo(file), `symbolic links are not accepted in the source scope: ${file}`);
-      } else if (entry.isDirectory() && recursive) directory(file, true);
-      else if (entry.isFile() && productionGo(file)) files.push(file);
+        demand(!recursive && !include(file), `symbolic links are not accepted in the source scope: ${file}`);
+      } else if (entry.isDirectory() && recursive) directory(file, true, include);
+      else if (entry.isFile() && include(file)) files.add(file);
     }
   }
   directory('', false);
   for (const name of SOURCE_DIRECTORIES) directory(name, true);
-  return [...files, 'go.mod', 'go.sum', ...DOCUMENTS].sort();
+  for (const name of ASSET_DIRECTORIES) directory(name, true, () => true);
+  return [...new Set([...files, 'go.mod', 'go.sum', ...DOCUMENTS, ...BUILD_AND_RELEASE_FILES])].sort();
 }
 
 export function checkAgentContract(siteRoot, mq) {
@@ -80,12 +96,12 @@ export function checkAgentContract(siteRoot, mq) {
   const added = actual.filter((name) => !Object.hasOwn(manifest.files, name));
   const removed = expected.filter((name) => !actual.includes(name));
   demand(!added.length && !removed.length,
-    `source inventory changed (added: ${added.join(', ') || 'none'}; removed: ${removed.join(', ') || 'none'}); review the agent guidance`);
+    `source inventory changed (added: ${added.join(', ') || 'none'}; removed: ${removed.join(', ') || 'none'}); review the website guidance`);
   const verified = {};
   for (const file of actual) {
     demand(typeof manifest.files[file] === 'string' && /^[0-9a-f]{64}$/.test(manifest.files[file]), `invalid reviewed fingerprint: ${file}`);
     verified[file] = digest(read(mq, file));
-    demand(verified[file] === manifest.files[file], `${file} changed; review the English/Chinese agent guidance before updating its fingerprint`);
+    demand(verified[file] === manifest.files[file], `${file} changed; review the English/Chinese website guidance before updating its fingerprint`);
   }
   // The revision describes the review basis. It need not equal HEAD: a version-
   // only commit or an unrelated change may retain this exact reviewed scope.

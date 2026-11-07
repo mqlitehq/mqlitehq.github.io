@@ -40,10 +40,13 @@ test('hourly freshness checks use the normal validation path and never skip it f
   assert.match(triggers, /\n  push:\n    branches: \[main\]/);
   assert.match(triggers, /\n  pull_request:\n/);
   assert.match(triggers, /\n  workflow_dispatch:\n/);
-  assert.doesNotMatch(antiRot, /^\s+if:/m);
+  assert.doesNotMatch(antiRot, /^    if:/m);
+  const validation = antiRot.split('      - name: Upload the documentation audit')[0];
+  assert.doesNotMatch(validation, /^\s+if:/m);
+  assert.match(antiRot, /- name: Upload the documentation audit\n        if: always\(\)/);
   for (const command of ['node --test *.test.mjs',
     'npx playwright test --config playwright.config.mjs',
-    'node build.mjs ../mqlite-src --check', 'sh tools/package-site.sh _site']) {
+    'node build.mjs ../mqlite-src --check', 'node site-audit.mjs ../mqlite-src', 'sh tools/package-site.sh _site']) {
     assert.ok(antiRot.includes(command), command);
   }
 });
@@ -51,7 +54,8 @@ test('hourly freshness checks use the normal validation path and never skip it f
 test('canonical freshness check reads main without retained checkout credentials or write permissions', () => {
   assert.match(workflow, /\npermissions:\n  contents: read\n/);
   assert.match(antiRot, /repository: mqlitehq\/mqlite\n          ref: main\n          path: mqlite-src\n          fetch-depth: 0\n          fetch-tags: true\n          persist-credentials: false/);
-  assert.equal((antiRot.match(/persist-credentials: false/g) ?? []).length, 2);
+  assert.match(antiRot, /repository: mqlitehq\/mqlite-go\n          ref: main\n          path: mqlite-go-src\n          persist-credentials: false/);
+  assert.equal((antiRot.match(/persist-credentials: false/g) ?? []).length, 3);
   assert.doesNotMatch(antiRot, /\b(?:contents|actions|pages|id-token): write\b/);
   assert.doesNotMatch(antiRot, /secrets\./);
 });

@@ -78,6 +78,51 @@ test('added and removed production files are rejected, including a same-count re
   assert.throws(f.check, /source inventory changed.*added: wire\/replacement\.go.*removed: wire\/wire\.go/);
 });
 
+test('a bundled console behavior change is rejected without an embed Go change', (t) => {
+  const f = fixture(t);
+  const file = Object.keys(manifest.files).find((name) => /^server\/web\/assets\/.*\.js$/.test(name));
+  assert.ok(file, 'the shipped console JavaScript must be reviewed');
+  const embedSource = readFileSync(resolve(f.mq, 'server/console.go'));
+  const before = readFileSync(resolve(f.mq, file), 'utf8');
+  const after = before.replace('"/mqlite.v1.AdminService/Observe"', '"/mqlite.v1.AdminService/Status"');
+  assert.notEqual(before, after, 'mutate an actual console RPC, not a comment');
+  put(f.mq, file, after);
+  assert.deepEqual(readFileSync(resolve(f.mq, 'server/console.go')), embedSource);
+  assert.throws(f.check, /server\/web\/assets\/.*\.js changed/);
+});
+
+test('new and removed embedded web assets require review, even with the same asset count', (t) => {
+  const f = fixture(t), added = 'server/web/assets/new-runtime.js';
+  put(f.mq, added, 'globalThis.mqliteConsoleReadOnly = false;\n');
+  assert.throws(f.check, /source inventory changed.*added: server\/web\/assets\/new-runtime\.js/);
+  rmSync(resolve(f.mq, 'server/web/favicon.svg'));
+  assert.throws(f.check, /source inventory changed.*added: server\/web\/assets\/new-runtime\.js.*removed: server\/web\/favicon\.svg/);
+  rmSync(resolve(f.mq, added));
+  assert.throws(f.check, /source inventory changed.*removed: server\/web\/favicon\.svg/);
+});
+
+test('floor, packaging and release policy changes require review', (t) => {
+  const f = fixture(t), floor = sourceAgentFacts(f.mq).goVersion;
+  const [major, minor] = floor.split('.');
+  const port = sourceAgentFacts(f.mq).brokerPort;
+  for (const [file, from, to] of [
+    ['.github/workflows/ci.yml', `'${major}.${minor}.x'`, `'${major}.${Number(minor) + 1}.x'`],
+    ['.goreleaser.yaml', 'goarch: [amd64, arm64]', 'goarch: [amd64]'],
+    ['Dockerfile', `EXPOSE ${port}`, `EXPOSE ${Number(port) % 65535 + 1}`],
+    ['.github/workflows/release.yml', 'release --clean', 'release --clean --skip=validate'],
+    ['.github/dependabot.yml', 'versions: [">=1.36.2"]', 'versions: ["*"]'],
+    ['.github/scripts/release_guard.py', 'check_ci(api, repository, target)', 'skip_ci(api, repository, target)'],
+  ]) {
+    const before = readFileSync(resolve(f.mq, file), 'utf8');
+    const after = before.replace(from, to);
+    assert.notEqual(before, after, `a real policy declaration must change: ${file}`);
+    put(f.mq, file, after);
+    assert.throws(f.check, /changed; review/);
+    put(f.mq, file, before);
+  }
+  f.check();
+});
+
 test('a missing or invalid review manifest never silently disables the gate', (t) => {
   const f = fixture(t), file = 'tools/agent-contract.json';
   rmSync(resolve(f.website, file));
@@ -118,10 +163,16 @@ test('test-only files and the project version constant do not require agent sema
   assert.deepEqual(f.check(), before);
 });
 
-test('normative guidance changes require explicit agent review', (t) => {
-  const f = fixture(t), file = 'docs/mcp.md';
-  put(f.mq, file, readFileSync(resolve(f.mq, file), 'utf8') + '\nChanged authorization semantics.\n');
-  assert.throws(f.check, /docs\/mcp\.md changed/);
+test('all sixteen normative website documents require explicit review', (t) => {
+  const f = fixture(t), documents = Object.keys(manifest.files).filter((file) => file.startsWith('docs/'));
+  assert.equal(documents.length, 16);
+  for (const file of documents) {
+    const before = readFileSync(resolve(f.mq, file), 'utf8');
+    put(f.mq, file, before + '\nChanged documented behavior.\n');
+    assert.throws(f.check, /docs\/.*\.md changed/);
+    put(f.mq, file, before);
+  }
+  f.check();
 });
 
 test('ambiguous or invalid generated source facts are rejected', (t) => {

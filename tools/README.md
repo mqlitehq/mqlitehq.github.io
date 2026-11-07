@@ -44,10 +44,15 @@ The Go module version-query and install rules are documented at
 
 ## Reviewing source changes
 
-`tools/agent-contract.json` records the reviewed source behind the agent guidance.
+`tools/agent-contract.json` records the reviewed source behind the whole website
+(the filename predates the wider scope).
 The gate checks the exact file inventory and bytes, including MCP argument
 schemas and HTTP mappings, wire definitions, authorization, lease/settlement
 logic, CLI behavior, schema/defaults, dependencies, and normative documents.
+It also includes the actual embedded console assets, all website reference
+documents, and the build/release/deployment inputs behind toolchain, platform and
+container claims. The companion contract separately checks the remote SDK's
+production source, source floor and public compatibility inputs.
 Same-name/same-count changes and added or removed files do not pass silently.
 The version constant and test files are intentionally excluded; version facts
 are generated, while behavior changes require an actual review.
@@ -65,9 +70,57 @@ production package outside that scope requires expanding it. Placeholder identit
 checks and source hashes cannot prove the meaning of natural-language prose.
 Independent semantic review is still needed.
 
-## Detecting changes in the other repository
+## Whole-site index and version checklist
 
-The website workflow checks canonical Go `main` on website PRs and updates, and
+`tools/site-index.json` maps every public file to its maintained sources, locale,
+owner and generation/static-review policy. The same index is the Pages packaging
+allowlist. Independent filesystem discovery rejects unregistered pages, new
+locale directories and assets; missing files, incomplete language counterparts
+and changed unreviewed static files also fail. A new page needs a source mapping,
+translation, fact review and tests before it can be packaged.
+
+`tools/version-references.json` classifies literal reference lines in every
+indexed content source, including both languages, summaries, artwork labels,
+scripts and explanatory figures. It records exact text and repeated occurrences,
+so reusing the same old version in a new sentence does not reuse an old review.
+The classes are current stable release, current source Go floor, historical
+compatibility, and upstream/companion version. Current classes must contain the
+actual bound value, as well as a matching reviewed value. The SDK example pinned
+to a companion version remains an explicit recorded example; this check does not
+claim that every canonical installation example uses `@latest`.
+
+A new stable baseline requires reviewing the whole indexed release checklist,
+including production exact-image pins and matching-release links. Changes to
+the default port, schema token or Go floor require reviewing literal examples
+and figures too. Regenerated banners alone cannot approve old body text. Keep
+historical migration boundaries and measured benchmark toolchains literal; read
+the context before changing a classification or fingerprint. There is no command
+to automatically accept or refresh the review ledger.
+
+Run the same read-only audit as PR CI, using canonical checkouts of both modules:
+
+```sh
+node tools/site-audit.mjs /absolute/path/to/mqlite \
+  --sdk /absolute/path/to/mqlite-go \
+  --report /absolute/path/outside-the-public-site/audit.json
+```
+
+The JSON report lists every public source mapping and each reference's actual
+line, classification and review reason. CI also writes an index to the job
+summary and retains `documentation-audit` separately from the Pages package.
+Failures include the offending file and reference position. The tests include
+unregistered pages, reverse-order latest-release declarations, stale Chinese
+facts, new occurrences of existing versions, forged review-value updates,
+changed embedded-console assets and source-floor/release configuration changes.
+
+This is a conservative textual and source-change gate, not a natural-language
+proof or an assertion that all release assets are available. Source ranges and
+classifications remain reviewable maintenance decisions. A source-version-only
+bump can still regenerate facts without rewriting historical references.
+
+## Detecting changes in the source repositories
+
+The website workflow checks canonical broker and remote-SDK `main` on website PRs and updates, and
 is scheduled hourly at minute 17. The schedule becomes active only after this
 workflow reaches the default branch; GitHub may delay or disable scheduled work,
 so it is not an immediate Go-PR gate or a guaranteed one-hour response time.
@@ -78,5 +131,5 @@ canonical source, rather than relying on an old green run.
 Scheduled checks have read-only repository permissions, do not retain checkout
 credentials, and never deploy. Deployment keeps the existing main-branch push
 or explicit manual workflow policy; PR and schedule events cannot deploy. The
-packaging script copies public generated files only, excluding templates,
+packaging script copies indexed generated and reviewed static files, excluding templates,
 translation catalogs, tools, and contract-review data.

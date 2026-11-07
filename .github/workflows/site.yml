@@ -35,12 +35,22 @@ jobs:
           node-version: 24
           check-latest: true
           package-manager-cache: false
+      - name: Check out mqlite-go (companion contract)
+        uses: actions/checkout@v7
+        with:
+          repository: mqlitehq/mqlite-go
+          ref: main
+          path: mqlite-go-src
+          persist-credentials: false
       - name: Install generator dependencies
         working-directory: tools
         run: npm ci
       - name: Install Chromium for browser checks
         working-directory: tools
         run: npx playwright install --with-deps chromium
+      - name: Audit every public file and version reference
+        working-directory: tools
+        run: node site-audit.mjs ../mqlite-src --sdk ../mqlite-go-src --report "$RUNNER_TEMP/site-audit.json" --summary "$GITHUB_STEP_SUMMARY"
       - name: Test generation and rejection contracts
         working-directory: tools
         run: node --test *.test.mjs
@@ -56,6 +66,13 @@ jobs:
         uses: actions/upload-pages-artifact@v5
         with:
           path: _site
+      - name: Upload the documentation audit
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: documentation-audit
+          path: ${{ runner.temp }}/site-audit.json
+          if-no-files-found: ignore
 
   deploy:
     if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')

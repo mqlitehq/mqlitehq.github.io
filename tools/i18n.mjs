@@ -6,7 +6,7 @@ import { Marked } from 'marked';
 import { checkFactPair } from './facts.mjs';
 
 export const sha256 = (text) => createHash('sha256').update(text).digest('hex');
-export const INTERFACE_FILES = ['tools/build.mjs', 'tools/i18n.mjs', 'tools/facts.mjs', 'tools/releases.mjs', 'tools/agent-contract.mjs', 'tools/agent-contract.json', 'tools/concept-diagrams.mjs', 'tools/diagrams/manifest.json', 'tools/explanatory-figures.mjs', 'assets/site.js', 'assets/demo.js', 'assets/demo.css'];
+export const INTERFACE_FILES = ['tools/build.mjs', 'tools/i18n.mjs', 'tools/facts.mjs', 'tools/releases.mjs', 'tools/agent-contract.mjs', 'tools/agent-contract.json', 'tools/companion-contract.mjs', 'tools/companion-contract.json', 'tools/site-index.mjs', 'tools/site-index.json', 'tools/site-audit.mjs', 'tools/version-references.mjs', 'tools/version-references.json', 'tools/concept-diagrams.mjs', 'tools/diagrams/manifest.json', 'tools/explanatory-figures.mjs', 'assets/site.js', 'assets/demo.js', 'assets/demo.css'];
 const demand = (ok, message) => { if (!ok) throw new Error(message); };
 const json = (path) => JSON.parse(readFileSync(path, 'utf8'));
 const normalize = (text) => text.replace(/\r\n/g, '\n');
