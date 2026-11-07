@@ -7,8 +7,12 @@ import { fileURLToPath } from 'node:url';
 import { renderSite, sourceMetadata, BUNDLE_FILES, checkClaims } from './build.mjs';
 import { renderFacts } from './facts.mjs';
 import { translateHandwritten } from './i18n.mjs';
+import { readReleaseTags } from './releases.mjs';
 const site = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const canonical = [resolve(site, '../mqlite'), resolve(site, 'mqlite-src')].find(p => existsSync(resolve(p, 'docs/mcp.md')));
+const availableTags = readReleaseTags(canonical);
+const fixtureOptions = { releaseTags: availableTags, sourceIsReleaseTag: true };
+const renderSnapshot = (root, overrides = {}) => renderSite(root, { ...fixtureOptions, ...overrides });
 const read = (root, file) => readFileSync(resolve(root, file), 'utf8');
 function put(root, file, value) { mkdirSync(dirname(resolve(root, file)), { recursive: true }); writeFileSync(resolve(root, file), value); }
 function snapshot(t) {
@@ -34,7 +38,7 @@ test('agent entry points install a matching latest pair and identify deployed ca
 test('a source-only version bump updates both languages without claiming main was released', (t) => {
   const root = snapshot(t);
   put(root, 'internal/version/version.go', 'package version\nconst Version = "9.9.0"\n');
-  const { outputs, metadata } = renderSite(root);
+  const { outputs, metadata } = renderSnapshot(root);
   assert.equal(metadata.sourceVersion, '9.9.0');
   assert.equal(metadata.latestRelease, sourceMetadata(canonical).latestRelease);
   for (const locale of ['', 'zh-CN/']) for (const file of ['index.html', 'agents.html', 'llms.txt']) {
@@ -48,7 +52,7 @@ test('a new stable documentation baseline updates links while historical boundar
   const root = snapshot(t);
   put(root, 'internal/version/version.go', 'package version\nconst Version = "9.9.0"\n');
   put(root, 'CHANGELOG.md', '# Changelog\n\n## Unreleased\n\n## v9.9.0 — 2030-01-01\n\n' + read(root, 'CHANGELOG.md'));
-  const { outputs, metadata } = renderSite(root);
+  const { outputs, metadata } = renderSnapshot(root, { releaseTags: [...availableTags, 'v9.9.0'] });
   assert.equal(metadata.latestRelease, 'v9.9.0');
   for (const locale of ['', 'zh-CN/']) {
     const agents = String(outputs.get(locale + 'agents.html'));
@@ -67,7 +71,28 @@ test('a new stable documentation baseline updates links while historical boundar
 test('a dated release candidate cannot replace an existing stable documentation baseline', (t) => {
   const root = snapshot(t);
   put(root, 'CHANGELOG.md', '## v9.9.0-rc.1 — 2030-01-01\n\n' + read(root, 'CHANGELOG.md'));
-  assert.equal(sourceMetadata(root).latestRelease, sourceMetadata(canonical).latestRelease);
+  assert.equal(sourceMetadata(root, fixtureOptions).latestRelease, sourceMetadata(canonical).latestRelease);
+});
+
+test('a prepared dated stable heading without its tag is not announced as available', (t) => {
+  const root = snapshot(t);
+  put(root, 'internal/version/version.go', 'package version\nconst Version = "9.9.0"\n');
+  put(root, 'CHANGELOG.md', '# Changelog\n\n## Unreleased\n\n## v9.9.0 — 2030-01-01\n\n' + read(root, 'CHANGELOG.md'));
+  const { outputs, metadata } = renderSnapshot(root, { sourceIsReleaseTag: false });
+  assert.equal(metadata.latestRelease, sourceMetadata(canonical).latestRelease);
+  assert.equal(metadata.hasUnreleasedChanges, true);
+  assert.ok(!String(outputs.get('agents.html')).includes('/releases/tag/v9.9.0'));
+});
+
+test('tracked changes after a tag remain unreleased even with an unchanged version and empty notes', (t) => {
+  const root = snapshot(t);
+  const base = sourceMetadata(canonical).latestRelease;
+  put(root, 'internal/version/version.go', `package version\nconst Version = "${base.slice(1)}"\n`);
+  put(root, 'CHANGELOG.md', `# Changelog\n\n## Unreleased\n\n## ${base} — 2030-01-01\n`);
+  const { outputs, metadata } = renderSnapshot(root, { sourceIsReleaseTag: false });
+  assert.equal(metadata.hasUnreleasedChanges, true);
+  assert.ok(String(outputs.get('agents.html')).includes('with unreleased changes'));
+  assert.ok(String(outputs.get('zh-CN/agents.html')).includes('未发布'));
 });
 test('current install instructions cannot silently reintroduce a stale pinned module', (t) => {
   const { outputs, metadata } = renderSite(canonical);

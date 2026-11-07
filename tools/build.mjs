@@ -11,6 +11,7 @@ import { DIAGRAM_ASSETS, loadConceptDiagrams, conceptDiagramRenderer } from './c
 import { loadExplanatoryFigures, findExplanatoryFigure, renderExplanatoryFigure } from './explanatory-figures.mjs';
 import { sourceAgentFacts, checkAgentContract } from './agent-contract.mjs';
 import { renderFacts } from './facts.mjs';
+import { readReleaseTags, isReleaseTree } from './releases.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const site = resolve(here, '..');
@@ -66,16 +67,24 @@ const requireValue = (condition, message) => {
   if (!condition) throw new Error(message);
 };
 
-export function sourceMetadata(mq) {
+export function sourceMetadata(mq, options = {}) {
   const versions = [...read(mq, 'internal/version/version.go').matchAll(/^const Version = "(\d+\.\d+\.\d+)"$/gm)];
   requireValue(versions.length === 1, 'cannot read the single source version constant');
   const changelog = read(mq, 'CHANGELOG.md');
   const unreleasedSection = /^## Unreleased[ \t]*\r?\n([\s\S]*?)(?=^## |(?![\s\S]))/m.exec(changelog)?.[1] ?? '';
-  const hasUnreleasedChanges = unreleasedSection.replace(/<!--[\s\S]*?-->/g, '')
+  const hasUnreleasedNotes = unreleasedSection.replace(/<!--[\s\S]*?-->/g, '')
     .split('\n').some((line) => line.trim() && !/^\s*#{1,6}\s/.test(line));
+  // Hermetic fixtures can supply a catalog. The CLI always reads existing tags
+  // and tracked source, so a dated heading cannot publish a prepared release.
+  const tags = options.releaseTags ?? readReleaseTags(mq);
+  requireValue(Array.isArray(tags) || tags instanceof Set, 'invalid release tag catalog');
+  const published = new Set(tags);
   const release = [...changelog.matchAll(/^## (v\d+\.\d+\.\d+(?:-rc\.\d+)?)\s+—\s+\d{4}-\d{2}-\d{2}(?:\s+\(([^)]+)\))?\s*$/gm)]
-    .find(([, tag, status = '']) => !tag.includes('-') && !/\b(?:retracted|withdrawn)\b/i.test(status));
-  requireValue(release, 'CHANGELOG.md has no dated stable release heading');
+    .find(([, tag, status = '']) => published.has(tag) && !tag.includes('-') && !/\b(?:retracted|withdrawn|unsupported)\b/i.test(status));
+  requireValue(release, 'CHANGELOG.md has no dated stable release heading with an available Git tag');
+  const sourceIsReleaseTag = options.sourceIsReleaseTag ?? isReleaseTree(mq, release[1]);
+  requireValue(typeof sourceIsReleaseTag === 'boolean', 'invalid source/release tree state');
+  const hasUnreleasedChanges = hasUnreleasedNotes || !sourceIsReleaseTag || versions[0][1] !== release[1].slice(1);
   const routes = [...read(mq, 'wire/wire.go').matchAll(/^\s*Path\w+\s*=\s*"(\/mqlite\.v1\.[^"]+)"/gm)].map((m) => m[1]);
   const tools = [...read(mq, 'cmd/mqlite-mcp/main.go').matchAll(/^\s+name:\s+"([^"]+)"/gm)].map((m) => m[1]);
   const dispatch = /^\tswitch cmd \{([\s\S]*?)^\t\}/m.exec(read(mq, 'cmd/mqlite/main.go'))?.[1];
@@ -220,7 +229,7 @@ ${body}
 
 export function renderSite(mq, options = {}) {
   const bilingual = options.bilingual !== false;
-  const metadata = sourceMetadata(mq);
+  const metadata = sourceMetadata(mq, options);
   if (!bilingual) metadata.generatedFiles = GENERATED_FILES;
   if (bilingual) metadata.agentGuideContract = checkAgentContract(options.translationRoot ?? site, mq);
   const translations = bilingual ? loadTranslations(options.translationRoot ?? site, mq, BUNDLE_FILES) : null;

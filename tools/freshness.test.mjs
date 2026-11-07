@@ -50,7 +50,7 @@ test('hourly freshness checks use the normal validation path and never skip it f
 
 test('canonical freshness check reads main without retained checkout credentials or write permissions', () => {
   assert.match(workflow, /\npermissions:\n  contents: read\n/);
-  assert.match(antiRot, /repository: mqlitehq\/mqlite\n          ref: main\n          path: mqlite-src\n          persist-credentials: false/);
+  assert.match(antiRot, /repository: mqlitehq\/mqlite\n          ref: main\n          path: mqlite-src\n          fetch-depth: 0\n          fetch-tags: true\n          persist-credentials: false/);
   assert.equal((antiRot.match(/persist-credentials: false/g) ?? []).length, 2);
   assert.doesNotMatch(antiRot, /\b(?:contents|actions|pages|id-token): write\b/);
   assert.doesNotMatch(antiRot, /secrets\./);

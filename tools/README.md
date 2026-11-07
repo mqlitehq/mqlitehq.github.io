@@ -31,8 +31,13 @@ runnable startup examples is configured explicitly; it is not inferred from the
 main branch's default for a different installed release.
 
 The documentation baseline is the first supported, dated stable release heading
-in canonical `CHANGELOG.md`; release candidates and withdrawn/retracted headings
-are excluded. It is not a live Go-proxy or GitHub-release lookup. Historical
+in canonical `CHANGELOG.md` with an existing tag in the canonical checkout;
+release candidates and withdrawn/retracted/unsupported headings are excluded.
+The checkout must include its tags (CI fetches the complete tag/history set).
+Missing Git metadata fails closed; a prepared dated heading is not a published
+module tag. Tracked tree differences from that tag also mark the source as
+unreleased, even when the version and changelog notes were not updated.
+These are read-only local Git checks, not a live Go-proxy or GitHub-release lookup. Historical
 version explanations must not be replaced indiscriminately with `latest`.
 The Go module version-query and install rules are documented at
 <https://go.dev/ref/mod#version-queries> and <https://go.dev/ref/mod#go-install>.

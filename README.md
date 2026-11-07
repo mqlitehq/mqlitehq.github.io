@@ -41,11 +41,12 @@ choose documentation matching an installed binary.
 Generated pages carry separate **source version** and **latest supported release**
 stamps and must never be edited by hand. The source version comes from
 `internal/version/version.go`; the latest supported release comes from the first
-dated stable release heading in `CHANGELOG.md`, excluding release candidates,
-withdrawn and retracted entries, never from the source version constant. This is
-a documentation baseline, not a live registry lookup. A nonempty `Unreleased`
-section also marks source behavior as
-unreleased, even when the version constant still matches the last release.
+dated supported stable heading in `CHANGELOG.md` whose tag exists in the canonical
+checkout, excluding release candidates and withdrawn/retracted/unsupported entries.
+A prepared dated heading without a tag cannot announce an available release.
+This is a tagged documentation baseline, not a live registry lookup. Nonempty
+`Unreleased` notes or tracked tree differences from the selected tag mark the
+source as unreleased, even if its version constant matches the last release.
 The website describes `main`, including changes not yet released.
 
 Use Node 24 LTS. Whenever the mqlite docs change (and on every release):

@@ -6,10 +6,13 @@ import { tmpdir } from 'node:os';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
-import { PAGES, BUNDLE_FILES, GENERATED_FILES, HANDWRITTEN_RELEASE_FILES, sourceMetadata, renderSite as renderBilingualSite, checkOutputs, checkClaims, checkLinks, rewriteLinks, rewriteMdLinks } from './build.mjs';
+import { PAGES, BUNDLE_FILES, GENERATED_FILES, HANDWRITTEN_RELEASE_FILES, sourceMetadata as sourceFacts, renderSite as renderBilingualSite, checkOutputs, checkClaims, checkLinks, rewriteLinks, rewriteMdLinks } from './build.mjs';
 import { createSiteServer } from './serve.mjs';
 
-const renderSite = (mq) => renderBilingualSite(mq, { bilingual: false });
+const fixtureReleases = ['v0.1.0', 'v0.1.1', 'v0.2.0', 'v0.3.0', 'v0.3.1', 'v0.3.2', 'v0.3.3', 'v0.4.0'];
+const fixtureOptions = { bilingual: false, releaseTags: fixtureReleases, sourceIsReleaseTag: true };
+const sourceMetadata = (mq) => sourceFacts(mq, fixtureOptions);
+const renderSite = (mq) => renderBilingualSite(mq, fixtureOptions);
 
 const here = dirname(fileURLToPath(import.meta.url));
 const site = resolve(here, '..');

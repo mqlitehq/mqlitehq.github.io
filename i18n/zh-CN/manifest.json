@@ -74,9 +74,10 @@
   },
   "chromeSourceSha256": "339d4d3c2b93b8b5a1f3c13d720094155f42b3400eff530e28f7f4fc2602e372",
   "runtimeSources": {
-    "tools/build.mjs": "05d059534864f4f6eab63fb30b80ccd11c7a7a05d7013384e3642304c739afa2",
-    "tools/i18n.mjs": "7c282e08f71d2703f62a362be69aff946fdbfed57c8a14e19e1de63925d46c3e",
+    "tools/build.mjs": "256f89a435fc0c7de985569897fe2cc49ee534e0a6f37e44a398b25140b99727",
+    "tools/i18n.mjs": "3b1efde2d1701e39299957b7b12931770d47d301770477034a8c7bf4cbf25680",
     "tools/facts.mjs": "863407c1b0e8a43ab8127c171ce4442362f9d8816ef9e034f5f60c47a8dd75fa",
+    "tools/releases.mjs": "98be80bf18eba04f0d2d0ee7aea4cb4a6cd8cc91cf153573dddd644306ca9f26",
     "tools/agent-contract.mjs": "f753ac19af68e5189137e9a0372d77a85780f12ec2b1a68780efe42cb548a1f0",
     "tools/agent-contract.json": "090339e222b03fbd5e9907775d77d5095171c8e633cde64c02484282e352ae40",
     "tools/concept-diagrams.mjs": "698e90f2e74e292c7d4b0cde8f52b78c66c7275db1f7ecdc9c51d68e1c905e1d",
