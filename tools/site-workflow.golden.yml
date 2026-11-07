@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  # Detect canonical-source drift even when this repository has no new commit.
+  # Scheduled checks are read-only and never publish; scheduling may be delayed.
+  schedule:
+    - cron: '17 * * * *'
 
 permissions:
   contents: read
@@ -15,11 +19,15 @@ jobs:
     steps:
       - name: Check out the site
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - name: Check out mqlite (canonical docs)
         uses: actions/checkout@v7
         with:
           repository: mqlitehq/mqlite
+          ref: main
           path: mqlite-src
+          persist-credentials: false
       - uses: actions/setup-node@v7
         with:
           node-version: 24
@@ -28,13 +36,13 @@ jobs:
       - name: Install generator dependencies
         working-directory: tools
         run: npm ci
-      - name: Install Chromium for the landing-page contract
+      - name: Install Chromium for browser checks
         working-directory: tools
         run: npx playwright install --with-deps chromium
       - name: Test generation and rejection contracts
         working-directory: tools
         run: node --test *.test.mjs
-      - name: Test the accessible landing-page demo
+      - name: Test navigation, bilingual pages and the demo
         working-directory: tools
         run: npx playwright test --config playwright.config.mjs
       - name: Verify every generated output and source-derived claim
@@ -48,7 +56,7 @@ jobs:
           path: _site
 
   deploy:
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     needs: anti-rot
     runs-on: ubuntu-latest
     permissions:

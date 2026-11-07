@@ -41,8 +41,8 @@ test('pairing manifest rejects source drift, unreviewed translations and missing
   };
   for (const name of INTERFACE_FILES) put(root, name, name);
   put(canonical, 'docs/concepts.md', en);
-  put(root, 'llms.txt', en);
-  put(root, 'agents.html', `<pre id="p1"><code>${en}</code></pre>`);
+  put(root, 'templates/llms.txt', en);
+  put(root, 'templates/agents.html', `<pre id="p1"><code>${en}</code></pre>`);
   put(root, 'i18n/zh-CN/agent-prompt.txt', zh);
   put(root, 'i18n/zh-CN/docs/concepts.md', zh);
   put(root, 'i18n/zh-CN/interface.json', catalog);

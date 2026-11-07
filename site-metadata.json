@@ -1,4 +1,7 @@
 {
+  "goVersion": "1.21",
+  "schemaVersion": "7",
+  "brokerPort": "6754",
   "sourceVersion": "0.4.2",
   "latestRelease": "v0.4.2",
   "hasUnreleasedChanges": true,
@@ -149,11 +152,20 @@
     "assets/concepts-filter.svg",
     "assets/zh-CN/fig-overview.svg",
     "assets/zh-CN/concepts-lifecycle.svg",
-    "assets/zh-CN/concepts-filter.svg"
+    "assets/zh-CN/concepts-filter.svg",
+    "index.html",
+    "agents.html",
+    "llms.txt"
   ],
   "locales": [
     "en",
     "zh-CN"
   ],
-  "defaultLocale": "en"
+  "defaultLocale": "en",
+  "agentGuideContract": {
+    "formatVersion": 1,
+    "reviewedRevision": "7834304fd58a2d8a767e93829004515230c9342e",
+    "sourceDigest": "25322068e01bca2c4ad5a8df4c06cf5a42b8fc4338956258d14a9b0b812e0964",
+    "filesReviewed": 66
+  }
 }

@@ -11,8 +11,8 @@ choose documentation matching an installed binary.
 
 | File | What | Maintained how |
 |---|---|---|
-| `index.html` | landing page | by hand |
-| `agents.html` | AI-agent guide (MCP + copy-paste prompt) | by hand |
+| `index.html` | landing page | **generated** from `templates/index.html` and source facts |
+| `agents.html` | AI-agent guide (MCP + copy-paste prompt) | **generated** from `templates/agents.html` and source facts |
 | `concepts.html` | the mqlite model | **generated** from `mqlite/docs/concepts.md` |
 | `internals.html` | how mqlite is built | **generated** from `mqlite/docs/internals.md` |
 | `api.html` | HTTP API reference | **generated** from `mqlite/docs/api-reference.md` |
@@ -22,7 +22,7 @@ choose documentation matching an installed binary.
 | `observability.html` | metrics and operational alerts | **generated** from `mqlite/docs/observability.md` |
 | `observability-cloud.html` | authenticated cloud and Kubernetes metric collection | **generated** from `mqlite/docs/observability-cloud.md` |
 | `operations.html` | backup, restore, upgrades and incident response | **generated** from `mqlite/docs/operations.md` |
-| `llms.txt` | one-page machine-readable summary | by hand |
+| `llms.txt` | one-page machine-readable summary | **generated** from `templates/llms.txt` and source facts |
 | `llms-full.txt` | full docs bundle (markdown) | **generated** (all rendered references + Turso, retention, benchmark, conformance, dependencies, MCP and examples) |
 | `site-metadata.json` | source version, latest supported release, API/MCP/CLI surface, output inventory | **generated** from canonical source |
 | `assets/site.css` | shared chrome (true-black, mono, amber accent) | by hand |
@@ -41,8 +41,10 @@ choose documentation matching an installed binary.
 Generated pages carry separate **source version** and **latest supported release**
 stamps and must never be edited by hand. The source version comes from
 `internal/version/version.go`; the latest supported release comes from the first
-dated non-withdrawn release heading in `CHANGELOG.md`, never from the source
-version constant. A nonempty `Unreleased` section also marks source behavior as
+dated stable release heading in `CHANGELOG.md`, excluding release candidates,
+withdrawn and retracted entries, never from the source version constant. This is
+a documentation baseline, not a live registry lookup. A nonempty `Unreleased`
+section also marks source behavior as
 unreleased, even when the version constant still matches the last release.
 The website describes `main`, including changes not yet released.
 
@@ -75,10 +77,13 @@ Before committing, regenerate against the canonical checkout after its docs merg
 metadata, the complete LLM bundle and the vendored highlighter; tests pin that
 entire inventory and verify rejection of stale content. It also checks every
 advertised route/tool/command count against the source, not just one matching
-mention. The three hand-written entry points must each match the source version,
-latest supported release and released/unreleased state. Local links, assets and
-page anchors are verified too, so update those hand-written release facts
-deliberately when a new release lands.
+mention. The three entry points render source/release versions, compatibility
+facts and counts from one fact set in both languages. Edit their `templates/`
+sources rather than the generated root files; do not manually repeat current
+version numbers. Historical compatibility boundaries remain literal. Local links,
+assets and page anchors are verified too. See [the maintenance guide](tools/README.md)
+for source-contract review, `@latest` installation and hourly cross-repository
+freshness checks. Scheduled checks cannot deploy the website.
 
 The concepts page displays three SVG illustrations by default: delivery targets,
 the message lifecycle and subscription-filter execution. Each image is paired
@@ -160,7 +165,7 @@ pins generated-page titles/descriptions and the scripts/templates that contain
 paired interface text; changes require reviewing both languages. Update only the
 reviewed pairs' hashes after semantic review (for example,
 `shasum -a 256 ../mqlite/docs/concepts.md i18n/zh-CN/docs/concepts.md`). Interface
-page source hashes must also match their exact hand-written HTML. The build
+page source hashes must also match their exact `templates/*.html` source. The build
 rejects unreviewed source or translation drift, missing counterparts, changed
 code/identifiers/numbers/links, and different heading, list or table structures.
 These checks support human translation review; they cannot establish semantic
