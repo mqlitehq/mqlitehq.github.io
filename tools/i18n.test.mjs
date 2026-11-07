@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync
 import { tmpdir } from 'node:os';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { INTERFACE_FILES, checkAgentPrompt, translateAgentPrompt, checkMarkdownPair, checkNumericPair, sha256, loadTranslations, keepEnglishHeadingIds, handwrittenStrings, translateHandwritten } from './i18n.mjs';
+import { INTERFACE_FILES, checkAgentPrompt, translateAgentPrompt, checkMarkdownPair, checkNumericPair, sha256, loadTranslations, keepEnglishHeadingIds, handwrittenStrings, translateHandwritten, languageSwitch } from './i18n.mjs';
 import { localizeSummary, renderSite, PAGES, ALL_GENERATED_FILES } from './build.mjs';
 
 const site = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -115,6 +115,14 @@ test('the real bilingual site covers every source and keeps code and anchors ide
   assert.deepEqual([...outputs.keys()], ALL_GENERATED_FILES);
   assert.deepEqual(metadata.locales, ['en', 'zh-CN']);
   assert.equal(metadata.defaultLocale, 'en');
+  // Hand-written entry pages must use the same reviewed picker as generated
+  // references; the locale widget is opaque to the prose translator.
+  for (const file of ['index.html', 'agents.html']) {
+    const english = readFileSync(resolve(site, file), 'utf8');
+    const picker = /<details\b[^>]*data-language-picker[^>]*>[\s\S]*?<\/details>/.exec(english)?.[0];
+    assert.equal(picker, languageSwitch(file), `${file}: shared language inventory`);
+    assert.ok(outputs.get(`zh-CN/${file}`).includes(languageSwitch(file, true)), file);
+  }
   for (const [, file] of PAGES) {
     const english = outputs.get(file), chinese = outputs.get(`zh-CN/${file}`);
     const ids = (html) => [...html.matchAll(/<h[1-6]\b[^>]*id="([^"]+)"/g)].map((m) => m[1]);

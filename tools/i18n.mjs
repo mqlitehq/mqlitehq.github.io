@@ -155,12 +155,12 @@ export const textKey = (text) => decodeText(text).replace(/\s+/g, ' ').trim();
 const escape = (text) => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 // Keep scripts, code examples, styles and diagrams opaque; prose outside them is
 // exhaustive, including metadata, accessible names and descriptions.
-const htmlTokens = (html) => html.match(/<!--[\s\S]*?-->|<a\b[^>]*data-language-switch[^>]*>[\s\S]*?<\/a>|<(pre|code|script|style|svg)\b[\s\S]*?<\/\1\s*>|<[^>]+>|[^<]+/gi) ?? [];
+const htmlTokens = (html) => html.match(/<!--[\s\S]*?-->|<details\b[^>]*data-language-picker[^>]*>[\s\S]*?<\/details>|<(pre|code|script|style|svg)\b[\s\S]*?<\/\1\s*>|<[^>]+>|[^<]+/gi) ?? [];
 
 export function handwrittenStrings(html) {
   const values = new Set();
   for (const token of htmlTokens(html)) {
-    if (/^<!--|^<(?:pre|code|script|style|svg)\b|^<a\b[^>]*data-language-switch/i.test(token)) continue;
+    if (/^<!--|^<(?:pre|code|script|style|svg)\b|^<details\b[^>]*data-language-picker/i.test(token)) continue;
     if (token[0] === '<') {
       for (const m of token.matchAll(/\b(?:aria-label|title|alt|placeholder)=(["'])(.*?)\1/g)) if (textKey(m[2])) values.add(textKey(m[2]));
       if (/^<meta\b[^>]*(?:name=["']description["']|property=["']og:(?:title|description)["'])/i.test(token)) {
@@ -184,7 +184,7 @@ export function translateHandwritten(html, catalog, name) {
     return leading + escape(catalog.strings[key]) + trailing;
   };
   return htmlTokens(html).map((token) => {
-    if (/^<!--|^<(?:pre|code|script|style|svg)\b|^<a\b[^>]*data-language-switch/i.test(token)) return token;
+    if (/^<!--|^<(?:pre|code|script|style|svg)\b|^<details\b[^>]*data-language-picker/i.test(token)) return token;
     if (token[0] !== '<') return translate(token);
     token = token.replace(/\b(aria-label|title|alt|placeholder)=(["'])(.*?)\2/g, (_m, attr, quote, value) => `${attr}=${quote}${translate(value)}${quote}`);
     if (/^<meta\b[^>]*(?:name=["']description["']|property=["']og:(?:title|description)["'])/i.test(token)) token = token.replace(/\bcontent=(["'])(.*?)\1/, (_m, quote, value) => `content=${quote}${translate(value)}${quote}`);
@@ -207,6 +207,23 @@ export function languageLinks(file, chinese = false) {
   return `<link rel="alternate" hreflang="en" href="${english}">\n<link rel="alternate" hreflang="zh-CN" href="${zh}">\n<link rel="alternate" hreflang="x-default" href="${english}">`;
 }
 
+// Add a language here only when its matching pages are available. The picker
+// lists every published locale; it never guesses a language from browser state.
+export const SITE_LANGUAGES = [
+  { tag: 'en', label: 'English', shortLabel: 'EN', directory: '' },
+  { tag: 'zh-CN', label: '简体中文', shortLabel: '中文', directory: 'zh-CN/' },
+];
+
 export function languageSwitch(file, chinese = false) {
-  return `<a class="language-switch" data-language-switch href="${chinese ? `../${file}` : `zh-CN/${file}`}" hreflang="${chinese ? 'en' : 'zh-CN'}" lang="${chinese ? 'en' : 'zh-CN'}" aria-label="${chinese ? 'Switch to English' : '切换为简体中文'}">${chinese ? 'English' : '简体中文'}</a>`;
+  const current = SITE_LANGUAGES.find(({ tag }) => tag === (chinese ? 'zh-CN' : 'en'));
+  const options = SITE_LANGUAGES.map(({ tag, label, directory }) => {
+    const href = `${chinese ? '../' : ''}${directory}${file}`;
+    return `<li><a data-language-switch href="${escape(href)}" hreflang="${escape(tag)}" lang="${escape(tag)}"${tag === current.tag ? ' aria-current="true"' : ''}>${escape(label)}</a></li>`;
+  }).join('\n');
+  return `<details class="language-picker" data-language-picker name="header-menu">
+      <summary aria-label="${chinese ? '语言：' : 'Language: '}${escape(current.label)}" title="${chinese ? '选择语言' : 'Choose language'}"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.25"><circle cx="8" cy="8" r="6"/><ellipse cx="8" cy="8" rx="2.5" ry="6"/><path d="M2 8h12"/></svg><span>${escape(current.shortLabel)}</span></summary>
+      <ul class="language-options" aria-label="${chinese ? '可用语言' : 'Available languages'}">
+${options}
+      </ul>
+    </details>`;
 }

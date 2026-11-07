@@ -6,7 +6,7 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Marked } from 'marked';
 import { gfmHeadingId } from 'marked-gfm-heading-id';
-import { sha256, loadTranslations, keepEnglishHeadingIds, checkNumericPair, translateHandwritten, translateAgentPrompt, localeLinks, languageLinks, languageSwitch } from './i18n.mjs';
+import { sha256, loadTranslations, keepEnglishHeadingIds, checkNumericPair, translateHandwritten, translateAgentPrompt, localeLinks, languageLinks, languageSwitch, SITE_LANGUAGES } from './i18n.mjs';
 import { DIAGRAM_ASSETS, loadConceptDiagrams, conceptDiagramRenderer } from './concept-diagrams.mjs';
 import { loadExplanatoryFigures, findExplanatoryFigure, renderExplanatoryFigure } from './explanatory-figures.mjs';
 
@@ -93,7 +93,7 @@ export function sourceMetadata(mq) {
     cliCommands: commands.sort(),
     documents: BUNDLE_FILES,
     generatedFiles: ALL_GENERATED_FILES,
-    locales: ['en', 'zh-CN'],
+    locales: SITE_LANGUAGES.map(({ tag }) => tag),
     defaultLocale: 'en',
   };
 }
@@ -187,7 +187,7 @@ ${languageLinks(out, chinese)}
   <div class="links overflow-nav" data-overflow>
     <div class="overflow-primary"></div>
     ${languageSwitch(out, chinese)}
-    <details class="overflow-more has-current">
+    <details class="overflow-more has-current" name="header-menu">
       <summary aria-label="${chinese ? '更多导航链接' : 'More navigation links'}">${chinese ? '更多' : 'More'}</summary>
       <div class="overflow-items">
 ${navigation}
@@ -262,7 +262,7 @@ export function renderSite(mq, options = {}) {
       if (name === 'agents.html') chinese = translateAgentPrompt(chinese, translations.prompt);
       checkNumericPair(english, chinese, name);
       chinese = chinese.replace('<html lang="en">', '<html lang="zh-CN">')
-        .replace(/<a\b[^>]*data-language-switch[^>]*>[\s\S]*?<\/a>/, languageSwitch(name, true))
+        .replace(/<details\b[^>]*data-language-picker[^>]*>[\s\S]*?<\/details>/, languageSwitch(name, true))
         .replace(/<link rel="alternate"[^>]*>\n?/g, '');
       chinese = chinese.replace('</head>', `${languageLinks(name, true)}\n</head>`);
       outputs.set(`zh-CN/${name}`, localeLinks(chinese, true));

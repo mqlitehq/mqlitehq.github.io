@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 async function expectSingleRow(row) {
   const geometry = await row.evaluate((element) => {
     const controls = Array.from(element.querySelectorAll('a, summary')).filter((item) => (
-      item.getClientRects().length && !item.closest('.overflow-items')
+      item.getClientRects().length && !item.closest('.overflow-items, .language-options')
     ));
     return {
       centers: controls.map((item) => {
@@ -36,7 +36,7 @@ test('header and hero keep one row and move a stable prefix into More at every w
     await expectSingleRow(header.locator('.wrap'));
     await expectSingleRow(hero);
     await expectNoPageOverflow(page);
-    await expect(header.locator('[data-language-switch]')).toBeVisible();
+    await expect(header.locator('[data-language-picker] > summary')).toBeVisible();
     await expect(hero.getByRole('link', { name: 'Quickstart', exact: true })).toBeVisible();
     previousHeader = await header.locator('.overflow-primary > a').count();
     previousHero = await hero.locator('.overflow-primary > a').count();
@@ -59,7 +59,7 @@ test('More is a native keyboard disclosure with Escape, outside click and focus 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
   const row = page.getByRole('navigation', { name: 'Main navigation' });
-  const more = row.locator('details');
+  const more = row.locator('.overflow-more');
   const summary = more.locator('summary');
   await summary.focus();
   await page.keyboard.press('Enter');
@@ -85,26 +85,26 @@ test('a focused link remains reachable through resize and current page is identi
   const concepts = row.getByRole('link', { name: 'Concepts', exact: true });
   await concepts.focus();
   await page.setViewportSize({ width: 320, height: 900 });
-  await expect(row.locator('details')).toHaveAttribute('open', '');
+  await expect(row.locator('.overflow-more')).toHaveAttribute('open', '');
   await expect(concepts).toBeFocused();
   await expect(concepts).toHaveAttribute('aria-current', 'page');
-  await expect(row.locator('summary')).toHaveAccessibleName('More navigation links; current page: Concepts');
+  await expect(row.locator('.overflow-more > summary')).toHaveAccessibleName('More navigation links; current page: Concepts');
   await expectNoPageOverflow(page);
   await page.keyboard.press('Escape');
   await page.setViewportSize({ width: 1440, height: 900 });
   await expect.poll(() => row.locator('.overflow-primary > a[aria-current="page"]').count()).toBe(1);
-  await expect(row.locator('summary')).toHaveAccessibleName('More navigation links');
+  await expect(row.locator('.overflow-more > summary')).toHaveAccessibleName('More navigation links');
 });
 
 test('all links return when space allows and focus leaves a disappearing More safely', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 844 });
   await page.goto('/');
   const row = page.getByRole('navigation', { name: 'Main navigation' });
-  await row.locator('summary').focus();
+  await row.locator('.overflow-more > summary').focus();
   await page.addStyleTag({ content: 'nav.top .wrap { max-width: none; }' });
   await page.setViewportSize({ width: 2000, height: 900 });
   await expect(row.locator('.overflow-primary > a')).toHaveCount(11);
-  await expect(row.locator('details')).toBeHidden();
+  await expect(row.locator('.overflow-more')).toBeHidden();
   await expect(row.getByRole('link', { name: 'GitHub', exact: false })).toBeFocused();
   await expectSingleRow(row.locator('.wrap'));
 });
@@ -113,7 +113,7 @@ test('a focused More retains focus while resizing with its disclosure closed or 
   await page.goto('/');
   for (const open of [false, true]) {
     await page.setViewportSize({ width: 390, height: 844 });
-    const more = page.getByRole('navigation', { name: 'Main navigation' }).locator('details');
+    const more = page.getByRole('navigation', { name: 'Main navigation' }).locator('.overflow-more');
     const summary = more.locator('summary');
     await summary.focus();
     if (open) await page.keyboard.press('Enter');
@@ -149,7 +149,7 @@ test('200 percent zoom reflows both rows and the open panels within the viewport
   for (const name of ['Main navigation', 'Get started']) {
     const row = page.getByRole('navigation', { name });
     await expectSingleRow(name === 'Main navigation' ? row.locator('.wrap') : row);
-    await row.locator('summary').click();
+    await row.locator('.overflow-more > summary').click();
     const box = await row.locator('.overflow-items').boundingBox();
     expect(box.x).toBeGreaterThanOrEqual(0);
     expect(box.x + box.width).toBeLessThanOrEqual(1280);
@@ -165,10 +165,10 @@ test('without JavaScript, both single rows expose every secondary link through n
   for (const name of ['Main navigation', 'Get started']) {
     const row = page.getByRole('navigation', { name });
     await expectSingleRow(name === 'Main navigation' ? row.locator('.wrap') : row);
-    await row.locator('summary').click();
+    await row.locator('.overflow-more > summary').click();
     await expect(row.locator('.overflow-items a').last()).toBeVisible();
     await expectNoPageOverflow(page);
-    await row.locator('summary').click();
+    await row.locator('.overflow-more > summary').click();
   }
   await context.close();
 });

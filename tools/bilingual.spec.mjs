@@ -15,7 +15,7 @@ async function expectNoHorizontalOverflow(page) {
 async function expectSingleRow(row) {
   await expect.poll(() => row.evaluate((element) => {
     const controls = Array.from(element.querySelectorAll('a, summary')).filter((item) => (
-      item.getClientRects().length && !item.closest('.overflow-items')
+      item.getClientRects().length && !item.closest('.overflow-items, .language-options')
     ));
     const centers = controls.map((item) => {
       const box = item.getBoundingClientRect();
@@ -27,11 +27,11 @@ async function expectSingleRow(row) {
 }
 
 async function expectPanelInsideViewport(page, row) {
-  const summary = row.locator('summary');
+  const summary = row.locator('.overflow-more > summary');
   await expect(summary).toBeVisible();
   await summary.focus();
   await page.keyboard.press('Enter');
-  await expect(row.locator('details')).toHaveAttribute('open', '');
+  await expect(row.locator('.overflow-more')).toHaveAttribute('open', '');
   const panel = await row.locator('.overflow-items').boundingBox();
   expect(panel).not.toBeNull();
   expect(panel.x).toBeGreaterThanOrEqual(-1);
@@ -39,7 +39,25 @@ async function expectPanelInsideViewport(page, row) {
   await page.keyboard.press('Tab');
   await expect(row.locator('.overflow-items > a').first()).toBeFocused();
   await page.keyboard.press('Escape');
-  await expect(row.locator('details')).not.toHaveAttribute('open');
+  await expect(row.locator('.overflow-more')).not.toHaveAttribute('open');
+  await expect(summary).toBeFocused();
+}
+
+async function expectLanguagePanelInsideViewport(page) {
+  const picker = page.locator('[data-language-picker]');
+  const summary = picker.locator('summary');
+  await summary.focus();
+  await page.keyboard.press('Enter');
+  await expect(picker).toHaveAttribute('open', '');
+  const panel = await picker.locator('.language-options').boundingBox();
+  expect(panel).not.toBeNull();
+  expect(panel.x).toBeGreaterThanOrEqual(-1);
+  expect(panel.x + panel.width).toBeLessThanOrEqual(page.viewportSize().width + 1);
+  await expectSingleRow(page.locator('nav.top .wrap'));
+  await page.keyboard.press('Tab');
+  await expect(picker.locator('[data-language-switch]').first()).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(picker).not.toHaveAttribute('open');
   await expect(summary).toBeFocused();
 }
 
@@ -51,10 +69,13 @@ test('English remains the default even when the browser prefers Simplified Chine
     await expect(page.locator('html')).toHaveAttribute('lang', 'en');
     expect(new URL(page.url()).pathname).toBe('/');
     await expect(page.locator('.hero .tag')).toContainText('A message queue');
-    await expect(page.locator('[data-language-switch]')).toHaveText('简体中文');
+    await expect(page.locator('[data-language-picker] > summary')).toHaveAccessibleName('Language: English');
+    await expect(page.locator('[data-language-switch]')).toHaveText(['English', '简体中文']);
+    await expect(page.locator('[data-language-switch][hreflang="en"]')).toHaveAttribute('aria-current', 'true');
     await page.goto('/zh-CN/index.html');
     await expect(page.locator('html')).toHaveAttribute('lang', 'zh-CN');
-    await expect(page.locator('[data-language-switch]')).toHaveText('English');
+    await expect(page.locator('[data-language-picker] > summary')).toHaveAccessibleName('语言：简体中文');
+    await expect(page.locator('[data-language-switch][hreflang="zh-CN"]')).toHaveAttribute('aria-current', 'true');
     // A prior explicit visit must not turn an English URL into an automatic redirect.
     await page.goto('/api.html');
     await expect(page.locator('html')).toHaveAttribute('lang', 'en');
@@ -66,19 +87,91 @@ test('English remains the default even when the browser prefers Simplified Chine
 
 test('language switch preserves the current document, query and section in both directions', async ({ page }) => {
   await page.goto('/api.html?view=contract&example=receive#auth');
-  const languageSwitch = page.locator('[data-language-switch]');
-  await expect(languageSwitch).toHaveAttribute('hreflang', 'zh-CN');
-  await languageSwitch.click();
+  const picker = page.locator('[data-language-picker]');
+  const english = picker.locator('[data-language-switch][hreflang="en"]');
+  const chinese = picker.locator('[data-language-switch][hreflang="zh-CN"]');
+  await expect(english).toHaveAttribute('href', /\/api\.html\?view=contract&example=receive#auth$/);
+  await expect(chinese).toHaveAttribute('href', /\/zh-CN\/api\.html\?view=contract&example=receive#auth$/);
+  await picker.locator('summary').click();
+  await chinese.click();
   await expect(page).toHaveURL(/\/zh-CN\/api\.html\?view=contract&example=receive#auth$/);
   await expect(page.locator('#auth')).toBeVisible();
-  await expect(languageSwitch).toHaveAttribute('hreflang', 'en');
-  await languageSwitch.click();
+  await expect(chinese).toHaveAttribute('aria-current', 'true');
+  await expect(english).not.toHaveAttribute('aria-current');
+  await picker.locator('summary').click();
+  await english.click();
   await expect(page).toHaveURL(/\/api\.html\?view=contract&example=receive#auth$/);
   // Anchors selected after document load must be kept as well.
   await page.evaluate(() => { location.hash = 'errors'; });
-  await expect(languageSwitch).toHaveAttribute('href', /\/zh-CN\/api\.html\?view=contract&example=receive#errors$/);
-  await languageSwitch.click();
+  await expect(english).toHaveAttribute('href', /\/api\.html\?view=contract&example=receive#errors$/);
+  await expect(chinese).toHaveAttribute('href', /\/zh-CN\/api\.html\?view=contract&example=receive#errors$/);
+  await picker.locator('summary').click();
+  await chinese.click();
   await expect(page).toHaveURL(/\/zh-CN\/api\.html\?view=contract&example=receive#errors$/);
+});
+
+test('the language picker supports keyboard selection, dismissal and exclusive navigation panels', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+  const picker = page.locator('[data-language-picker]');
+  const summary = picker.locator('summary');
+  const options = picker.locator('[data-language-switch]');
+  const more = page.locator('nav.top .overflow-more');
+  await summary.focus();
+  await page.keyboard.press('Enter');
+  await expect(picker).toHaveAttribute('open', '');
+  await page.keyboard.press('Tab');
+  await expect(options.nth(0)).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(options.nth(1)).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(picker).not.toHaveAttribute('open');
+  await expect(summary).toBeFocused();
+  await page.keyboard.press('Space');
+  await expect(picker).toHaveAttribute('open', '');
+  await more.locator('summary').click();
+  await expect(more).toHaveAttribute('open', '');
+  await expect(picker).not.toHaveAttribute('open');
+  await summary.click();
+  await expect(picker).toHaveAttribute('open', '');
+  await expect(more).not.toHaveAttribute('open');
+  await page.locator('.hero h1').click();
+  await expect(picker).not.toHaveAttribute('open');
+  await summary.click();
+  await page.locator('nav.top .brand').focus();
+  await expect(picker).not.toHaveAttribute('open');
+  await summary.focus();
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Enter');
+  await expect(page).toHaveURL(/\/zh-CN\/index\.html$/);
+  await expect(page.locator('html')).toHaveAttribute('lang', 'zh-CN');
+});
+
+test('an additional language link receives location preservation and native keyboard access', async ({ page }) => {
+  // Add a catalog entry before site.js runs; this tests extension without a fake translated page.
+  await page.route(/\/agents\.html(?:\?|$)/, async (route) => {
+    const response = await route.fetch();
+    const html = await response.text();
+    expect(html).toMatch(/<a\b[^>]*data-language-switch/);
+    const body = html.replace(/(?=<a\b[^>]*data-language-switch)/,
+      '<a data-language-switch href="fr/agents.html" hreflang="fr" lang="fr">Français</a>');
+    await route.fulfill({ response, body });
+  });
+  await page.goto('/agents.html?view=extended#p1');
+  const picker = page.locator('[data-language-picker]');
+  const french = picker.locator('[data-language-switch][hreflang="fr"]');
+  await expect(french).toHaveAttribute('href', /\/fr\/agents\.html\?view=extended#p1$/);
+  await page.evaluate(() => { location.hash = 'rules'; });
+  await expect(french).toHaveAttribute('href', /\/fr\/agents\.html\?view=extended#rules$/);
+  await picker.locator('summary').focus();
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('Tab');
+  await expect(french).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(picker).not.toHaveAttribute('open');
+  await expect(picker.locator('summary')).toBeFocused();
 });
 
 test('Chinese navigation stays on one line at 320px and at 200 percent zoom', async ({ page }) => {
@@ -95,7 +188,8 @@ test('Chinese navigation stays on one line at 320px and at 200 percent zoom', as
     const hero = page.locator('nav.cta');
     await expectSingleRow(header.locator('.wrap'));
     await expectSingleRow(hero);
-    await expect(page.locator('[data-language-switch]')).toBeVisible();
+    await expect(page.locator('[data-language-picker] > summary')).toBeVisible();
+    await expectLanguagePanelInsideViewport(page);
     await expectPanelInsideViewport(page, header);
     await expectPanelInsideViewport(page, hero);
     await expectNoHorizontalOverflow(page);
@@ -179,16 +273,24 @@ test('language selection and the Chinese More menu remain usable without JavaScr
   try {
     const page = await context.newPage();
     await page.goto('/operations.html');
-    await page.locator('[data-language-switch]').click();
+    const picker = page.locator('[data-language-picker]');
+    await picker.locator('summary').focus();
+    await page.keyboard.press('Enter');
+    await expect(picker.locator('[data-language-switch]')).toHaveText(['English', '简体中文']);
+    await page.keyboard.press('Tab');
+    await page.keyboard.press('Tab');
+    await page.keyboard.press('Enter');
     await expect(page).toHaveURL(/\/zh-CN\/operations\.html$/);
     await expect(page.locator('html')).toHaveAttribute('lang', 'zh-CN');
     const nav = page.locator('nav.top');
     await expectSingleRow(nav.locator('.wrap'));
-    await nav.locator('summary').click();
+    await nav.locator('.overflow-more > summary').click();
     await expect(nav.locator('.overflow-items > a').last()).toBeVisible();
     await expectNoHorizontalOverflow(page);
-    await nav.locator('summary').click();
-    await page.locator('[data-language-switch]').click();
+    await nav.locator('.overflow-more > summary').click();
+    await picker.locator('summary').focus();
+    await page.keyboard.press('Space');
+    await picker.locator('[data-language-switch][hreflang="en"]').click();
     await expect(page).toHaveURL(/\/operations\.html$/);
     await expect(page.locator('html')).toHaveAttribute('lang', 'en');
   } finally {
@@ -207,6 +309,12 @@ test('English and Chinese pages publish reciprocal hreflang and an English x-def
       expect(alternates, `${chinese ? 'zh-CN/' : ''}${file}`).toEqual([
         ['en', `/${file}`], ['x-default', `/${file}`], ['zh-CN', `/zh-CN/${file}`],
       ]);
+      const picker = page.locator('[data-language-picker]');
+      await expect(picker).toHaveCount(1);
+      await expect(picker.locator('[data-language-switch]')).toHaveText(['English', '简体中文']);
+      await expect(picker.locator('[aria-current="true"]')).toHaveAttribute('hreflang', chinese ? 'zh-CN' : 'en');
+      await expect(picker.locator('[hreflang="en"]')).toHaveAttribute('lang', 'en');
+      await expect(picker.locator('[hreflang="zh-CN"]')).toHaveAttribute('lang', 'zh-CN');
     }
   }
 });

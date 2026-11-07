@@ -19,8 +19,14 @@
   <a class="brand" href="./"><img src="../logo.svg" alt="" width="24" height="24"> mqlite</a>
   <div class="links overflow-nav" data-overflow>
     <div class="overflow-primary"></div>
-    <a class="language-switch" data-language-switch href="../observability-cloud.html" hreflang="en" lang="en" aria-label="Switch to English">English</a>
-    <details class="overflow-more has-current">
+    <details class="language-picker" data-language-picker name="header-menu">
+      <summary aria-label="语言：简体中文" title="选择语言"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.25"><circle cx="8" cy="8" r="6"/><ellipse cx="8" cy="8" rx="2.5" ry="6"/><path d="M2 8h12"/></svg><span>中文</span></summary>
+      <ul class="language-options" aria-label="可用语言">
+<li><a data-language-switch href="../observability-cloud.html" hreflang="en" lang="en">English</a></li>
+<li><a data-language-switch href="../zh-CN/observability-cloud.html" hreflang="zh-CN" lang="zh-CN" aria-current="true">简体中文</a></li>
+      </ul>
+    </details>
+    <details class="overflow-more has-current" name="header-menu">
       <summary aria-label="更多导航链接">更多</summary>
       <div class="overflow-items">
     <a href="concepts.html">核心概念</a>

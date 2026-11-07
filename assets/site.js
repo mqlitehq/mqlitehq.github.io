@@ -24,6 +24,37 @@
       preserveLocation();
       window.addEventListener('hashchange', preserveLocation);
     });
+    // Native details supplies the no-script fallback. These handlers add Escape,
+    // outside-click and focus-exit behavior to both header disclosures, and keep
+    // them exclusive in browsers without support for the details name group.
+    document.querySelectorAll('.overflow-more, [data-language-picker]').forEach(function (menu) {
+      var summary = menu.querySelector('summary');
+      menu.addEventListener('toggle', function () {
+        if (!menu.open) return;
+        var row = menu.closest('[data-overflow]');
+        if (row) row.querySelectorAll('details').forEach(function (other) {
+          if (other !== menu) other.open = false;
+        });
+      });
+      menu.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape' && menu.open) {
+          menu.open = false;
+          summary.focus();
+          event.preventDefault();
+        }
+      });
+      menu.addEventListener('focusout', function () {
+        setTimeout(function () {
+          if (!menu.contains(document.activeElement)) menu.open = false;
+        }, 0);
+      });
+      menu.addEventListener('click', function (event) {
+        if (event.target.closest('a')) menu.open = false;
+      });
+      document.addEventListener('click', function (event) {
+        if (!menu.contains(event.target)) menu.open = false;
+      });
+    });
     // Native disclosures keep every destination available without JavaScript.
     // Move only the prefix that fits into the row; keep the same anchor nodes so
     // their current-page state and focus survive a change in available width.
@@ -87,24 +118,6 @@
         }
       }
 
-      more.addEventListener('keydown', function (event) {
-        if (event.key === 'Escape' && more.open) {
-          more.open = false;
-          summary.focus();
-          event.preventDefault();
-        }
-      });
-      more.addEventListener('focusout', function () {
-        setTimeout(function () {
-          if (!more.contains(document.activeElement)) more.open = false;
-        }, 0);
-      });
-      more.addEventListener('click', function (event) {
-        if (event.target.closest('a')) more.open = false;
-      });
-      document.addEventListener('click', function (event) {
-        if (!more.contains(event.target)) more.open = false;
-      });
       // Observe the available row width, rather than the overflowing contents.
       if (window.ResizeObserver) new ResizeObserver(distribute).observe(row);
       else window.addEventListener('resize', distribute);

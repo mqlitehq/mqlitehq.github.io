@@ -144,7 +144,7 @@ test('every generated reference keeps native navigation and marks its current pa
     const html = outputs.get(output);
     assert.match(html, /<nav class="top" aria-label="Main navigation">/);
     assert.match(html, /<div class="overflow-primary"><\/div>/);
-    assert.match(html, /<details class="overflow-more has-current">/);
+    assert.match(html, /<details class="overflow-more has-current" name="header-menu">/);
     assert.match(html, /<summary aria-label="More navigation links">More<\/summary>/);
     assert.ok(new RegExp(`<a[^>]*href="${output}"[^>]*aria-current="page">`).test(html), output);
     assert.equal((html.match(/aria-current="page"/g) || []).length, 1, output);
