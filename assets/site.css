@@ -174,13 +174,24 @@ footer.site .wrap { padding: 22px 24px; display: flex; flex-wrap: wrap; gap: 8px
 footer.site a { color: var(--muted); }
 footer.site a:hover { color: var(--ink2); }
 
-/* ── landing-page figure; generated docs preserve their canonical ASCII diagrams ── */
+/* ── landing-page illustration ── */
 figure.fig {
   background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
   padding: 18px 18px 10px; margin: 16px 0;
   overflow-x: auto; /* narrow screens scroll the figure instead of shrinking its labels */
 }
 figure.fig svg, figure.fig img { width: 100%; min-width: 640px; height: auto; display: block; }
+
+/* Reviewed concepts illustrations; wide diagrams scroll within their own region. */
+.concept-diagram { margin: 20px 0; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.concept-diagram figcaption { padding: 14px 18px; color: var(--ink); font-weight: 650; border-bottom: 1px solid var(--line); }
+.diagram-viewport { max-width: 100%; overflow-x: auto; scrollbar-width: thin; scrollbar-color: #555 var(--surface); }
+.diagram-viewport:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.prose .diagram-viewport img { display: block; width: 100%; max-width: none; min-width: 820px; height: auto; }
+.concept-diagram .diagram-hint { margin: 0; padding: 8px 18px; color: var(--muted); font-size: 12px; }
+.diagram-source { padding: 8px 18px 14px; border-top: 1px solid var(--line); }
+.diagram-source summary { cursor: pointer; color: var(--link); font-size: 13px; }
+.diagram-source pre { margin-bottom: 0; }
 
 /* ── code blocks: copy button · line-number gutter · highlight theme ── */
 .codebox { position: relative; margin: 14px 0; }

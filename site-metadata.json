@@ -143,7 +143,10 @@
     "zh-CN/index.html",
     "zh-CN/agents.html",
     "zh-CN/llms.txt",
-    "zh-CN/llms-full.txt"
+    "zh-CN/llms-full.txt",
+    "assets/fig-overview.svg",
+    "assets/concepts-lifecycle.svg",
+    "assets/concepts-filter.svg"
   ],
   "locales": [
     "en",

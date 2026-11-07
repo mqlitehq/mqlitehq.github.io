@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { Marked } from 'marked';
 import { gfmHeadingId } from 'marked-gfm-heading-id';
 import { sha256, loadTranslations, keepEnglishHeadingIds, checkNumericPair, translateHandwritten, translateAgentPrompt, localeLinks, languageLinks, languageSwitch } from './i18n.mjs';
+import { DIAGRAM_ASSETS, loadConceptDiagrams, conceptDiagramRenderer } from './concept-diagrams.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const site = resolve(here, '..');
@@ -36,7 +37,7 @@ PAGES.push(
 );
 export const BUNDLE_FILES = PAGES.map(([src]) => src);
 export const GENERATED_FILES = [...PAGES.map(([, out]) => out), 'llms-full.txt', 'site-metadata.json', 'assets/highlight.min.js'];
-export const ALL_GENERATED_FILES = [...GENERATED_FILES, ...PAGES.map(([, out]) => `zh-CN/${out}`), 'zh-CN/index.html', 'zh-CN/agents.html', 'zh-CN/llms.txt', 'zh-CN/llms-full.txt'];
+export const ALL_GENERATED_FILES = [...GENERATED_FILES, ...PAGES.map(([, out]) => `zh-CN/${out}`), 'zh-CN/index.html', 'zh-CN/agents.html', 'zh-CN/llms.txt', 'zh-CN/llms-full.txt', ...DIAGRAM_ASSETS];
 const ZH = {
   'Concepts': ['核心概念', '队列、主题、订阅、过滤器与完整的消息生命周期。'],
   'Internals': ['内部原理', 'SQLite、单写入者模型、隔离令牌、索引与崩溃恢复。'],
@@ -221,9 +222,16 @@ export function renderSite(mq, options = {}) {
   if (bilingual) requireValue(translations.manifest.chromeSourceSha256 === sha256(JSON.stringify(PAGES)), 'page titles or descriptions changed; review Chinese chrome');
   const marked = new Marked({ gfm: true });
   marked.use(gfmHeadingId());
+  const diagrams = bilingual ? loadConceptDiagrams(read(mq, 'docs/concepts.md')) : null;
+  const parse = (markdown, source, chinese = false) => {
+    if (source !== 'concepts.md' || !diagrams) return marked.parse(markdown);
+    const illustrated = new Marked({ gfm: true });
+    illustrated.use(gfmHeadingId(), { renderer: conceptDiagramRenderer(diagrams, chinese) });
+    return illustrated.parse(markdown);
+  };
   const outputs = new Map();
   for (const [src, out, title, description] of PAGES) {
-    const english = marked.parse(read(mq, `docs/${src}`));
+    const english = parse(read(mq, `docs/${src}`), src);
     const body = rewriteLinks(english);
     outputs.set(out, page({ title, description, src, out, body }, metadata));
   }
@@ -236,8 +244,8 @@ export function renderSite(mq, options = {}) {
   outputs.set('assets/highlight.min.js', readFileSync(resolve(here, 'node_modules/@highlightjs/cdn-assets/highlight.min.js')));
   if (bilingual) {
     for (const [src, out, title, description] of PAGES) {
-      const en = marked.parse(read(mq, `docs/${src}`));
-      const zh = keepEnglishHeadingIds(en, marked.parse(translations.documents.get(src)), src);
+      const en = parse(read(mq, `docs/${src}`), src);
+      const zh = keepEnglishHeadingIds(en, parse(translations.documents.get(src), src, true), src);
       outputs.set(`zh-CN/${out}`, page({ title, description, src, out, body: rewriteLinks(zh) }, metadata, true));
     }
     for (const name of ['index.html', 'agents.html']) {
@@ -254,6 +262,7 @@ export function renderSite(mq, options = {}) {
     outputs.set('zh-CN/llms.txt', localizeSummary(translations.summary));
     const zhParts = BUNDLE_FILES.map((file) => `<!-- ===== docs/${file} · 英文与简体中文逐项对应 ===== -->\n\n${rewriteMdLinks(translations.documents.get(file), true)}`);
     outputs.set('zh-CN/llms-full.txt', `mqlite main — 完整简体中文文档。\n源码版本：v${metadata.sourceVersion}。最新受支持版本：[${metadata.latestRelease}](${releaseURL})。\n${sourceStatus ? '源码包含未发布变更。\n' : ''}本文档跟随 main；使用已发布产物时，请核对相应版本说明。\n英文规范来源：${metadata.source}\n\n${zhParts.join('\n\n')}`);
+    for (const diagram of diagrams) outputs.set(diagram.asset, diagram.svg);
   }
   requireValue(JSON.stringify([...outputs.keys()]) === JSON.stringify(bilingual ? ALL_GENERATED_FILES : GENERATED_FILES), 'generated output inventory drift');
   return { outputs, metadata };

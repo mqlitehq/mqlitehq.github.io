@@ -55,6 +55,11 @@ differences are called out where they matter. Sections 1–5 are the model; sect
 </blockquote>
 <hr>
 <h2 id="1-the-whole-picture-in-one-diagram">1. The whole picture in one diagram</h2>
+<figure class="concept-diagram" data-concept-diagram="overview" aria-labelledby="diagram-overview-caption">
+<figcaption id="diagram-overview-caption">Two delivery targets: direct queue and topic fan-out</figcaption>
+<div class="diagram-viewport" role="region" tabindex="0" aria-label="Two delivery targets: direct queue and topic fan-out"><img src="assets/fig-overview.svg" width="1000" height="794" alt="A direct Send goes to the orders queue. A topic stores no messages; each matching subscription gets an independent backing-queue copy. Dead-lettered messages remain a state within their own queue."></div>
+<p class="diagram-hint">On narrow screens, scroll inside the figure or focus it and use the arrow keys.</p>
+<details class="diagram-source"><summary>View the source text diagram</summary>
 <pre><code>  ┌──────────────────────────── two delivery targets ─────────────────────────┐
   │                                                                            │
   │   A) send straight to a Queue        B) publish to a Topic, fan out        │
@@ -76,6 +81,8 @@ differences are called out where they matter. Sections 1–5 are the model; sect
   │      consumer                  consumer     consumer                       │
   └────────────────────────────────────────────────────────────────────────────┘
 </code></pre>
+</details>
+</figure>
 <p>One sentence to remember: <strong>a Topic stores nothing — it is only a routing rule that
 copies a message into a number of subscription queues. The thing that actually stores
 messages, can be consumed, and can dead-letter is always a Queue</strong> (including the
@@ -87,6 +94,11 @@ backing queue behind a subscription).</p>
 runs this state machine — a row is in exactly one state at a time; below <code>count</code> =
 <code>delivery_count</code>, <code>max</code> = the queue&#39;s <code>max_delivery_count</code>, and <code>✗ removed</code> means the row
 is deleted from the database:</p>
+<figure class="concept-diagram" data-concept-diagram="lifecycle" aria-labelledby="diagram-lifecycle-caption">
+<figcaption id="diagram-lifecycle-caption">The message lifecycle: claims, settlement and recovery</figcaption>
+<div class="diagram-viewport" role="region" tabindex="0" aria-label="The message lifecycle: claims, settlement and recovery"><img src="assets/concepts-lifecycle.svg" width="1000" height="1100" alt="The states scheduled, active, locked, deferred and dead_lettered belong to one queue. The diagram lists delivery counts, retries, renewal, expiry and removal conditions. Removed means row deletion, not another state."></div>
+<p class="diagram-hint">On narrow screens, scroll inside the figure or focus it and use the arrow keys.</p>
+<details class="diagram-source"><summary>View the source text diagram</summary>
 <pre><code>                   ┌───────────┐
   Send(scheduled)  │ scheduled │   scheduler, when due ─► active
   ───────────────► └─────┬─────┘   cancel ─► ✗ removed (never-delivered only)
@@ -110,6 +122,8 @@ is deleted from the database:</p>
                    └───────┬───────┘
                            │ purge / DLQ retention ─► ✗ removed
 </code></pre>
+</details>
+</figure>
 <p>Every transition, with its trigger and the condition under which it fires:</p>
 <table>
 <thead>
@@ -655,9 +669,16 @@ boolean expression — for example:</p>
 compiled once when you subscribe</strong> (a bad one is rejected immediately with
 <code>400 invalid_argument</code>) and <strong>run once per message at publish time</strong> (the per-message
 gate in the topic fan-out from §1–§3):</p>
+<figure class="concept-diagram" data-concept-diagram="filter" aria-labelledby="diagram-filter-caption">
+<figcaption id="diagram-filter-caption">Subscription filters: compile once, evaluate on publish</figcaption>
+<div class="diagram-viewport" role="region" tabindex="0" aria-label="Subscription filters: compile once, evaluate on publish"><img src="assets/concepts-filter.svg" width="1000" height="580" alt="Subscribe compiles and type-checks the filter, caching the valid program or rejecting an invalid expression with HTTP 400. Publish evaluates the cached program for each subscription and creates a copy only when it matches."></div>
+<p class="diagram-hint">On narrow screens, scroll inside the figure or focus it and use the arrow keys.</p>
+<details class="diagram-source"><summary>View the source text diagram</summary>
 <pre><code> Subscribe ──► compile + type-check ──► cache the program     (bad expr → 400)
  Publish   ──► for each subscription: run program(message) ──► route when true
 </code></pre>
+</details>
+</figure>
 <p>The filter environment contains the message&#39;s own fields and timestamps. Use
 <code>enqueued_at</code> as the publish-time reference for repeatable routing decisions.
 The upstream <code>now()</code> builtin is also available and reads the wall clock, so an

@@ -29,7 +29,9 @@ choose documentation matching an installed binary.
 | `assets/site.js` | copy buttons · line numbers · tabs · highlight init | by hand |
 | `assets/demo.css` · `assets/demo.js` | accessible, one-shot landing-page product demo | by hand; loaded by `index.html` only |
 | `assets/highlight.min.js` | syntax highlighting, vendored (no CDN) | **generated** (copied from `@highlightjs/cdn-assets`) |
-| `assets/fig-overview.svg` | landing-page model illustration | by hand; generated pages retain canonical ASCII diagrams |
+| `assets/fig-overview.svg` | overview for concepts and the no-script landing page | **generated** from the reviewed SVG source |
+| `tools/diagrams/` | reviewed SVG sources, bilingual captions and exact canonical diagram fingerprints | update together after diagram review |
+| `assets/concepts-*.svg` | three concepts illustrations | **generated** from the reviewed SVG sources |
 | `tools/build.mjs` | the generator | — |
 | `tools/build.test.mjs` | generation and rejection contracts | Node's built-in test runner; no test dependencies |
 
@@ -77,9 +79,22 @@ latest supported release and released/unreleased state. Local links, assets and
 page anchors are verified too, so update those hand-written release facts
 deliberately when a new release lands.
 
-Generated pages preserve the Markdown's ASCII figures directly. Keyword-based SVG
-replacement is intentionally absent, so a source diagram change is immediately
-visible. Keep optional SVG illustrations consistent when editing them.
+The concepts page displays three SVG illustrations by default: delivery targets,
+the message lifecycle and subscription-filter execution. Each image is paired
+with the full canonical concepts document, its exact ASCII block and the
+reviewed SVG by SHA-256 in
+`tools/diagrams/manifest.json`. A source or artwork change blocks generation until
+its semantics and bilingual captions are reviewed together; matching a few words
+cannot substitute a stale diagram. The native details disclosure retains the
+original text diagram. Other code and expression examples stay literal, and the
+machine-readable Markdown bundles keep the canonical diagrams unchanged.
+
+Diagrams are local static images, shared by both languages. No diagram framework,
+remote renderer or extra browser script is loaded. Narrow screens scroll within
+the focusable diagram region; the page itself stays within the viewport. Review
+all state-transition conditions, especially the final delivery, TTL policy,
+Cancel admission, and DLQ as a state within the same queue, before updating a
+source pairing.
 
 ## Publishing
 
@@ -108,8 +123,9 @@ The language link opens the same page and, with JavaScript, preserves the curren
 section and query. It also works without JavaScript. Locale choice is explicit;
 browser settings do not redirect English links. Both locales share the English
 section IDs, scripts and styles. They never download a second locale dictionary
-or an external font. ASCII figures, identifiers, commands and runnable examples
-retain their original form.
+or an external font. Identifiers, commands and runnable examples retain their original form.
+The three concepts illustrations share English labels; their localized captions
+and expandable canonical text keep the two pages aligned.
 
 English product documentation in `mqlite/docs/` remains the source of truth.
 Complete Chinese counterparts live in `i18n/zh-CN/docs/`. Hand-written page prose,

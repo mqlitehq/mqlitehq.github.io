@@ -243,7 +243,7 @@ test('missing/ambiguous metadata and source contracts fail closed', (t) => {
   assert.throws(() => sourceMetadata(root), /invalid routes/);
 });
 
-test('canonical diagram changes remain visible in every generated page and the bundle', (t) => {
+test('unreviewed diagram-like code remains literal in every generated page and the bundle', (t) => {
   const root = fixture(t);
   let { outputs } = renderSite(root);
   for (const [, out] of PAGES) {
@@ -393,6 +393,7 @@ test('the real Pages package contains the complete static inventory with identic
     'concepts.html', 'deployment.html', 'favicon.svg', 'index.html', 'internals.html',
     'llms-full.txt', 'llms.txt', 'logo.svg', 'observability.html', 'observability-cloud.html', 'operations.html',
     'site-metadata.json', 'turso.html', 'retention.html', 'benchmark.html', 'conformance.html', 'dependencies.html', 'mcp.html', 'examples.html',
+    'assets/concepts-lifecycle.svg', 'assets/concepts-filter.svg',
     ...['index.html', 'agents.html', 'concepts.html', 'internals.html', 'api.html', 'cli.html', 'access-keys.html', 'deployment.html', 'observability.html', 'observability-cloud.html', 'operations.html', 'turso.html', 'retention.html', 'benchmark.html', 'conformance.html', 'dependencies.html', 'mcp.html', 'examples.html', 'llms.txt', 'llms-full.txt'].map((name) => `zh-CN/${name}`),
   ].sort();
   assert.deepEqual(files(output).sort(), expected);

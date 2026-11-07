@@ -1,0 +1,134 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1100" role="img" aria-labelledby="lifecycle-title lifecycle-description">
+  <title id="lifecycle-title">The lifecycle of one message in a queue</title>
+  <desc id="lifecycle-description">A message row occupies exactly one of scheduled, active, locked, deferred or dead_lettered. Removed means the row is deleted, not another state or queue. Receive and ReceiveDeferred increment delivery_count. Renew extends the same live lease without incrementing it. The final live delivery can still complete or renew. Retry, redrive, cancellation, expiry and removal conditions are listed below the main flow.</desc>
+  <defs>
+    <marker id="lifecycle-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 10 5 0 10Z" fill="#a7a59b"/></marker>
+    <marker id="lifecycle-complete-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 10 5 0 10Z" fill="#34d399"/></marker>
+    <style>
+      text { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; fill: #f2f1ea; }
+      .title { font-size: 24px; font-weight: 700; }
+      .subtitle { font-size: 15px; fill: #b9b8ad; }
+      .state { fill: #1d1d1b; stroke: #6b6a62; stroke-width: 1.8; }
+      .state-name { font-family: ui-monospace, "SF Mono", Consolas, monospace; font-size: 18px; font-weight: 600; }
+      .label { font-size: 15px; }
+      .note { font-size: 14px; fill: #b9b8ad; }
+      .edge { fill: none; stroke: #a7a59b; stroke-width: 1.8; marker-end: url(#lifecycle-arrow); }
+      .rule-name { font-family: ui-monospace, "SF Mono", Consolas, monospace; font-size: 14px; font-weight: 600; }
+      .rule-text { font-size: 15px; fill: #d2d0c6; }
+    </style>
+  </defs>
+  <rect width="1000" height="1100" rx="14" fill="#141413"/>
+  <text x="32" y="43" class="title">One message. One state at a time.</text>
+  <text x="32" y="70" class="subtitle">Solid boxes are states of the same queue. A dashed box means the row has been deleted.</text>
+
+  <g data-state="scheduled">
+    <rect x="315" y="130" width="190" height="62" rx="10" class="state" style="stroke:#facc15"/>
+    <text x="410" y="167" text-anchor="middle" class="state-name">scheduled</text>
+  </g>
+  <g data-state="active">
+    <rect x="315" y="270" width="190" height="62" rx="10" class="state" style="stroke:#34d399"/>
+    <text x="410" y="307" text-anchor="middle" class="state-name">active</text>
+  </g>
+  <g data-state="locked">
+    <rect x="315" y="410" width="190" height="62" rx="10" class="state" style="stroke:#facc15"/>
+    <text x="410" y="447" text-anchor="middle" class="state-name">locked</text>
+  </g>
+  <g data-state="deferred">
+    <rect x="700" y="410" width="220" height="62" rx="10" class="state" style="stroke:#7db3f5"/>
+    <text x="810" y="447" text-anchor="middle" class="state-name">deferred</text>
+  </g>
+  <g data-state="dead_lettered">
+    <rect x="315" y="550" width="190" height="62" rx="10" class="state" style="stroke:#e66767"/>
+    <text x="410" y="579" text-anchor="middle" class="state-name">dead_lettered</text>
+    <text x="410" y="600" text-anchor="middle" class="note">DLQ state</text>
+  </g>
+  <g data-terminal="removed">
+    <rect x="700" y="130" width="220" height="62" rx="10" fill="none" stroke="#b9b8ad" stroke-width="1.8" stroke-dasharray="7 5"/>
+    <text x="810" y="157" text-anchor="middle" class="state-name">removed</text>
+    <text x="810" y="180" text-anchor="middle" class="note">row deleted · not a state</text>
+  </g>
+
+  <g data-edge="new-to-scheduled">
+    <path d="M68 161H307" class="edge"/>
+    <text x="68" y="144" class="label">Scheduled Send</text>
+  </g>
+  <g data-edge="new-to-active">
+    <path d="M68 301H307" class="edge"/>
+    <text x="68" y="284" class="label">Send</text>
+  </g>
+  <g data-edge="scheduled-to-active">
+    <path d="M410 192V262" class="edge"/>
+    <text x="391" y="224" text-anchor="end" class="label">Scheduler: when due</text>
+    <text x="391" y="246" text-anchor="end" class="note">count unchanged</text>
+  </g>
+  <g data-edge="scheduled-to-removed">
+    <path d="M505 161H692" class="edge"/>
+    <text x="602" y="142" text-anchor="middle" class="label">Cancel</text>
+    <text x="602" y="183" text-anchor="middle" class="note">delivery_count = 0 only</text>
+  </g>
+  <g data-edge="active-to-locked">
+    <path d="M410 332V402" class="edge"/>
+    <text x="391" y="363" text-anchor="end" class="label">Receive / claim</text>
+    <text x="391" y="385" text-anchor="end" class="note">count++</text>
+  </g>
+  <g data-edge="locked-to-removed">
+    <path d="M505 417H550V230H810V200" fill="none" stroke="#34d399" stroke-width="1.8" marker-end="url(#lifecycle-complete-arrow)"/>
+    <text x="680" y="217" text-anchor="middle" class="label" style="fill:#34d399">Complete · live lease + token</text>
+  </g>
+  <g data-edge="locked-to-deferred">
+    <path d="M505 433H692" class="edge"/>
+    <text x="618" y="415" text-anchor="middle" class="label">Defer</text>
+  </g>
+  <g data-edge="deferred-to-locked">
+    <path d="M700 455H513" class="edge"/>
+    <text x="710" y="496" class="label">ReceiveDeferred by seq</text>
+    <text x="710" y="517" class="note">count++</text>
+    <text x="710" y="538" class="note">No max admission check today</text>
+  </g>
+  <g data-edge="locked-to-locked">
+    <path d="M315 455H258V426H307" class="edge"/>
+    <text x="64" y="421" class="label">Renew / RenewBatch</text>
+    <text x="64" y="445" class="note">Same live lease</text>
+    <text x="64" y="468" class="note">count unchanged</text>
+  </g>
+  <g data-edge="locked-to-dead_lettered">
+    <path d="M410 472V542" class="edge"/>
+    <text x="391" y="505" text-anchor="end" class="label">Reject</text>
+    <text x="391" y="528" text-anchor="end" class="note">or failed final claim</text>
+  </g>
+  <text x="32" y="638" class="subtitle">The DLQ is a state in the same queue, not a separate queue. Other transitions are specified below.</text>
+
+  <rect x="32" y="658" width="936" height="414" rx="12" fill="#1b1b19" stroke="#3a3933"/>
+  <text x="52" y="691" font-size="19" font-weight="650">Recovery, retry and expiry rules</text>
+  <text x="52" y="716" class="note">count = delivery_count · max = max_delivery_count</text>
+
+  <g data-edge="locked-to-active">
+    <text x="52" y="749" class="rule-name">locked → active</text>
+    <text x="300" y="749" class="rule-text">Immediate Abandon / expiry, count &lt; max; count unchanged.</text>
+  </g>
+  <g data-edge="locked-to-scheduled">
+    <text x="52" y="782" class="rule-name">locked → scheduled</text>
+    <text x="300" y="782" class="rule-text">Abandon: delay_ms &gt; 0, count &lt; max; count unchanged.</text>
+    <text x="300" y="805" class="note">The message keeps blocking its ordered group until due.</text>
+  </g>
+  <g data-rule="failed-final-claim">
+    <text x="52" y="839" class="rule-name">locked → dead_lettered</text>
+    <text x="300" y="839" class="rule-text">Reject; or Abandon / lock expiry when count ≥ max.</text>
+  </g>
+  <g data-edge="dead_lettered-to-active">
+    <text x="52" y="873" class="rule-name">dead_lettered → active</text>
+    <text x="300" y="873" class="rule-text">Redrive resets count to 0 (this queue or a target queue).</text>
+  </g>
+  <g data-edge="dead_lettered-to-removed">
+    <text x="52" y="907" class="rule-name">dead_lettered → removed</text>
+    <text x="300" y="907" class="rule-text">Purge or asynchronous DLQ retention (age / count / bytes).</text>
+  </g>
+  <g data-rule="message-ttl-expiry">
+    <text x="52" y="941" class="rule-name">TTL expiry</text>
+    <text x="300" y="941" class="rule-text">active / locked / deferred / scheduled:</text>
+    <text x="300" y="964" class="rule-text">dead_letter_on_expire = 1 → DLQ; = 0 → removed.</text>
+  </g>
+  <path d="M52 985H948" stroke="#454238"/>
+  <text x="52" y="1014" font-size="16" font-weight="650" style="fill:#facc15">Reaching max does not end a live final claim.</text>
+  <text x="52" y="1040" class="rule-text">It can still Complete or Renew. Abandon or expiry after that failed attempt moves it to the DLQ.</text>
+</svg>

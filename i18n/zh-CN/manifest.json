@@ -74,8 +74,10 @@
   },
   "chromeSourceSha256": "339d4d3c2b93b8b5a1f3c13d720094155f42b3400eff530e28f7f4fc2602e372",
   "runtimeSources": {
-    "tools/build.mjs": "1bb6cb6279daff998c2e0db3dcdf329fae6452afae244b311c256d2e19e5a2b2",
-    "tools/i18n.mjs": "80baca7ba74754c04c6005e39ec690c7b6d68b99d06a44ab0ff37b7e78516544",
+    "tools/build.mjs": "c43e83b1097317ce95fac368be069472d2bc458f27ca73e40f6f5602bbc4a78d",
+    "tools/i18n.mjs": "9e40754be67bddb5bf2c525e00406b2bbec4b51bba0571f2d4ddfa0b12580860",
+    "tools/concept-diagrams.mjs": "0dce9d4256e104fbeb1ee84bc29c40a0a675540c1deddb56d02cb1071833a2bf",
+    "tools/diagrams/manifest.json": "a216508a88d8bde44e22d11263a0ffefea589b3f3615a408bf86f9d3a8881c32",
     "assets/site.js": "2c61ae5e131f97e9bb77d50657ff7a1c63e8b073717495808877aa451f6adb9c",
     "assets/demo.js": "1a916e737341db031451acf1297cbcf5a8e6f6225963ead959e6b0b599dea2ed"
   },
