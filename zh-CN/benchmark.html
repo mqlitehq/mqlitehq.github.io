@@ -516,7 +516,7 @@ go test ./engine -run &#39;^$&#39; -bench &#39;^BenchmarkHranaSingleLeaseExec$&#
 <tr>
 <td>写入者/提供方连接池</td>
 <td>本地写入者 1 / 远程提供方 4</td>
-<td><strong>不要修改</strong>——本地写入连接池保持一个连接，以保证原子 claim；本地文件另有一个只读观测连接。远程连接池仅属于单个 broker，Turso 会串行化提交。<code>libsql://</code> 逻辑连接采用单次连接租借，而共享 HTTP 传输层保持 TCP/TLS 复用；参见 <a href="turso.html">turso.md</a>。</td>
+<td><strong>不要修改</strong>——本地写入连接池保持一个连接，以保证原子 claim；本地文件另有一个只读观测连接。每个远程所有者同一时刻只准入一次写入尝试，同时四连接池保留读取容量。<code>libsql://</code> 逻辑连接采用单次连接租借，而共享 HTTP 传输层保持 TCP/TLS 复用；参见 <a href="turso.html">turso.md</a>。</td>
 </tr>
 </tbody></table>
 <p>本地 modernc SQLite 连接设置了 <code>busy_timeout=5000</code> 和 <code>temp_store=MEMORY</code>。这些设置不适用于远程 Turso/libSQL 连接；其瞬时争用使用 <a href="turso.html">turso.md</a> 所述的有界重试策略。</p>

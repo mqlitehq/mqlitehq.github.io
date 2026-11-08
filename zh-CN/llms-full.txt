@@ -456,9 +456,7 @@ CREATE TABLE messages (
 - **进程内写入连接池大小为一**（`SetMaxOpenConns(1)`）。`database/sql` 将每次变更排入该连接，因而*所有写入在进入 SQLite 前就已串行化*。没有写锁争用，无需 `SQLITE_BUSY` 重试循环，也无需分析写入交错。两个 goroutine 不可能各自领取同一消息的一部分，因为语句不能重叠执行。
 - **跨进程时，建议性文件锁直接拒绝第二个所有者。** 嵌入式本地文件还会对 `<db>.lock` 辅助文件加操作系统锁，键取自*规范化*路径，因此 `./mq.db` 和指向它的符号链接会冲突。第二个进程打开同一文件时立即返回 `ErrDBLocked`，而不是破坏领取语义。需要多进程访问时应运行 broker，一个 broker 就是唯一写入者。
 - **文件使用 WAL 模式**，因此在文件层面，读取者不会阻塞写入者，也不会看到撕裂状态。监控探针、实时的单队列 `Stats` 和全局观测刷新使用另一个 `mode=ro` 加 `query_only` 的连接；全局队列指标共享约 10 秒的快照，并合并并发刷新。普通引擎读取和全部变更保留既有的写入连接顺序。内存引擎无法共享该读取连接，仍使用唯一连接。默认耐久性设置为 `synchronous=NORMAL`；当每次提交一次 fsync 值得付出本地吞吐量约 4–11 倍的代价时，可选择 `FULL`（`MQLITE_SYNC`）。远程 Turso 忽略此设置，其耐久性由服务端负责。
-- **远程 Turso/libSQL** 将连接池放宽到 4 个连接，因为 Turso 主库会在服务端串行化写入；这也是唯一会重试瞬时错误的路径。本地失败语句未产生执行效果，没有需要重试的内容。对于 HTTP Hrana（`libsql://`），一个逻辑驱动连接只维持一次 `database/sql` 连接租借，或一个完整事务，结束后即丢弃；Go 的共享 HTTP transport 仍会复用底层 TCP/TLS 连接。WebSocket transport 保留有界连接池，本地 SQLite 路径保持不变。
-
-关键在于：mqlite 不额外*实现*消费者之间的互斥，而是**安排执行方式，使这种额外互斥不再必要**。通过减少并发交错实现并发控制。
+- **远程 Turso/libSQL** 保留四连接池用于读取，并在变更尝试获取连接之前进行单写入准入。续锁工作按 FIFO 排队，以有界优先级先于结算执行；结算相对其他写入也只有有界优先级，以保证维护工作取得进展。许可持续到提交或回滚结束、SQL 连接租借归还后，再于重试退避前释放。这也是唯一会重试瞬时错误的路径。本地失败语句未产生执行效果，没有需要重试的内容。对于 HTTP Hrana（`libsql://`），一个逻辑驱动连接只维持一次 `database/sql` 连接租借，或一个完整事务，结束后即丢弃；Go 的共享 HTTP transport 仍会复用底层 TCP/TLS 连接。WebSocket transport 保留有界连接池，本地 SQLite 路径保持不变。
 
 ## 4 · 领取：Peek-Lock 是一条原子 UPDATE
 
@@ -598,7 +596,7 @@ err := mq.Tx(ctx, func(tx *engine.EngineTx) error {
 
 - **一致性测试集**（[conformance.md](https://mqlitehq.github.io/zh-CN/conformance.html)）：令牌隔离、跨锁过期的顺序、恢复边界、幂等重放、命名空间互斥等不变量各自引用固定其行为的隔离测试；CI 在三种操作系统上启用 race detector 执行。
 - **查询计划固定测试**：对 `EXPLAIN QUERY PLAN` 输出作断言，使性能特征成为防回归契约，而非期望，见第 5 节。
-- **Schema 黄金测试**：固定完整规范 DDL。保护令牌不匹配的数据库会被拒绝（`ErrSchemaVersionMismatch`），绝不迁移已有表布局；不兼容改动必须更换令牌。独立的 `access_keys` 增加最初保留令牌 5，并持续属于规范 schema，其 DDL 另有黄金测试。持久化资源生命周期与固定订阅到期使当前规范 schema 升至令牌 7；真实 schema-5 文件及中间 schema-6 文件在升级和回退两个方向都被拒绝。
+- **Schema 黄金测试**：固定完整规范 DDL。保护令牌不匹配的数据库会被拒绝（`ErrSchemaVersionMismatch`），绝不迁移已有表布局；不兼容改动必须更换令牌。一项范围严格受限的兼容修复，会在同一事务内将两个已识别的旧消息父项触发器替换为等价的索引化谓词，使其也能在基于 Rust 的 Turso 上编译。发现未知触发器定义时，Open 会在执行 DDL 前拒绝打开；该修复不改变消息数据或 schema 令牌。独立的 `access_keys` 增加最初保留令牌 5，并持续属于规范 schema，其 DDL 另有黄金测试。持久化资源生命周期与固定订阅到期使当前规范 schema 升至令牌 7；真实 schema-5 文件及中间 schema-6 文件在升级和回退两个方向都被拒绝。
 - **完整性扫描**：随机发送、接收、崩溃工作负载断言每条消息到达（无缺失）、正文完整（内容哈希），且不超过投递次数上限。
 - **崩溃注入层**：真实 worker 在事务中途被强杀（`SIGKILL`）后重启，验证发件箱跨崩溃仍保持原子性，以及测试程序已收到确认的每次生产端提交均能保留。崩溃 worker 使用嵌入式恢复，将孤儿锁移回 active，或在投递次数耗尽时移入 DLQ。它重新执行测试二进制，因此位于 `crash_injection` 构建标签之后，由 Linux 独立 CI 任务运行：启用 race detector 的 `make crash`，与默认包矩阵分开执行。这测试的是*进程*终止，不是断电。
 
@@ -668,7 +666,7 @@ Broker 使用 **Connect 风格的 HTTP JSON 协议**。每个操作都是向 `/m
 - **Go SDK 传输**：RPC 客户端从不跟随 HTTP 重定向。默认客户端为每个 broker 保留最多 64 条空闲连接，以支持并发 Receiver，并在 `Client.Close` 时释放自己拥有的空闲连接。通过 `WithHTTPClient` 传入的客户端仍归调用方所有；MQLite 保留其传输和超时设置，但仍禁止 RPC 重定向。自定义传输的 `MaxIdleConnsPerHost` 至少应覆盖 Receiver 并发数加有效预取数（即托管管线中最多同时进行的网络工作量）。如果应用用不透明的包装器替换了进程级 `http.DefaultTransport`，MQLite 会保留该包装器以兼容监控插桩和 mock，且不会关闭它；底层连接池的大小仍由应用负责，因为通用的 `http.RoundTripper` 无法被克隆或调优。
 - **`body`** 在 JSON 中使用 **base64**（Go 将 `[]byte` 编码为 base64）。
 - **时间戳**为 **Unix 纪元毫秒数**（UTC）整数。消息时长使用 `*_ms`；可观测性中明确命名为 `*_seconds` 的时长保留小数秒。
-- **Broker 时间响应头**：每个 broker 响应都包含 `X-Mqlite-Server-Time-Ms`，其值为 UTC 纪元毫秒数，取自租约、TTL、调度和结算（settlement）决策所用的同一时钟。Go 托管客户端只信任成功的 broker 响应中的该字段，并扣除保守的传输预算，将绝对租约截止时间映射到本地单调时钟。旧客户端忽略这个新增响应头。对旧 broker，客户端可使用精度为一秒的 HTTP `Date`；若保守剩余时间下界主要受该精度影响，则使用有界的时钟降级节奏。如果两个响应头都不存在，公开的绝对截止时间仍会保留，但托管 Receiver 会报告一次诊断，在派发前确认租约，并使用有界的不可信时钟节奏，而不会把另一台机器的时间戳直接当成本地调度依据。新建或重新配置的队列接受 `0`（默认 30 秒）或 1 秒至 1 小时的锁时长。包含范围外旧值的数据库仍可读取，但在没有时间头、又无法证明极短租约尚有足够剩余时间时，此回退模式可能采取安全拒绝策略。原始 HTTP 调用方应保留至少一个时间响应头、进行 broker 时间映射，或同步时钟。启用 CORS 的 broker 会向浏览器客户端公开此响应头。
+- **Broker 时间响应头**：每个 broker 响应都包含 `X-Mqlite-Server-Time-Ms`，其值为 UTC 纪元毫秒数，取自租约、TTL、调度和结算（settlement）决策所用的同一时钟。Go 托管客户端只信任成功的 broker 响应中的该字段，并扣除保守的传输预算，将绝对租约截止时间映射到本地单调时钟。`X-Mqlite-Server-Elapsed-Ms` 是记录该时钟值之前，按单调时钟测量的处理耗时的整毫秒下界。有效值会从时钟不确定性中排除存储和长轮询耗时；续锁调度与请求预算仍使用实测的完整 RPC 时长。该耗时字段缺失、重复、格式错误或超出范围时，仍保留原有的完整 RTT 边界。旧客户端忽略这个新增响应头。对旧 broker，客户端可使用精度为一秒的 HTTP `Date`；若保守剩余时间下界主要受该精度影响，则使用有界的时钟降级节奏。如果 `X-Mqlite-Server-Time-Ms` 与 HTTP `Date` 都不存在，公开的绝对截止时间仍会保留，但托管 Receiver 会报告一次诊断，在派发前确认租约，并使用有界的不可信时钟节奏，而不会把另一台机器的时间戳直接当成本地调度依据。新建或重新配置的队列接受 `0`（默认 30 秒）或 1 秒至 1 小时的锁时长。包含范围外旧值的数据库仍可读取，但在没有时间头、又无法证明极短租约尚有足够剩余时间时，此回退模式可能采取安全拒绝策略。原始 HTTP 调用方应保留 `X-Mqlite-Server-Time-Ms` 或 HTTP `Date`、进行 broker 时间映射，或同步时钟。启用 CORS 的 broker 会向浏览器客户端公开 `X-Mqlite-Server-Time-Ms` 与 `X-Mqlite-Server-Elapsed-Ms`。
 - **序号**（`seq_number`）由 broker 分配，是严格递增且**永不复用**的整数（可不连续）；它是**结算消息时使用的标识**，仅在消息存续期间有效。调用方不能设置序号。
 - **交付模式**：默认 Peek-Lock 提供至少一次交付（at-least-once），可能重复，因此消费者必须具备幂等性。Receive-and-delete 是显式选择的至多一次 broker 删除路径，会先删除消息再返回；显式使用同一接收尝试 ID 重试，可重放保存的响应。配置为丢弃的消息 TTL、DLQ 保留策略、强制资源删除和固定订阅到期均是明确的移除路径；参见 [retention.md](https://mqlitehq.github.io/zh-CN/retention.html)。
 - **每种结果只有一个结算动词**：`Complete` / `Abandon` / `Reject` / `Defer`，没有别名。产生新效果时，必须提供 `Receive` 返回的 `lock_token` 且租约尚未过期；下文介绍完全相同请求的回执重放。
@@ -899,7 +897,7 @@ Go SDK 要求结果数与请求消息数完全一致、顺序相同，完成结�
 - **请求** `RenewBatchRequest`：`queue`、`messages`（[{`seq_number`, `lock_token`}]）。**每次最多 512 条消息**，超出返回 `400 invalid_argument`。
 - **响应** `RenewBatchResponse`：`results`（[{`seq_number`, `ok`, `locked_until_ms`}]）。该条目锁陈旧或过期时为 `ok=false`（不使整个批次失败）；每条都像 `Renew` 一样按自己的 `lock_token` 校验所有权。
 
-`locked_until_ms` 是实际提交的 broker 绝对截止时间，必须在它之前再次续锁。`ok=true` 表示租约在 **broker 语句结束时**有效，不是响应到达调用方时有效。结果还需要映射、编码并传回，因此极短的租约可能在传输中到期。当前 broker 返回与租约使用同一时钟的 `X-Mqlite-Server-Time-Ms`；托管 Receiver 结合该观测、本地单调时钟和保守的传输预算，而不是直接比较两台主机的墙上时钟。截止时间不可用时，它在派发前执行有界同步 Renew，将续锁节奏与请求看门狗分开，为下一次请求预留两个已观测往返时间，并且绝不会仅因本地墙上时钟落在很宽的不确定区间内就延长租约。精确确认的租约若短于 50ms 最小节奏，会安全拒绝，而不会进入续锁热循环。旧 broker 在可用时使用 HTTP `Date`；两个时间头都缺失时，保留公开的绝对截止时间，但不把它用作托管的本地调度依据。Receiver 会报告一次诊断，在派发前确认所有权，并保持保守的 250ms 节奏。该回退模式没有相对租约时长信息，因此应保留至少一个时间响应头。新建及重新配置的队列明确将锁时长限制为 1 秒至 1 小时；零表示默认 30 秒。范围外的旧配置仍可读取，但极短租约在无法证明可安全续锁时可能被安全拒绝。原始 `RenewBatch` 调用方也应进行 broker 时钟映射（或同步时钟），不能仅凭时钟偏移就认定 `ErrLockLost`。（如果写入本身超过了租约期限，会得到 `ok=false`，而不是一个实际上从未持有的锁。）与单条 Renew 一样，批量操作不改变 token、状态和 `delivery_count`，并提交“已有截止时间”与 broker 新计算的 `now + lock_duration` 候选值中的较晚者（受固定订阅寿命限制）。
+`locked_until_ms` 是实际提交的 broker 绝对截止时间，必须在它之前再次续锁。`ok=true` 表示租约在 **broker 语句结束时**有效，不是响应到达调用方时有效。结果还需要映射、编码并传回，因此极短的租约可能在传输中到期。当前 broker 返回与租约使用同一时钟的 `X-Mqlite-Server-Time-Ms`；托管 Receiver 结合该观测、本地单调时钟和保守的传输预算，而不是直接比较两台主机的墙上时钟。经校验的 `X-Mqlite-Server-Elapsed-Ms` 会从时钟不确定性中排除服务端处理耗时；续锁调度仍保留完整 RPC 时长。截止时间不可用时，它在派发前执行有界同步 Renew，将续锁节奏与请求看门狗分开，为下一次请求预留两个已观测往返时间，并且绝不会仅因本地墙上时钟落在很宽的不确定区间内就延长租约。精确确认的租约若短于 50ms 最小节奏，会安全拒绝，而不会进入续锁热循环。旧 broker 在可用时使用 HTTP `Date`；这两种时钟来源都缺失时，保留公开的绝对截止时间，但不把它用作托管的本地调度依据。Receiver 会报告一次诊断，在派发前确认所有权，并保持保守的 250ms 节奏。该回退模式没有相对租约时长信息，因此应保留至少一项时钟来源。新建及重新配置的队列明确将锁时长限制为 1 秒至 1 小时；零表示默认 30 秒。范围外的旧配置仍可读取，但极短租约在无法证明可安全续锁时可能被安全拒绝。原始 `RenewBatch` 调用方也应进行 broker 时钟映射（或同步时钟），不能仅凭时钟偏移就认定 `ErrLockLost`。（如果写入本身超过了租约期限，会得到 `ok=false`，而不是一个实际上从未持有的锁。）与单条 Renew 一样，批量操作不改变 token、状态和 `delivery_count`，并提交“已有截止时间”与 broker 新计算的 `now + lock_duration` 候选值中的较晚者（受固定订阅寿命限制）。
 
 Go SDK 要求每个请求条目恰好对应一个按原顺序排列的结果。成功续锁必须包含正的 `locked_until_ms`；续锁失败不能声称有截止时间。格式错误的续锁结果会被拒绝，不会视为已续锁。
 
@@ -1646,7 +1644,7 @@ mqlite 以**一个纯 Go 二进制**（或一个容器镜像）管理**一个 SQ
 
 | 环境变量 | 含义 |
 |---|---|
-| `MQLITE_DB` | `file:/data/mq.db`（本地）或 `libsql://<db>.turso.io`（远程） |
+| `MQLITE_DB` | `file:/data/mq.db`（本地）、`libsql://<db>.turso.io`（远程 libSQL），或尚未发布的 `turso://<db>.turso.io`（[Rust 预览](https://mqlitehq.github.io/zh-CN/turso.html#rust-based-turso-technical-preview)） |
 | `MQLITE_DB_AUTH_TOKEN` | 远程 libSQL/Turso DSN 的身份验证 token |
 | `MQLITE_TOKENS` | 逗号分隔的管理员 Bearer token（**生产环境必须设置**） |
 | `MQLITE_MONITOR_TOKENS` | v0.3.2+：可选的逗号分隔凭据，仅用于 `Observe` 和 `/metrics`；要求启用身份验证，并配置独立的管理员凭据 |
@@ -2189,7 +2187,10 @@ Prometheus 使用 text exposition 0.0.4 格式。
 `canceled`、`closed`、`busy`、`connection`、`full`、`corrupt`、`io`、
 `application`、`outcome_unknown`、`other` 之一。
 固定的存储结果／错误组合以及已注册 RPC／结果组合会初始化为零，
-因此先前有成功抓取时，就能检测第一个事件。对已观察样本使用 `rate`/`increase`；
+因此先前有成功抓取时，就能检测第一个事件。
+已确认的空闲事务回滚仍归入现有 `connection` 计数器类别；可选错误详情使用更精确的
+`transaction_expired` 类别。这样既保留必需的计数器矩阵，又让旧 broker 的观测数据仍可原样解码。
+对已观察样本使用 `rate`/`increase`；
 事件之后才开始的首次抓取无法重建事件发生时间。
 维护任务为 `locks`、`scheduled`、`ttl`、
 `dedup`、`receipts`、`retention`、`reclaim`、`subscription_expiry`、`lifecycle`。
@@ -2593,7 +2594,8 @@ v0.3.2 提供完整、仅含 active 项的 `ListSubscriptions` 操作，但没�
 
 下面的协同关停和保留租约的重启契约要求尚未发布的 `main`；已安装的 v0.4.2 broker
 不提供这些保证。它也不会排空应用消费者。取消 `Receiver.Run` 会取消在途处理函数的上下文。
-`Run` 仍会等待处理函数与结算返回，但不会在取消前给予处理函数自然完成的宽限期。
+`Run` 仍会等待处理函数、续锁结束和结算返回，包括每个处理函数返回后最多 30 秒的终结确认。
+取消前不会给予处理函数自然完成的宽限期；忽略上下文的回调或传输可能使等待更久。
 被中断的投递可能消耗投递机会，或在达到配置上限时进入 DLQ。
 计划停止消费者且必须完成其工作时，应先在应用层停止新工作并排空，再取消消费者。
 
@@ -2619,8 +2621,15 @@ broker 启动会保留 active 资源上尚未到期的 Peek-Lock 租约、隔离
 锁时长和部署宽限期应确保计划重启通常能在剩余租期内完成。
 测量从停止旧 broker 到新 listener 就绪的完整间隔，包含数据库打开和 schema 检查。
 默认租约为 30 秒；实测远程存储重启及续锁／结算延迟需要更多余量时，应配置更长租约。
-托管 Go 客户端的续锁与结算重试预算也有上限：Complete/Abandon 终结结算清理的总预算
-最多五秒，包含首次请求和所有重放。因此，在租约到期前恢复是保住特定处理函数结算的必要条件，
+`main` 上的托管 Receiver 也有有界的续锁和结算预算：
+Complete/Abandon 终结确认从处理函数返回起，最多使用 30 秒，包含续锁交接、首次请求、全部重放
+和退避；每次结算请求最多十五秒。每次都复用相同的队列、序号、token、操作与参数，确认不会重新
+执行处理函数。瞬时故障导致确认预算耗尽时，会通过 `WithErrorHandler` 报告 `ErrOutcomeUnknown`，
+并为 `errors.Is`/`errors.As` 保留最终原因。如果等待处理阶段的心跳结束时预算已经到期，
+就不再发送新的结算请求；任何结算请求发出前预算即到期，并不意味着存在未知的结算结果。
+`ErrLockLost` 等确定性错误会原样报告，不进行重试；永久错误还会停止 `Run`。
+该预算不会延长租约；已保留的精确请求回执可在原租约到期后确认此前已提交的效果，
+而新的效果仍要求有效 token。因此，在租约到期前恢复是保住特定处理函数结算的必要条件，
 但不是充分条件；重试预算耗尽后，不会在 broker 稍后恢复时自动继续。
 持有有效 token 也不能保证外部副作用只发生一次。
 
@@ -2669,12 +2678,20 @@ Ctrl-D 通常产生 stdin EOF，不是进程信号，也不会自动取消上下
 |---|---|
 | Broker 在剩余租期内停止并重启 | 活跃 Receiver 会重试，并可复用持久化的 token。续锁和结算还必须在各自重试预算内完成。保持单个活跃 broker，不要取消 Receiver 的控制上下文。 |
 | Broker 停机持续到租约到期 | 原 token 无法续锁或产生新的结算效果。未达到 `MaxDeliveryCount` 时返回 active；达到上限时进入 DLQ。保留的精确请求回执仍可确认此前已提交的结算。 |
-| 应用取消 `Run` | Receive 重试停止，处理函数／续锁上下文立即取消。`Run` 仍等待工作器和清理结束。处理函数返回 `nil` 请求 Complete；返回非 nil 请求在新上下文中执行最多五秒的 Abandon，除非最终续锁失败已使结算不安全。取消不会给处理函数宽限期。 |
+| 应用取消 `Run` | Receive 重试、处理函数上下文和处理阶段的心跳立即取消。`Run` 仍等待工作器和有界的终结确认结束。已进入结算阶段的自动续锁投递，会在该确认预算内继续心跳。取消不会给处理函数宽限期。 |
 | 处理函数、错误回调或自定义传输忽略取消 | 等待这些工作结束时，关停可能一直阻塞。上下文取消是协作式的，不是终止 goroutine，也不是硬返回截止时间。 |
 | 应用调用 Close 方法 | `Receiver.Close` 不执行操作；`Client.Close` 仅释放 SDK 拥有的空闲 HTTP 连接。两者都不会取消活跃 Run。`Embedded.Close` 等待的是已获准数据库工作，不是应用处理函数。关闭客户端或引擎前，先取消并等待 Receiver 返回。 |
 | Broker 仍可用时，消费者被杀死、SIGSTOP 或容器暂停 | 被杀死的进程无法结算；被暂停的进程无法续锁。到期租约遵循通常的重投／DLQ 规则。即使旧 token 已被隔离，恢复后的处理函数也可能已经造成外部变更。 |
 | Broker 被杀死 | 没有 HTTP 排空或清理保证。本地事务原子恢复，默认启动保留仍有效的租约。提交前后响应丢失时，调用方必须对账（例如通过精确请求回执）；进程死亡本身不能证明回滚。`:memory:` 在进程退出时丢失所有状态。 |
 | 屏幕关闭或锁屏；机器休眠、冻结或断电 | 仅关闭屏幕或锁屏不会向进程发信号，也不会取消其上下文；操作系统可能另行暂停主机。主机休眠或故障期间，不要假定仍会服务、续锁或清理；恢复时 broker 时钟上的截止时间可能已过。SIGSTOP、容器暂停／重启和 SIGKILL 是进程故障模型，不是主机休眠或断电行为的证明。 |
+
+处理函数返回后，`nil` 请求 Complete，非 nil 结果请求 Abandon。
+已确认的处理阶段租约故障仍会跳过新的结算；否则，从处理函数返回时开始，共享一个 30 秒确认预算。
+正常交接会让最后一次在途续锁在原有看门狗和 Run 上下文约束内完成，等待其结束后才开始结算。
+Run 取消、预算耗尽和异常退出仍会取消并等待该续锁结束。每次结算请求最多十五秒。
+启用自动续锁时，心跳与确认共用同一个有界上下文，直到确认完成；即使在该阶段取消 Run 也如此。
+随后，Receiver 会取消心跳并等待其结束，再释放该投递的总在途槽位。
+自身结算之后收到的失锁响应，不会把已确认结果变成错误；未知的结算结果仍保持未知。
 
 计划停止消费者时，应安排应用级准入控制，让工作先结算后再取消；
 也可以使用生命周期由应用自行控制的显式 Receive 循环。
@@ -2925,6 +2942,21 @@ MQLite 在本地 SQLite 文件和远程
 基于 HTTP 的 Hrana 协议，因此单个静态二进制仍然没有原生依赖。
 本文记录并发处理方式，以及为何**不采用**嵌入式副本。
 
+## 基于 Rust 的 Turso 技术预览
+
+尚未发布的 `main` 也接受 `turso://<database>.turso.io`，用于连接基于 Rust 的
+Turso 数据库。与 `libsql://` 数据库一样，通过 `MQLITE_DB_AUTH_TOKEN` 或
+`WithDBAuthToken` 提供 token。MQLite 使用服务的
+[HTTP v2 兼容端点](https://github.com/tursodatabase/turso/blob/65a31536512e3ae906277796f520785b7d68ba93/serverless/PROTOCOL.md#2-overview)，
+沿用现有纯 Go 驱动和连接有效性适配层；适配层会在驱动连接字符串内转换 URI scheme。
+不需要原生库，也不提高 Go 源码版本下限。
+
+Rust 服务目前属于技术预览。采用前，应使用自己的工作负载验证队列操作、重复打开、
+恢复和查询性能。MQLite 仍使用普通 `BEGIN` 事务，每个数据库只允许一个 broker / `Engine`。
+提供方支持并发写入，并不意味着 MQLite 启用了 `BEGIN CONCURRENT`，也不意味着可以安全地
+同时运行多个 MQLite 所有者。新提供方的 SQL 兼容性和优化器与 libSQL 相互独立；
+不要假定两者具有相同的吞吐量或查询计划。
+
 ## 后端语义一致性契约
 
 存储选择属于部署细节，不是另一种 API 模式。在已提交状态、broker 时间和请求相同的前提下，
@@ -2955,16 +2987,28 @@ MQLite 在本地 SQLite 文件和远程
 嵌入式 `Engine`。替换所有者时，必须先停止旧进程、确认其已经退出，再启动新进程。
 不要让滚动替换中的新旧进程同时访问同一个数据库。不同存储模式的区别在于连接池：
 
-| | 本地文件 / `:memory:` | `libsql://`（HTTP Hrana） | `ws://` / `wss://` |
+| | 本地文件 / `:memory:` | `libsql://` / `turso://`（HTTP Hrana） | `ws://` / `wss://` |
 |---|---|---|---|
-| 写入所有权 | 1 个连接 = 本地写入器（文件锁，MQLITE-6） | 一个 broker 拥有 4 连接池；Turso 串行提交 | 相同的远程所有权要求 |
-| 写入连接池 | MaxOpen=1, MaxIdle=1 | MaxOpen=4, MaxIdle=0 | MaxOpen=4, MaxIdle=2 |
+| 写入所有权 | 1 个连接 = 本地写入器（文件锁，MQLITE-6） | 一个所有者每次只准入一次写入尝试 | 相同的远程所有权要求 |
+| 提供方连接池 | MaxOpen=1, MaxIdle=1 | MaxOpen=4, MaxIdle=0 | MaxOpen=4, MaxIdle=2 |
 | 观测 | 文件：1 个只读连接；`:memory:`：写入连接 | 由提供方支持的连接池 | 由提供方支持的连接池 |
 | 生命周期 | ConnMaxLifetime=0 | 每次 `database/sql` 连接租借使用一个逻辑 Hrana 连接 | IdleTime=3s, Lifetime=55s |
 | 物理连接复用 | SQLite 连接保持打开 | `http.DefaultTransport` 仍然复用 TCP/TLS 连接 | 对 WebSocket 连接本身进行池化 |
 
-在单个 MQLite 进程内使用小型远程连接池是安全的，因为 Turso 主节点会将各连接的写入串行化；
-这不意味着同时运行两个 broker 或嵌入式 `Engine` 实例也是安全的。对于 `libsql://`，一次连接租借
+远程变更在获取 SQL 连接之前，先等待一个可取消的写入许可。该许可覆盖一次尝试，
+直到提交或回滚结束；重试退避期间会释放许可。续锁与结算各自按 FIFO 排队，续锁优先于结算，
+每个优先级的连续执行次数都有上限，以保证普通写入和维护也能取得进展。
+读取仍可使用四连接池。该机制不能抢占已经运行的事务，也不能让重叠运行的 broker 或 `Engine`
+实例变得安全。
+
+公开 `Tx` 回调持有写入许可，直到该次尝试结束。应让回调保持简短，并使用提供的
+`EngineTx` 执行业务 SQL 和入队。先完成回调，再等待同一个所有者上的另一项变更。
+
+对于 HTTP Hrana，直接队列批量发送会将参数化语句分为有界组一起传输，同时让整个 Send
+保持在同一个事务内，并只提交一次。扇出和具有固定到期时间的订阅仍使用原有的隔离路径。
+网络延迟仍计入事务和租约预算。
+
+对于 `libsql://`，一次连接租借
 覆盖一个普通操作或一个完整事务。归还租借连接时，会先丢弃其逻辑 Hrana 连接，防止它进入空闲槽位
 或直接交给等待中的调用方；这**不会**关闭共享 HTTP 传输层及其 TCP/TLS 保活连接。
 无论使用本地还是远程后端，每个 broker 进程都会将成本较高的全队列观测查询结果共享约 10 秒；
@@ -2985,20 +3029,43 @@ MQLite 对 `libsql://` 阻止了这种失效连接交接：兼容适配层会在
 共享传输层负责。正常故障处理仍遵循以下有界规则：
 
 - **仅对瞬时错误进行有界重试**——`maxConnAttempts = 6`。
-- **读取在任何传输中断后重试。** `retryable = remote && (isConnErr || isBusyErr)`
+- **读取在传输中断或确定的远程中止后重试。**
+  `retryable = remote && (isConnErr || isBusyErr || isExpiredRemoteTransactionErr)`
   控制 `query`/`queryRowScan`：读取具有幂等性，因此在新的池连接上重放读取总是安全的。
   `isConnErr` 覆盖整个传输故障族——`driver.ErrBadConn`、关闭的 Hrana 流，以及同类的
   `EOF` / `broken pipe` / `i/o timeout`（位于 Fly 等代理后面时，连接中断表现为 `EOF`，而不是 `RST`）。
-- **只有能够证明语句从未生效时才重试写入**——`retryableWrite =
-  remote && (ErrBadConn || isBusyErr)`。关闭的流（`ErrBadConn`）或 `SQLITE_BUSY`
-  （从未取得锁）保证写入没有执行，因此重放 `exec` / `inTx` 的提交不会重复生效。
-  重试次数受 `maxConnAttempts` 限制；耗尽后向调用方返回错误。
-  DSN 中的 `busy_timeout(5000)` pragma 仅适用于本地 modernc SQLite 连接，不适用于 Turso/libSQL。
+  仅包含一个提供方 HTTP 错误叶节点、且状态为 408、429、499 或 5xx 的错误，也遵循此策略。
+  在尝试 COMMIT 之前，`inTx` 会丢弃失败事务，并可在相同的六次尝试上限内重新执行整个回调。
+  提供方的数字状态码优先于其响应正文中的 SQLite 错误字样。
+- **写入和 COMMIT 仅在能够证明请求已被拒绝时重试。** 只有真正发生于发送之前的
+  `driver.ErrBadConn`，或带类型码的 `SQLITE_BUSY` 证据，才允许透明重放。
+  `database is locked` 这类纯文本、Rust 预览的精确文本 `Tursodb error: Database is busy`，
+  或空闲事务已回滚的提示，都不能证明已发送的写入或 COMMIT 被拒绝。
+  固定版本的驱动可能丢弃非 200 HTTP 状态，只返回与普通 SQL 拒绝完全相同的文本。
+  这些已发送写入会返回 `ErrOutcomeUnknown`，并保留其原始原因；不会自动重复可能已经提交的效果。
+  在 COMMIT 开始之前，回调错误仍可使整个事务被丢弃，并在六次尝试预算内重试。
+  本地 SQLite 行为保持不变。受支持的回调只能通过 `EngineTx.SQL()` 执行业务语句；
+  不得调用其 `Commit`/`Rollback` 方法，也不得发出事务控制 SQL。事务边界由 Engine 管理。
+  调用方提前提交会绕过这一分阶段契约。
+- **空闲事务到期按所处阶段处理。** 提供方明确说明交互式事务因流空闲而回滚的精确提示，
+  可用于识别读取和 COMMIT 前回调重试中的已知到期条件。这些路径会重新打开整个事务，
+  并重新构造时间敏感参数。重试耗尽仍归入现有 `connection` 计数器类别，可选详情为
+  `transaction_expired`。在独立写入或 COMMIT 已发出后收到同一非类型化文本，结果仍然未知，
+  因为驱动已无法提供足够的协议信息来证明其来源。泛化的超时／回滚文本、合并原因以及
+  checkpoint 失败都不能授权额外重试。
 - **写入确认回执丢失表示 _结果未知（outcome-unknown）_，不进行重试**（MQLITE-59）。写入／提交时
   发生的其他传输中断——主节点可能已经持久化提交，只是回执丢失——会以 `ErrOutcomeUnknown`
   （HTTP `503 outcome_unknown`）返回，而不是盲目重放造成重复插入。
   调用方应先依据 `message_id`／去重进行对账，再决定是否重试；透明恢复需要持久化的逐操作幂等机制，
   该能力已延后。**`errors.Is(err, mqlite.ErrOutcomeUnknown)` 在嵌入式模式和客户端模式中均有效。**
+  独立写入或 COMMIT 已发出后收到提供方瞬时 HTTP 响应，结果也属于未知：代理返回 502
+  不能证明主节点拒绝了该效果。此类操作绝不自动重放；错误保留提供方原因和 `HTTPStatus()`，
+  用于对账与诊断。HTTP 认证错误和其他非瞬时响应直接返回，不盲目重试。
+  提供方 HTTP 故障仍归入现有 `connection` 存储计数器类别；可选详情携带安全的状态码及
+  `provider_unavailable` 描述，而对于不确定写入，`outcome_unknown` 仍是权威分类。
+  回退解码丢弃 HTTP 状态时，诊断信息不会凭空补出状态码。
+  带代码的回退错误不能把远程写入提升为可安全重试的 `ErrBadConn`。
+  受支持的远程变更会持有显式连接或事务；MQLite 不通过 `sql.DB.ExecContext` 发出独立写入。
 - **绝不重试逻辑存储错误。** 约束冲突或 `no such table` 在引擎内直接作为最终错误返回。
   HTTP 客户端边界上的生命周期删除更为保守：所有 HTTP 5xx 都视为 `ErrOutcomeUnknown`，因为网关
   可能在 broker 已提交、但确认回执丢失后生成该响应。本地存储始终不重试（单个连接就是唯一写入器）。
@@ -3046,10 +3113,29 @@ Turso 嵌入式副本保留一份**从远程主节点同步的本地 libSQL 文�
 
 ## 验证状态
 
+功能检查使用[尚未发布的兼容性候选版本](https://github.com/mqlitehq/mqlite/commit/e01577ec938902bf853026461e27bf86dcc9511f)，
+通过兼容 libSQL 的 HTTP/Hrana，验证了 MQLite 在标准 Turso 与基于 Rust 的技术预览后端上的
+队列和消息契约。
+
+- **传输：** MQLite 使用纯 Go 驱动 `github.com/tursodatabase/libsql-client-go`，
+  固定版本为 `v0.0.0-20251219100830-236aa1ff8acc`。MQLite 的 Go 源码下限仍为 Go 1.21。
+  Rust 预览检查使用尚未发布的 URI 适配层，将 `turso://` 映射到同一 HTTP/Hrana 传输。
+  对于 v0.4.2，请使用文档规定的 `libsql://` URI。
+- **所有权与事务：** 每个数据库只运行一个活跃 broker 或嵌入式 `Engine`。
+  MQLite 使用普通事务，而不是 `BEGIN CONCURRENT`；提供方的并发写入功能不改变此所有权模型。
+- **写入确认：** COMMIT 确认回执丢失时返回 `ErrOutcomeUnknown`。
+  重试之前应先对账；响应中断不能证明写入是否已经提交。
+- **部署：** 将 broker 部署在 Turso 主节点附近。使用自己的消息体、并发数与批次大小测量
+  延迟和吞吐量，再据此选择租约时长与请求截止时间。
+
+### 可重复运行的测试套件
+
 ```
-hermetic (always, in CI)   engine/storage_test.go    conn-error retry classifier
-live  (creds-gated, nightly) engine/turso_test.go     full lifecycle vs real Turso
+hermetic (always, CI)       engine/storage_test.go  retry classifiers and connection lifecycle
+live (credentials-gated)   engine/turso_test.go    representative lifecycle contracts
 ```
+
+在线兼容性结论仅指针对所述后端与源码候选版本，已经完成的真实在线检查。
 
 仅可在专用、可丢弃的测试数据库上运行真实远程测试。
 即使 `-run` 仅选择一个测试，`TestMain` 也会在选中的测试开始前删除所有 MQLite 管理的表，
@@ -3453,7 +3539,7 @@ mqlite 提供合理的默认值；大多数部署无需改动。以下按大致�
 | `wal_autocheckpoint` | 1000 页（~4 MB） | 适用于没有长时间读操作的历史基线；观测快照和其他读操作可能导致更大的暂时性 WAL。只有测量检查点与恢复之间的权衡后才提高。 |
 | `cache_size` | ~2 MB | 工作集（队列头部 + 索引）很小；只有性能分析表明深度积压下存在缓存压力时才提高——256 MB 机器上的 RAM 成本不可忽略。 |
 | `mmap_size` | 关闭 | `modernc.org/sqlite` 是纯 Go 实现；不要假定它会得到 C-SQLite 的 mmap 收益——先测量。 |
-| 写入者/提供方连接池 | 本地写入者 1 / 远程提供方 4 | **不要修改**——本地写入连接池保持一个连接，以保证原子 claim；本地文件另有一个只读观测连接。远程连接池仅属于单个 broker，Turso 会串行化提交。`libsql://` 逻辑连接采用单次连接租借，而共享 HTTP 传输层保持 TCP/TLS 复用；参见 [turso.md](https://mqlitehq.github.io/zh-CN/turso.html)。 |
+| 写入者/提供方连接池 | 本地写入者 1 / 远程提供方 4 | **不要修改**——本地写入连接池保持一个连接，以保证原子 claim；本地文件另有一个只读观测连接。每个远程所有者同一时刻只准入一次写入尝试，同时四连接池保留读取容量。`libsql://` 逻辑连接采用单次连接租借，而共享 HTTP 传输层保持 TCP/TLS 复用；参见 [turso.md](https://mqlitehq.github.io/zh-CN/turso.html)。 |
 
 本地 modernc SQLite 连接设置了 `busy_timeout=5000` 和 `temp_store=MEMORY`。这些设置不适用于远程 Turso/libSQL 连接；其瞬时争用使用 [turso.md](https://mqlitehq.github.io/zh-CN/turso.html) 所述的有界重试策略。
 
@@ -4103,7 +4189,7 @@ func process(ctx context.Context, body []byte) error {
 }
 ```
 
-`WithAutoRenew` 保持当前交付尝试有效，不消耗另一次 `delivery_count`。每次成功续锁保留“现有租约截止时间”和 broker 新计算的 `now + lock_duration` 候选值中的较晚者（受固定订阅到期时间限制），而不是给旧截止时间叠加时长。请求必须在现有租约到期前到达，且不能延长消息 TTL 或固定订阅寿命。已知租约仍留有时间时，Receiver 会重试瞬时续锁失败。前一响应测得往返开销不可忽略时，它会提前发起，为保守的本地截止时间留下传输余量。若精确确认的租约短于最小安全节奏，或续锁被拒绝、无法在该截止时间前确认，它会取消单条 处理函数 context，并跳过该陈旧交付的 Complete/Abandon。Handler 必须遵守 `ctx.Done()` 且保持幂等：失锁后其他消费者可能收到消息。完全相同的 Complete 和 Abandon 请求共用五秒结算总预算，包括首次请求和回执丢失后的重放；broker 结算回执使重放安全。Broker 或中间层返回 HTTP 499 时，只要 Receiver 自身 context 仍有效，就会使用相同 Receive 尝试 ID 重试。若代理移除两个 broker 时间头，`WithErrorHandler` 会收到一次时钟降级诊断。
+`WithAutoRenew` 保持当前交付尝试有效，不消耗另一次 `delivery_count`。每次成功续锁保留“现有租约截止时间”和 broker 新计算的 `now + lock_duration` 候选值中的较晚者（受固定订阅到期时间限制），而不是给旧截止时间叠加时长。请求必须在现有租约到期前到达，且不能延长消息 TTL 或固定订阅寿命。已知租约仍留有时间时，Receiver 会重试瞬时续锁失败。前一响应测得往返开销不可忽略时，它会提前发起，为保守的本地截止时间留下传输余量。若精确确认的租约短于最小安全节奏，或续锁被拒绝、无法在该截止时间前确认，它会取消单条 处理函数 context，并跳过该陈旧交付的 Complete/Abandon。Handler 必须遵守 `ctx.Done()` 且保持幂等：失锁后其他消费者可能收到消息。处理函数返回后，所选的 Complete 或 Abandon 请求共享一个 30 秒确认预算，包含续锁交接、首次结算尝试、回执丢失后的完全相同请求重放，以及退避。每次结算请求最多十五秒，并受剩余总预算限制；broker 的精确结算回执使重放安全，无需再次调用处理函数。单个无响应请求最多用掉初始总窗口的一半；其重试受剩余预算限制，不保证再获得完整十五秒。瞬时故障导致确认预算耗尽时，`WithErrorHandler` 收到 `ErrOutcomeUnknown`，并为 `errors.Is`/`errors.As` 保留最终原因。预算本身不会延长租约。启用自动续锁时，心跳会在同一个有界确认阶段内保护该投递。取消 `Run` 后，仍会等待已返回处理函数的终结确认完成。续锁交接、取消，以及结算请求发出前预算已到期的行为，见[消费者停止契约](https://mqlitehq.github.io/zh-CN/operations.html#consumer-stops-and-host-interruptions)。Broker 或中间层返回 HTTP 499 时，只要 Receiver 自身 context 仍有效，就会使用相同 Receive 尝试 ID 重试。若代理同时移除 `X-Mqlite-Server-Time-Ms` 与 HTTP `Date`，`WithErrorHandler` 会收到一次时钟降级诊断。
 
 ## 4. 主题订阅生命周期
 

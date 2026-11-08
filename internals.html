@@ -183,17 +183,18 @@ stays on its single connection. <code>synchronous=NORMAL</code> is the default
 durability point; <code>FULL</code> is a knob (<code>MQLITE_SYNC</code>) when an fsync per commit is
 worth ~4–11× of your local throughput (on remote Turso it&#39;s a no-op — the
 server owns durability).</li>
-<li><strong>Remote Turso/libSQL</strong> relaxes the pool to 4 connections because the Turso
-primary serializes writes server-side; it is also the only path that retries
-transient errors — locally a failed statement never ran, so there is nothing
+<li><strong>Remote Turso/libSQL</strong> keeps a four-connection pool for reads and admits
+one mutation attempt before it acquires a connection. Renewal work has bounded
+FIFO priority over settlement, with bounded priority over other writes so
+maintenance also progresses.
+A permit lasts through commit or rollback and SQL-lease return, then is released
+before retry backoff. This is also the only path that retries transient errors — locally a failed statement never ran, so there is nothing
 to retry. For HTTP Hrana (<code>libsql://</code>), one logical driver connection lasts for
 one <code>database/sql</code> lease (or one whole transaction) and is then discarded;
 Go&#39;s shared HTTP transport still reuses the underlying TCP/TLS connections.
 WebSocket transports retain their bounded connection pooling, and the local
 SQLite path is unchanged.</li>
 </ul>
-<p>The punchline: mqlite doesn&#39;t <em>implement</em> mutual exclusion between consumers —
-it <strong>arranges to never need it</strong>. Concurrency control by subtraction.</p>
 <h2 id="4--claiming-peek-lock-is-one-atomic-update">4 · Claiming: Peek-Lock is one atomic UPDATE</h2>
 <p>The hot path — a consumer asking for work — is a single statement
 (<code>engine/claim.go</code>, abridged):</p>
@@ -493,6 +494,10 @@ performance shape is a regression-tested contract, not a hope (§5).</li>
 <li><strong>A schema golden test</strong> — the complete canonical DDL is pinned. A database
 with a different guard token is refused (<code>ErrSchemaVersionMismatch</code>); existing
 table layouts are never migrated. Incompatible changes require a token change.
+A narrowly scoped compatibility repair atomically replaces the two recognized
+legacy message-parent triggers with equivalent indexed predicates that also
+compile on Rust-based Turso. Unknown trigger definitions refuse Open before
+DDL; this repair changes neither message data nor the schema token.
 The independent <code>access_keys</code> addition originally preserved token 5 and remains
 part of the canonical schema, with a separate golden for its DDL. Durable
 resource lifecycle and fixed subscription expiry advance the current canonical

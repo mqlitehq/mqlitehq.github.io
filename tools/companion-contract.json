@@ -1,21 +1,21 @@
 {
   "formatVersion": 1,
-  "reviewedRevision": "05e014518b8c205cf22ed649b8f5e6057b855081",
-  "reviewNote": "Reviewed the official remote-only SDK source, README and CI/release configurations against website claims: the module declares Go 1.13, production imports only the standard library and this module, and transport is JSON over HTTP without the embedded engine, SQLite, libSQL/Turso or CGO. The README has a pre-existing broker-v0.4.1 current-release sentence; it is not a source for the website current broker release. Only the release string literal in internal/version/version.go is normalized; any other change to that file remains reviewed. New fingerprints require English/Chinese semantic review, not automatic acceptance.",
+  "reviewedRevision": "48c91072ec6815bf2746254aa58bbc451b554fba",
+  "reviewNote": "Reviewed the remote-only SDK candidate and corresponding bilingual managed-Receiver guidance: elapsed server processing reduces only clock uncertainty, full RPC duration still budgets renewal, and normal heartbeat handoff shares the bounded settlement confirmation budget. The module still has a Go 1.13 source floor and standard-library-only production imports. This unreleased revision is a review basis, not a claim about public main or a published SDK release; unchanged transport, build and release inputs retain their earlier review. Version-string-only normalization and the complete production inventory remain unchanged.",
   "files": {
     ".github/workflows/ci.yml": "def545c145cebe60212de62bc4217fa0a544b8889fd502eb12b56bd689a63c9c",
     ".github/workflows/release.yml": "0afd94c9ba93b354beb35300347f55fe5721625ac42ea92d58869d2024a0c8fd",
-    "README.md": "a01130cefd5423a6f2caee201742e56b88d82c3d6a14707477f987cf54bbeaca",
+    "README.md": "f0c5005825d84912707b36bd2835844ac37a588675b1ae6d5aec95d548f4670f",
     "api.go": "3a5b6cc6dd86ea85e91e7af6ec35322b08b189bec0d69974e099716711282c5b",
-    "client.go": "e35a46527db33c5416cc9e9f3c0161a9e74c445be7e85ab59ff8f4f674f46712",
+    "client.go": "f0140ba372c4ad7b9b7d7634fd1a529c2366a00ee51e30d6184a528d7f222676",
     "cmd/mqlitec/main.go": "02a27c96e750af37124e0ff140c6dd5618d92297073b4abc52f27e98ae50fd4a",
     "doc.go": "0cfbc50df4f5212700d7747addea6e6b97c8e4371d70a1aa605dd917ce68fed9",
     "go.mod": "d6e87157bc4f30f81994e11a8f7bd87c4f8e6e3ed4f51e3834b0e7ed2589c17d",
     "internal/version/version.go": "dd032b3b9b3f0d5d22842bafeeb3855ffe57017eb491e162ec47f96193d655a9",
     "internal/wire/responses.go": "266006400694eacb83c53d567bfc5c790f9a9f119c63d0c22b126d7be586b08c",
-    "internal/wire/wire.go": "bda33b0df2657a34a5af0b0659049aeb44155845a351199e139d98015e67559c",
+    "internal/wire/wire.go": "02d5cce362abdf0e57fd7aab0c5541b0c03a8d764c61501793ade3a1349b70b1",
     "message.go": "377a6644a52370b9eae72663232e7fec2b5b32597c0dcdb589aa91e33e171e56",
-    "receiver.go": "ec698cf7c153c5845e773f085c44754812f492d45cfd1aa40153cfce28d08de4",
+    "receiver.go": "f1aa2ae09f73ed296e76faf7b0982ca7fdee73026436ef542da3311cc7ae7d27",
     "types.go": "abd4de258d70863e5296efd454d88c44c9f706a5ce497b85f05a5850ff6ba724"
   }
 }

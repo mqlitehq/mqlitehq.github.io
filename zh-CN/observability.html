@@ -436,7 +436,10 @@ Grafana 仪表盘刷新查询 Prometheus，不额外直接请求 broker。
 <code>canceled</code>、<code>closed</code>、<code>busy</code>、<code>connection</code>、<code>full</code>、<code>corrupt</code>、<code>io</code>、
 <code>application</code>、<code>outcome_unknown</code>、<code>other</code> 之一。
 固定的存储结果／错误组合以及已注册 RPC／结果组合会初始化为零，
-因此先前有成功抓取时，就能检测第一个事件。对已观察样本使用 <code>rate</code>/<code>increase</code>；
+因此先前有成功抓取时，就能检测第一个事件。
+已确认的空闲事务回滚仍归入现有 <code>connection</code> 计数器类别；可选错误详情使用更精确的
+<code>transaction_expired</code> 类别。这样既保留必需的计数器矩阵，又让旧 broker 的观测数据仍可原样解码。
+对已观察样本使用 <code>rate</code>/<code>increase</code>；
 事件之后才开始的首次抓取无法重建事件发生时间。
 维护任务为 <code>locks</code>、<code>scheduled</code>、<code>ttl</code>、
 <code>dedup</code>、<code>receipts</code>、<code>retention</code>、<code>reclaim</code>、<code>subscription_expiry</code>、<code>lifecycle</code>。

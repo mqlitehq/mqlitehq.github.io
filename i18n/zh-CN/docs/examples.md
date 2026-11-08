@@ -169,7 +169,7 @@ func process(ctx context.Context, body []byte) error {
 }
 ```
 
-`WithAutoRenew` 保持当前交付尝试有效，不消耗另一次 `delivery_count`。每次成功续锁保留“现有租约截止时间”和 broker 新计算的 `now + lock_duration` 候选值中的较晚者（受固定订阅到期时间限制），而不是给旧截止时间叠加时长。请求必须在现有租约到期前到达，且不能延长消息 TTL 或固定订阅寿命。已知租约仍留有时间时，Receiver 会重试瞬时续锁失败。前一响应测得往返开销不可忽略时，它会提前发起，为保守的本地截止时间留下传输余量。若精确确认的租约短于最小安全节奏，或续锁被拒绝、无法在该截止时间前确认，它会取消单条 处理函数 context，并跳过该陈旧交付的 Complete/Abandon。Handler 必须遵守 `ctx.Done()` 且保持幂等：失锁后其他消费者可能收到消息。完全相同的 Complete 和 Abandon 请求共用五秒结算总预算，包括首次请求和回执丢失后的重放；broker 结算回执使重放安全。Broker 或中间层返回 HTTP 499 时，只要 Receiver 自身 context 仍有效，就会使用相同 Receive 尝试 ID 重试。若代理移除两个 broker 时间头，`WithErrorHandler` 会收到一次时钟降级诊断。
+`WithAutoRenew` 保持当前交付尝试有效，不消耗另一次 `delivery_count`。每次成功续锁保留“现有租约截止时间”和 broker 新计算的 `now + lock_duration` 候选值中的较晚者（受固定订阅到期时间限制），而不是给旧截止时间叠加时长。请求必须在现有租约到期前到达，且不能延长消息 TTL 或固定订阅寿命。已知租约仍留有时间时，Receiver 会重试瞬时续锁失败。前一响应测得往返开销不可忽略时，它会提前发起，为保守的本地截止时间留下传输余量。若精确确认的租约短于最小安全节奏，或续锁被拒绝、无法在该截止时间前确认，它会取消单条 处理函数 context，并跳过该陈旧交付的 Complete/Abandon。Handler 必须遵守 `ctx.Done()` 且保持幂等：失锁后其他消费者可能收到消息。处理函数返回后，所选的 Complete 或 Abandon 请求共享一个 30 秒确认预算，包含续锁交接、首次结算尝试、回执丢失后的完全相同请求重放，以及退避。每次结算请求最多十五秒，并受剩余总预算限制；broker 的精确结算回执使重放安全，无需再次调用处理函数。单个无响应请求最多用掉初始总窗口的一半；其重试受剩余预算限制，不保证再获得完整十五秒。瞬时故障导致确认预算耗尽时，`WithErrorHandler` 收到 `ErrOutcomeUnknown`，并为 `errors.Is`/`errors.As` 保留最终原因。预算本身不会延长租约。启用自动续锁时，心跳会在同一个有界确认阶段内保护该投递。取消 `Run` 后，仍会等待已返回处理函数的终结确认完成。续锁交接、取消，以及结算请求发出前预算已到期的行为，见[消费者停止契约](operations.md#consumer-stops-and-host-interruptions)。Broker 或中间层返回 HTTP 499 时，只要 Receiver 自身 context 仍有效，就会使用相同 Receive 尝试 ID 重试。若代理同时移除 `X-Mqlite-Server-Time-Ms` 与 HTTP `Date`，`WithErrorHandler` 会收到一次时钟降级诊断。
 
 ## 4. 主题订阅生命周期
 

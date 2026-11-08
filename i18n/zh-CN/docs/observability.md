@@ -286,7 +286,10 @@ Prometheus 使用 text exposition 0.0.4 格式。
 `canceled`、`closed`、`busy`、`connection`、`full`、`corrupt`、`io`、
 `application`、`outcome_unknown`、`other` 之一。
 固定的存储结果／错误组合以及已注册 RPC／结果组合会初始化为零，
-因此先前有成功抓取时，就能检测第一个事件。对已观察样本使用 `rate`/`increase`；
+因此先前有成功抓取时，就能检测第一个事件。
+已确认的空闲事务回滚仍归入现有 `connection` 计数器类别；可选错误详情使用更精确的
+`transaction_expired` 类别。这样既保留必需的计数器矩阵，又让旧 broker 的观测数据仍可原样解码。
+对已观察样本使用 `rate`/`increase`；
 事件之后才开始的首次抓取无法重建事件发生时间。
 维护任务为 `locks`、`scheduled`、`ttl`、
 `dedup`、`receipts`、`retention`、`reclaim`、`subscription_expiry`、`lifecycle`。

@@ -59,7 +59,7 @@ test('Chinese main figures translate prose and retain important API names, units
   for (const [id, terms] of Object.entries({
     monitoring: ['采集器（collector）', '私有路由（private route）', '监控 Bearer 令牌', 'MQLite :6754/metrics', 'Prometheus-compatible storage', 'Grafana'],
     capacity: ['历史部署容量样本', '19 MB', '50k', '38 MB', '256 MB', '0.4 KB', '256 B', '4 MB WAL', '1 GB', '1.1M', '0.6 KB × 1.5', '1000s/s', '1 个共享 vCPU', '10.9 MiB', '15 MB', '&lt; 1 s', '不存在通用的积压阈值'],
-    validation: ['隔离测试（hermetic）', '始终运行，包含 CI', '须配置测试凭据（creds-gated）', '夜间任务（nightly）', 'engine/storage_test.go', 'engine/turso_test.go', '真实 Turso'],
+    validation: ['隔离测试（hermetic）', '始终运行，包含 CI', '须配置测试凭据（credentials-gated）', 'engine/storage_test.go', 'engine/turso_test.go', '重试分类与连接生命周期', '具有代表性的生命周期契约'],
     'shutdown-budget': ['必须大于', '25s HTTP 排空（HTTP drain）', 'Engine.Close', '耗时', '日志与进程退出余量'],
     creation: ['两种显式创建操作', 'CreateQueue(name)', 'Subscribe(topic, sub, filter)', 'Send', '支撑队列（backing queue）', 'sub', 'topic', '主题（Topic）随之隐式形成'],
   })) for (const term of terms) assert.ok(main(id).includes(term), `${id}: missing ${term}`);

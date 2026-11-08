@@ -234,14 +234,25 @@ deadline. If an exact confirmed lease is shorter than the minimum safe cadence, 
 renewal is rejected or cannot be confirmed before that deadline, it cancels the
 individual handler context and skips Complete/Abandon for that stale delivery. The
 handler must honor <code>ctx.Done()</code> and remain idempotent:
-another consumer may receive the message after the lease is lost. Exact Complete and
-Abandon requests share a five-second total settlement budget, including the first
-request and replays after a lost acknowledgement; the broker&#39;s settlement receipt
-makes that replay safe.
+another consumer may receive the message after the lease is lost. After the handler
+returns, its selected Complete or Abandon request has one 30-second confirmation
+budget, including the renewal handoff, first settlement attempt, exact replays
+after a lost acknowledgement and backoff. Each settlement request gets at
+most fifteen seconds, clamped by the remaining total budget; the broker&#39;s exact
+settlement receipt makes replay safe without calling the handler again. A single
+blackholed request can use at most half of the initial total window; its retry is
+clamped by the remaining budget and is not guaranteed another full fifteen seconds.
+Exhausted transient confirmation reaches <code>WithErrorHandler</code> as
+<code>ErrOutcomeUnknown</code>, retaining the final cause for <code>errors.Is</code>/<code>errors.As</code>.
+The budget does not extend a lease itself. With auto-renew enabled, the heartbeat
+protects that delivery within the same bounded confirmation phase. Canceling <code>Run</code>
+still waits for returning handlers&#39; terminal confirmation to finish. See the
+<a href="operations.html#consumer-stops-and-host-interruptions">consumer stop contract</a> for
+handoff, cancellation and expiry before a settlement request is sent.
 If a broker or intermediary returns HTTP 499, it is retried while the Receiver&#39;s
 own context remains live, using the same Receive attempt ID. If a proxy removes
-both broker-time headers, <code>WithErrorHandler</code> receives one degraded-clock
-diagnostic.</p>
+both <code>X-Mqlite-Server-Time-Ms</code> and HTTP <code>Date</code>, <code>WithErrorHandler</code> receives one
+degraded-clock diagnostic.</p>
 <h2 id="4-topic-subscription-lifecycle">4. Topic subscription lifecycle</h2>
 <p>Use one stable subscription for high-rate request/reply traffic and route replies
 inside the consumer by a globally unique <code>correlation_id</code>. A subscription per
