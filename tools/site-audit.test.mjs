@@ -19,6 +19,20 @@ test('Chinese pages and machine-readable summaries receive the same current-fact
   checkCurrentVersionClaims(new Map([['zh-CN/agents.html', '源版本 v0.4.2。最新受支持版本是 v0.4.2。']]), facts);
 });
 
+test('linked release versions in Markdown summaries keep the current-version checks', () => {
+  const release = (version) => `[${version}](https://github.com/mqlitehq/mqlite/releases/tag/${version})`;
+  checkCurrentVersionClaims(new Map([
+    ['llms-full.txt', `Source version: v0.4.2. Latest supported release: ${release('v0.4.2')}.`],
+    ['zh-CN/llms-full.txt', `源码版本：v0.4.2。最新受支持版本：${release('v0.4.2')}。`],
+  ]), facts);
+  for (const text of [
+    `Source version: v0.4.2. Latest supported release: ${release('v9.9.9')}.`,
+    `源码版本：v0.4.2。最新受支持版本：${release('v9.9.9')}。`,
+  ]) {
+    assert.throws(() => checkCurrentVersionClaims(new Map([['llms-full.txt', text]]), facts), /stale supported release v9.9.9/);
+  }
+});
+
 test('unreleased source and released baseline can differ without rewriting historical versions', () => {
   checkCurrentVersionClaims(new Map([['operations.html', 'source v0.5.0 with unreleased changes. Latest supported release: v0.4.2. v0.2.0 used schema 2.'],
     ['zh-CN/operations.html', '源码 v0.5.0（含未发布变更）。最新受支持版本：v0.4.2。v0.2.0 使用 schema 2。']]), { ...facts, sourceVersion: '0.5.0' });

@@ -10,7 +10,7 @@ Relative links below resolve against this website.
 NOTE ON VERSIONS: the latest supported release is v0.4.2. The documented main source
 uses default port 6754 and schema token 7. v0.3.3 is withdrawn, unsupported and retracted by v0.4.0 and later; its
 public artifacts remain only for forensic or compatibility inspection and must not
-be deployed. This website tracks main, currently source v0.4.2 with unreleased changes.
+be deployed. This website tracks main, currently source v0.4.3 with unreleased changes.
 The source version constant can still match the last release while behavior differs;
 the versioned documentation below is authoritative for an installed release. Runtime access
 keys and key-management tools require v0.3.1 or later.
@@ -40,7 +40,7 @@ preserving the matching old binary/database pair and starting v0.4.2 with a fres
   share successful queue semantics, validation, state transitions and logical errors;
   latency, availability, remote outcome_unknown failures and storage operations
   have different envelopes.
-- Wire protocol: JSON over HTTP, one POST per operation, 29 routes in source v0.4.2 with unreleased changes under
+- Wire protocol: JSON over HTTP, one POST per operation, 29 routes in source v0.4.3 with unreleased changes under
   /mqlite.v1.QueueService/*, /mqlite.v1.AdminService/* and /mqlite.v1.AuthService/*. Message bodies are
   base64 in JSON. GET / with no Accept header, */*, or JSON is an open discovery
   card listing every endpoint; an interactive browser that prefers HTML enters
@@ -125,7 +125,7 @@ preserving the matching old binary/database pair and starting v0.4.2 with a fres
 - Transactional outbox (embedded-only): business write + enqueue commit in ONE
   SQLite transaction via mq.Tx.
 - Ops: /ui embedded admin console, opt-in authenticated /metrics Prometheus
-  (incl. per-RPC latency histograms), /healthz, CLI (26 commands, including the key subcommand group), MCP server (mqlite-mcp, 22 tools in source v0.4.2 with unreleased changes). The local production
+  (incl. per-RPC latency histograms), /healthz, CLI (26 commands, including the key subcommand group), MCP server (mqlite-mcp, 22 tools in source v0.4.3 with unreleased changes). The local production
   boundary is one broker per persistent SQLite file; backups and recovery must be
   rehearsed. Use TLS and Bearer authentication for network access.
 - Unified observation (v0.3.2 and later): AdminService/Observe, SDK, CLI observe,

@@ -1,16 +1,16 @@
 mqlite main — full documentation bundle.
-Source version: v0.4.2. Latest supported release: [v0.4.2](https://github.com/mqlitehq/mqlite/releases/tag/v0.4.2).
+Source version: v0.4.3. Latest supported release: [v0.4.2](https://github.com/mqlitehq/mqlite/releases/tag/v0.4.2).
 Source includes unreleased changes.
 These docs track main; consult release notes for published artifacts and upgrade requirements.
 Source of truth: https://github.com/mqlitehq/mqlite/tree/main/docs
 
-<!-- ===== mqlite main · source v0.4.2; latest supported release v0.4.2 · docs/concepts.md ===== -->
+<!-- ===== mqlite main · source v0.4.3; latest supported release v0.4.2 · docs/concepts.md ===== -->
 
 # Core concepts & subscription filters
 
-This document follows `main`, including unreleased changes. For an installed
+This document follows `main` for release target v0.4.3. For an installed
 v0.4.2 release, use the [concepts at that tag](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/concepts.md);
-see [CHANGELOG.md](https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md#unreleased) for pending behavior changes.
+see [CHANGELOG.md](https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md) for version-specific behavior changes.
 
 > Goal: explain MQLite's model once, clearly, and place it against the comparable
 > services from Azure Service Bus, AWS (SQS + SNS) and GCP Pub/Sub. MQLite is designed
@@ -587,13 +587,13 @@ network I/O APIs are exposed; `now()` can read the wall clock:
   for the filter rules MQLite guarantees.
 
 
-<!-- ===== mqlite main · source v0.4.2; latest supported release v0.4.2 · docs/internals.md ===== -->
+<!-- ===== mqlite main · source v0.4.3; latest supported release v0.4.2 · docs/internals.md ===== -->
 
 # How mqlite works — building a reliable queue on one SQLite file
 
-This document follows `main`, including unreleased changes. For an installed
+This document follows `main` for release target v0.4.3. For an installed
 v0.4.2 release, use the [internals at that tag](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/internals.md);
-see [CHANGELOG.md](https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md#unreleased) for pending behavior changes.
+see [CHANGELOG.md](https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md) for version-specific behavior changes.
 
 > This is the teaching document: how mqlite is actually built, table by table and
 > decision by decision — and *why* this construction yields a queue you can trust.
@@ -1143,7 +1143,7 @@ with the conformance suite as the judge.
 [benchmark.md](https://github.com/mqlitehq/mqlite/blob/main/docs/benchmark.md).*
 
 
-<!-- ===== mqlite main · source v0.4.2; latest supported release v0.4.2 · docs/api-reference.md ===== -->
+<!-- ===== mqlite main · source v0.4.3; latest supported release v0.4.2 · docs/api-reference.md ===== -->
 
 # mqlite HTTP API reference
 
@@ -1153,12 +1153,11 @@ construction. This document is generated from the wire contract in
 [`wire/wire.go`](https://github.com/mqlitehq/mqlite/blob/main/wire/wire.go) (the single source of truth shared by the broker
 and the Go SDK, so the two can't drift) and the server's error mapping.
 
-This reference follows `main`, including unreleased changes. The latest supported
-release is v0.4.2; use the [v0.4.2 reference](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/api-reference.md)
+This reference follows `main` for release target v0.4.3. Use the [v0.4.2 reference](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/api-reference.md)
 for that installed broker. The broker time header, revised Go managed Receiver
 retry and renewal behavior, 1-second through 1-hour queue lock-duration bounds,
 lease-preserving startup, and coordinated shutdown responses documented here
-are unreleased; see [CHANGELOG.md](https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md#unreleased). v0.3.3 is withdrawn
+are included in the v0.4.3 release target; see [CHANGELOG.md](https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md). v0.3.3 is withdrawn
 and unsupported; use the documentation in the v0.3.2 tag when working with its
 smaller management surface.
 
@@ -1234,6 +1233,17 @@ reasonable (they count toward the JSON request you send, not toward the body cap
 | `Peek` `max` | 32 default, 1000 max | request field |
 | retained subscriptions | 10,000 active + deleting | `MQLITE_MAX_SUBSCRIPTIONS` (serve) / `Options.MaxSubscriptions` or `WithMaxSubscriptions` (embedded) |
 | filter `expr` source | capped length + AST node count | internal (see [concepts.md](https://github.com/mqlitehq/mqlite/blob/main/docs/concepts.md#subscription-filters-expr)) |
+
+The v0.4.3 release target applies a 32 MiB serialization-accounting threshold to
+new Peek, Receive, and ReceiveDeferred batches. The accounting includes message
+bodies, base64 expansion, JSON escaping and metadata. The engine returns the
+message that reaches the threshold, then stops before claiming another one;
+the bound is therefore the threshold plus one message, not a hard per-message
+rejection limit. This allows existing individually large messages to make
+progress. Peek continues with `from_seq`; ReceiveDeferred callers request the
+unreturned sequence numbers again. An existing Receive attempt replays its
+original committed batch, including records created before this accounting
+change; it is never truncated and its outstanding tokens are not revoked.
 
 ## The base URL
 
@@ -2216,14 +2226,14 @@ returned no JSON error code. Redirect errors report only the status and never co
 the untrusted `Location` value into the error.
 
 
-<!-- ===== mqlite main · source v0.4.2; latest supported release v0.4.2 · docs/cli.md ===== -->
+<!-- ===== mqlite main · source v0.4.3; latest supported release v0.4.2 · docs/cli.md ===== -->
 
 # CLI reference (`mqlite`)
 
-This reference follows `main`, including unreleased changes. Cross-invocation
+This reference follows `main` for release target v0.4.3. Cross-invocation
 local settlement and lease-preserving maintenance below are not included in
 v0.4.2; use the [CLI reference at that tag](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/cli.md)
-for that installed binary. See [CHANGELOG.md](https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md#unreleased).
+for that installed binary. See [CHANGELOG.md](https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md).
 
 One binary, **two modes** — the same commands work against a local SQLite DB
 (embedded) or a running broker (client), chosen by environment:
@@ -2702,7 +2712,7 @@ See also: [api-reference.md](https://github.com/mqlitehq/mqlite/blob/main/docs/a
 [examples.md](https://github.com/mqlitehq/mqlite/blob/main/docs/examples.md) (Go SDK).
 
 
-<!-- ===== mqlite main · source v0.4.2; latest supported release v0.4.2 · docs/access-keys.md ===== -->
+<!-- ===== mqlite main · source v0.4.3; latest supported release v0.4.2 · docs/access-keys.md ===== -->
 
 # Access keys
 
@@ -2880,7 +2890,7 @@ revocation state or discard newer credentials. Review keys using a configured
 administrator before reopening traffic. See [backup and upgrade procedures](https://github.com/mqlitehq/mqlite/blob/main/docs/operations.md).
 
 
-<!-- ===== mqlite main · source v0.4.2; latest supported release v0.4.2 · docs/deployment.md ===== -->
+<!-- ===== mqlite main · source v0.4.3; latest supported release v0.4.2 · docs/deployment.md ===== -->
 
 # Deploying mqlite
 
@@ -2932,9 +2942,10 @@ and error reference: [api-reference.md](https://github.com/mqlitehq/mqlite/blob/
 ## Docker / GHCR
 
 > **Version and upgrade compatibility.**
-> The latest supported release is **v0.4.2**, with default port **6754** and
-> schema token **7**. Pin the exact v0.4.2 binary or image rather than relying on
-> a moving image alias. v0.3.3 is withdrawn, unsupported, and retracted by
+> This source targets **v0.4.3**, with default port **6754** and
+> schema token **7**. Verify its tag and assets on
+> [Releases](https://github.com/mqlitehq/mqlite/releases) before using the exact
+> v0.4.3 binary or image in these examples. v0.3.3 is withdrawn, unsupported, and retracted by
 > v0.4.0 and later; its public assets and exact image remain available for
 > forensic or compatibility inspection and must not be deployed.
 >
@@ -2954,21 +2965,21 @@ remain `manage` operations. Browser root requests that explicitly prefer HTML
 enter the enabled console, while curl and JSON clients retain the discovery
 response. The wire contract is unchanged and no database rebuild is required.
 
-The exact supported image is multi-arch (amd64 + arm64):
+The target image is multi-arch (amd64 + arm64); confirm publication before running:
 
 ```bash
-# v0.4.2, default port 6754
+# v0.4.3 release target, default port 6754
 docker run -d --name mqlite -p 6754:6754 \
   -v mqlite-data:/data \
   -e MQLITE_DB=file:/data/mq.db \
   -e MQLITE_TOKENS=mqk_prod_CHANGEME \
   -e MQLITE_MONITOR_TOKENS=mqk_monitor_CHANGEME \
   -e MQLITE_SYNC=FULL \
-  ghcr.io/mqlitehq/mqlite:0.4.2
+  ghcr.io/mqlitehq/mqlite:0.4.3
 ```
 
 - The named volume `mqlite-data` persists the SQLite file across restarts.
-- Pin exact `0.4.2` in production. Images `>= 0.3.0` listen on `6754`;
+- Pin exact `0.4.3` in production. Images `>= 0.3.0` listen on `6754`;
   **`0.2.x` and earlier listen on `8080`**.
 - Verify: `curl http://localhost:6754/` (discovery card) and `/healthz`. Metrics is
   disabled by default. For a private broker or an ingress that blocks public
@@ -2987,7 +2998,7 @@ app            = "your-mqlite"
 primary_region = "sin"            # pick a region near you
 
 [build]
-  image = "ghcr.io/mqlitehq/mqlite:0.4.2"   # latest supported exact image
+  image = "ghcr.io/mqlitehq/mqlite:0.4.3"   # exact release-target image
 
 [env]
   MQLITE_DB = "file:/data/mq.db"            # SQLite on the persistent volume
@@ -3101,7 +3112,7 @@ online snapshots, offline directory copies, isolated restore validation and roll
 Use a fresh restore directory so an old WAL/SHM cannot attach to the snapshot.
 
 **v0.2.0 databases use schema 2; v0.3.0/v0.3.1/v0.3.2 and withdrawn
-v0.3.3 use schema 5; v0.4.0, v0.4.1, and v0.4.2 use schema 7.**
+v0.3.3 use schema 5; v0.4.0 through v0.4.3 use schema 7.**
 Intermediate untagged lifecycle builds used schema 6. There is no in-place
 migration between these tokens. Before testing a different token, account for
 retained work in every state, keep the old binary/database pair and a consistent
@@ -3165,7 +3176,7 @@ curl -H "Authorization: Bearer $T" -H 'Content-Type: application/json' \
 - [ ] Enable `MQLITE_METRICS=on` for authenticated Prometheus scraping on the API port; use private routing or public-ingress path filtering to keep `/metrics` private — see [observability.md](https://github.com/mqlitehq/mqlite/blob/main/docs/observability.md).
 
 
-<!-- ===== mqlite main · source v0.4.2; latest supported release v0.4.2 · docs/observability.md ===== -->
+<!-- ===== mqlite main · source v0.4.3; latest supported release v0.4.2 · docs/observability.md ===== -->
 
 # Observability
 
@@ -3713,7 +3724,7 @@ An occupied-resource or capacity rejection is an application outcome, not a
 storage failure.
 
 
-<!-- ===== mqlite main · source v0.4.2; latest supported release v0.4.2 · docs/observability-cloud.md ===== -->
+<!-- ===== mqlite main · source v0.4.3; latest supported release v0.4.2 · docs/observability-cloud.md ===== -->
 
 # Cloud and Kubernetes monitoring
 
@@ -3862,16 +3873,15 @@ validation steps. Local integration evidence must not be presented as a managed-
 deployment test.
 
 
-<!-- ===== mqlite main · source v0.4.2; latest supported release v0.4.2 · docs/operations.md ===== -->
+<!-- ===== mqlite main · source v0.4.3; latest supported release v0.4.2 · docs/operations.md ===== -->
 
 # Production operations
 
-This runbook follows `main`, including unreleased changes. The latest supported
-release is v0.4.2 (port 6754, schema token 7); use the
-[v0.4.2 runbook](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/operations.md)
+This runbook follows `main` for release target v0.4.3 (port 6754, schema token 7).
+Use the [v0.4.2 runbook](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/operations.md)
 when operating that binary. In particular, lease-preserving startup and local
 maintenance, coordinated broker shutdown, and the revised managed Receiver
-behavior below are unreleased; see [CHANGELOG.md](https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md#unreleased).
+behavior below are included in the v0.4.3 release target; see [CHANGELOG.md](https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md).
 v0.3.3 is withdrawn and
 unsupported; its public assets and exact image remain available for forensic or
 compatibility inspection and must not be deployed. v0.4.2 retains v0.4.0's
@@ -3983,7 +3993,7 @@ restore test.
 ## Graceful broker shutdown
 
 The coordinated shutdown and lease-preserving restart contract below requires
-unreleased `main`; an installed v0.4.2 broker does not provide these guarantees.
+v0.4.3; an installed v0.4.2 broker does not provide these guarantees.
 It also does not drain application consumers. Canceling `Receiver.Run` cancels
 its in-flight handler contexts. `Run` still waits for handlers and settlement to
 return, but offers no grace period for handlers to finish before cancellation.
@@ -4064,7 +4074,14 @@ Set the platform's outer termination grace longer than:
 ```
 
 `Engine.Close` deliberately waits for admitted work and has no unsafe timeout that
-releases ownership while a write may still be running. The outer platform deadline
+releases ownership while a write may still be running. It immediately refuses new
+database operations and wakes parked receivers, then gives admitted operations up
+to five seconds to finish before canceling background maintenance. This internal
+grace avoids interrupting a healthy commit; after it expires, an unacknowledged
+commit remains outcome-unknown and must be reconciled. The grace is separate from
+transaction cleanup and does not bound the total Close duration. This grace applies
+to engine-admitted SQL operations; it does not give application message handlers a
+graceful-drain phase. The outer platform deadline
 is therefore the final hard bound. The repository's `docker-compose.yml` sets
 `stop_grace_period: 40s`; plain Docker otherwise defaults to only 10 seconds and
 can send SIGKILL while a deliberately stalled handler is still inside the 25-second
@@ -4076,7 +4093,7 @@ shutdown behavior does not make overlapping brokers safe.
 
 ## Consumer stops and host interruptions
 
-These boundaries describe unreleased `main` and both Go clients' managed
+These boundaries describe release target v0.4.3 and both Go clients' managed
 `Receiver.Run`. The SDK does not install process signal handlers. The host
 application decides how SIGINT/SIGTERM, stdin EOF, and platform grace periods
 affect its contexts; `Consumer.Shutdown` and a stop-admission-then-drain API are
@@ -4378,13 +4395,13 @@ in this release, so do not improvise a direct SQL table copy between schemas.
 rules behind these procedures.
 
 
-<!-- ===== mqlite main · source v0.4.2; latest supported release v0.4.2 · docs/turso.md ===== -->
+<!-- ===== mqlite main · source v0.4.3; latest supported release v0.4.2 · docs/turso.md ===== -->
 
 # Turso / libSQL: concurrency & embedded replicas (MQLITE-4)
 
-This guide follows `main`, including unreleased driver hardening. For an installed
+This guide follows `main` for release target v0.4.3. For an installed
 v0.4.2 release, use the [Turso guide at that tag](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/turso.md);
-see [CHANGELOG.md](https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md#unreleased) for pending behavior changes.
+see [CHANGELOG.md](https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md) for version-specific behavior changes.
 
 MQLite runs the same engine on a local SQLite file or a remote
 [Turso](https://turso.tech)/libSQL database — set `MQLITE_DB=libsql://<db>.turso.io`
@@ -4476,12 +4493,14 @@ still bounded as follows:
   connection is always safe. `isConnErr` spans the whole transport-failure family —
   `driver.ErrBadConn`, a closed Hrana stream, and their siblings `EOF` / `broken pipe` /
   `i/o timeout` (behind a proxy like Fly a dropped connection reads as `EOF`, not `RST`).
-- **Writes retry only when the statement provably never applied** — `retryableWrite =
-  remote && (ErrBadConn || isBusyErr)`. A closed stream (`ErrBadConn`) or a `SQLITE_BUSY`
-  (lock never acquired) guarantees the write never ran, so replaying `exec` / the `inTx`
-  commit cannot double-apply. The retry is bounded by `maxConnAttempts`; exhaustion is
-  returned to the caller. The `busy_timeout(5000)` DSN pragma belongs to local modernc
-  SQLite connections and does not apply to Turso/libSQL.
+- **Writes retry only when the statement provably never applied.** A pre-dispatch
+  `driver.ErrBadConn` or a definite typed `SQLITE_BUSY` rejection permits a bounded
+  retry. The error must identify one provider failure, with no ambiguous HTTP status
+  or caller cancellation. An error body mentioning Busy alone cannot establish
+  rejection. See [remote HTTP failure and write replay boundaries](#remote-http-failure-and-write-replay-boundaries).
+  The retry is bounded by `maxConnAttempts`; exhaustion is returned to the caller.
+  The `busy_timeout(5000)` DSN pragma belongs to local modernc SQLite connections
+  and does not apply to Turso/libSQL.
 - **A lost write acknowledgement is _outcome-unknown_, not retried** (MQLITE-59). Any
   other transport drop on a write/commit — the primary may have durably committed before
   the ack was lost — surfaces as `ErrOutcomeUnknown` (HTTP `503 outcome_unknown`) instead
@@ -4522,6 +4541,71 @@ This write-first shape addresses claim transactions in one broker or embedded
 `Engine`. Remote retries remain bounded, other operations may still surface
 `SQLITE_BUSY`, and the change does not make overlapping brokers against one database
 safe.
+
+## Remote transaction cancellation
+
+For HTTP Hrana transactions, COMMIT uses the original transaction context,
+including its cancellation and deadline (MQLITE-163). Supply a deadline when a
+bounded commit wait is required; a background context adds no request timeout.
+Cancellation detected before COMMIT execution starts sends no COMMIT, attempts
+rollback, and returns the original caller error. Once execution starts, an
+interruption without confirmation remains `ErrOutcomeUnknown`, even when the
+provider may not have applied it. The engine must not replay that transaction as
+though cancellation proved it had no effect. A confirmed commit remains successful
+even if cancellation arrives at the same time as its acknowledgement.
+
+ROLLBACK uses an independent five-second request context, so canceling the caller
+does not skip cleanup. This cleanup is synchronous: an operation can include that
+interval, and `Engine.Close` waits for its admitted operation to finish. A callback
+error or known pre-COMMIT caller cancellation remains the primary error if cleanup
+also fails or times out; neither that primary error nor a cleanup timeout confirms
+that the provider rolled back. Detached stream-close requests still follow their
+separate best-effort budget below. Local SQLite cancellation protection and the
+WebSocket driver are unchanged.
+
+At shutdown, `Engine.Close` first refuses new database operations and wakes parked
+receivers. It gives already-admitted operations up to five seconds to acknowledge
+before canceling background maintenance. This avoids interrupting a healthy
+in-flight COMMIT solely because shutdown began. If that opportunity expires, an
+interrupted unacknowledged commit still remains `ErrOutcomeUnknown`; shutdown
+does not confirm rollback or make replay safe. The five seconds is separate from
+the ROLLBACK cleanup budget and is not a total shutdown deadline: Close still joins
+admitted foreground work and background cleanup.
+This drains engine-admitted SQL operations, not application message handlers;
+stop and join application consumers separately.
+
+The terminal-request contracts are covered by
+`TestHranaCommitHonorsTransactionContext`,
+`TestHranaCancellationBeforeDriverCommitRemainsNotStarted`,
+`TestHranaRollbackHasIndependentCleanupDeadline`, and
+`TestHranaLostCommitReplyRemainsOutcomeUnknown` in `engine/storage_test.go`.
+
+## Bounded HTTP stream cleanup
+
+MQLite carries the pinned driver's HTTP v2 compatibility code internally, with a
+narrow stream-cleanup patch (MQLITE-164). Its source revision, license and local
+changes are recorded in `internal/libsqlcompat/NOTICE` and `UPSTREAM.json`. The
+original pure-Go parser, HTTP client and TCP/TLS transport reuse are retained;
+normal SQL and transport reuse are retained. The separate acknowledgement
+checks below reject damaged replies without adding requests or replaying
+ambiguous writes.
+
+Stream cleanup is asynchronous and best effort. Each opened database handle has a fixed cap of
+16 active cleanup requests, each with a five-second deadline created before the
+cleanup goroutine starts. There is no cleanup queue. A saturated cap skips that
+cleanup request rather than holding a SQL lease while waiting
+for a cleanup slot. Completed cleanup workers report observed saturation with
+one fixed warning at most per handle; logging is also best effort and never
+runs on the foreground return path. Normal operations do
+not wait for an extra cleanup round trip.
+
+The deadline bounds the client's request, not the provider's resource lifetime.
+Unconfirmed streams may remain allocated until the provider reclaims them under
+its own expiration policy; no fixed provider timeout is assumed. Neither the
+client deadline nor `Engine.Close` confirms remote resource release or transaction
+rollback. An acknowledged commit stays successful, and a lost commit
+acknowledgement remains outcome-unknown. This does not add synchronous cleanup
+draining to `Close` or change the WebSocket and local SQLite paths.
 
 ## Embedded replicas — evaluated, not adopted
 
@@ -4567,16 +4651,56 @@ MQLITE_TEST_DB=libsql://<db>.turso.io MQLITE_TEST_DB_AUTH_TOKEN=<jwt> \
 Without `MQLITE_TEST_DB` the live tests skip; the hermetic classifier test always
 runs.
 
+## Remote HTTP failure and write replay boundaries
 
-<!-- ===== mqlite main · source v0.4.2; latest supported release v0.4.2 · docs/retention.md ===== -->
+A transient HTTP response or a body mentioning `SQLITE_BUSY` does not prove
+that a preceding write failed. The provider or an intermediary can lose the
+success acknowledgement after the database committed. An issued standalone
+write or COMMIT with such an ambiguous response returns `ErrOutcomeUnknown` and
+is not transparently replayed. Reconcile the effect before retrying.
+
+Reads and transactions that have not attempted COMMIT retain bounded retries
+for recognized transient errors. A proven pre-execution `driver.ErrBadConn` or
+typed SQLite busy rejection remains distinct from arbitrary provider text.
+`RenewBatch` uses the same issued-write rules for its `UPDATE RETURNING`,
+including response scanning and interrupted acknowledgements. Before SQL is
+issued, cancellation while waiting for pool capacity stays the original caller
+context error. Request budgets, the remote pool and local single-writer behavior
+are unchanged. These boundaries do not add Rust-preview backend support.
+
+The engine manages BEGIN, COMMIT and ROLLBACK in a transaction callback. Do not
+issue transaction-control SQL or take over those boundaries through
+`EngineTx.SQL()`; doing so bypasses its rollback and retry guarantees.
+
+Non-200 HTTP response statuses are preserved internally even when a provider
+error-body fallback omits the numeric status. A transient status received after
+a write was issued does not prove rejection; the operation returns
+`ErrOutcomeUnknown` without replay.
+
+## Malformed remote SQL acknowledgements
+
+The HTTP Hrana compatibility layer checks pipeline result counts and types,
+statement result fields, row widths and value representations, and the actual
+conditions of batch steps before accepting success. It preserves valid
+conditional skips, explicit SQL errors, SQL NULL and matching close replies.
+
+Missing or malformed success data cannot confirm a write. After an issued
+standalone write or COMMIT it is `ErrOutcomeUnknown`, without transparent replay;
+reconcile its actual effect before retrying. Ordinary reads retain distinct
+protocol errors and bounded retries for interrupted network reads. These checks
+add no requests, do not change the pinned driver or cleanup budgets, and do not
+extend backend support beyond the verified scope.
+
+
+<!-- ===== mqlite main · source v0.4.3; latest supported release v0.4.2 · docs/retention.md ===== -->
 
 # Retention, deletion, and storage reclamation
 
-This page describes v0.4.2, the latest supported release. v0.3.3 is withdrawn and
+This page follows `main` for release target v0.4.3. v0.3.3 is withdrawn and
 unsupported; its public artifacts remain available for forensic or compatibility
 inspection and must not be deployed. v0.4.2 retains v0.4.0's retraction of
 v0.3.3. v0.3.2 has DLQ retention
-and automatic local reclamation, but the work budgets below describe v0.4.2
+and automatic local reclamation, but the work budgets below describe the v0.4.3 release target
 unless a version difference is stated.
 v0.3.2 does not have the
 queue and subscription lifecycle APIs introduced in v0.4.0.
@@ -4732,7 +4856,7 @@ archive remains at-least-once, so the archive consumer must be idempotent; Redri
 does not make the external archival handoff one transaction.
 
 
-<!-- ===== mqlite main · source v0.4.2; latest supported release v0.4.2 · docs/benchmark.md ===== -->
+<!-- ===== mqlite main · source v0.4.3; latest supported release v0.4.2 · docs/benchmark.md ===== -->
 
 # mqlite benchmarks, sizing & tuning
 
@@ -5225,13 +5349,13 @@ the table as historical evidence and rerun the commands above before using the
 numbers for a current deployment decision.
 
 
-<!-- ===== mqlite main · source v0.4.2; latest supported release v0.4.2 · docs/conformance.md ===== -->
+<!-- ===== mqlite main · source v0.4.3; latest supported release v0.4.2 · docs/conformance.md ===== -->
 
 # Conformance — correct mqlite behavior (TCK)
 
-This specification follows `main`, including unreleased changes. For an installed
+This specification follows `main` for release target v0.4.3. For an installed
 v0.4.2 release, use the [conformance specification at that tag](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/conformance.md);
-see [CHANGELOG.md](https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md#unreleased) for pending behavior changes.
+see [CHANGELOG.md](https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md) for version-specific behavior changes.
 
 This is the normative spec of how mqlite **must** behave — the invariants that define
 "correct," independent of any one implementation detail. Each is enforced by a
@@ -5885,7 +6009,7 @@ in the OS/Go matrix; tagged crash tests run with `-race` in their own Linux job.
 run separately without `-race`; the large no-loss sweep also runs weekly without `-race`.*
 
 
-<!-- ===== mqlite main · source v0.4.2; latest supported release v0.4.2 · docs/dependencies.md ===== -->
+<!-- ===== mqlite main · source v0.4.3; latest supported release v0.4.2 · docs/dependencies.md ===== -->
 
 # Dependency policy & the go 1.21 floor
 
@@ -5898,7 +6022,7 @@ and how the freeze is enforced so it can't be lifted by accident.
 
 Applications that only call a broker can instead use the official
 [MQLite Remote Client for Go](https://github.com/mqlitehq/mqlite-go). Its module
-path remains `github.com/mqlitehq/mqlite-go`; release `v0.1.1` has a Go 1.13
+path remains `github.com/mqlitehq/mqlite-go`; release target `v0.1.2` has a Go 1.13
 source floor and uses only the standard library, so it does not link the embedded
 engine, SQLite, libSQL/Turso, or CGO.
 The low floor is a compatibility promise, not a recommendation to run an
@@ -5950,6 +6074,16 @@ physical TCP/TLS connections. Migration to a maintained driver requires the full
 local/remote conformance suite, live Turso lifecycle and sustained-load runs, and
 all release-platform builds. Do not swap this dependency or remove the adapter
 based only on API similarity; there is no promised replacement or migration date.
+
+The HTTP v2 transport and its protocol/result helpers are a small internal copy
+of that same pin (`internal/libsqlcompat`), with bounded asynchronous stream
+cleanup (MQLITE-164) and success-acknowledgement validation (MQLITE-191).
+Incomplete or mismatched replies cannot confirm success or authorize write replay. The original public SQL parser and WebSocket driver remain
+at the pin. Source/delta hashes and a module-version guard detect drift; there is
+no library-local `replace` or reliance on a caller's vendor directory. The copied
+MIT license and source notice ship with binary archives and container images.
+The existing ANTLR version is now listed directly because the copied helper
+imports it; dependency versions and the selected module graph are unchanged.
 
 ## Security posture
 
@@ -6027,7 +6161,7 @@ requirement is dropped, or a security CVE forces it): bump `go.mod`, update
 let the held bumps (`modernc.org/sqlite`, `golang.org/x/sys`) flow in together.
 
 
-<!-- ===== mqlite main · source v0.4.2; latest supported release v0.4.2 · docs/mcp.md ===== -->
+<!-- ===== mqlite main · source v0.4.3; latest supported release v0.4.2 · docs/mcp.md ===== -->
 
 # MCP server (`mqlite-mcp`)
 
@@ -6237,13 +6371,13 @@ Environment tokens are not listed or revocable through these tools. Key tools ar
 unavailable when broker authentication is explicitly disabled.
 
 
-<!-- ===== mqlite main · source v0.4.2; latest supported release v0.4.2 · docs/examples.md ===== -->
+<!-- ===== mqlite main · source v0.4.3; latest supported release v0.4.2 · docs/examples.md ===== -->
 
 # Examples
 
-These examples follow `main`, including unreleased behavior. For an installed
+These examples follow `main` for release target v0.4.3. For an installed
 v0.4.2 release, use the [examples at that tag](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/examples.md);
-see [CHANGELOG.md](https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md#unreleased) for pending behavior changes.
+see [CHANGELOG.md](https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md) for version-specific behavior changes.
 
 For authenticated producer/consumer credentials, Go SDK key management, console and
 MCP workflows, see [Access keys](https://github.com/mqlitehq/mqlite/blob/main/docs/access-keys.md) (v0.3.1 and later).
@@ -6383,7 +6517,7 @@ concurrency.
 
 The core calls in this example also work with MQLite Remote Client for Go, the
 standard-library-only, remote-only companion module. Install
-`github.com/mqlitehq/mqlite-go@v0.1.1` and change the import to
+`github.com/mqlitehq/mqlite-go@v0.1.2` and change the import to
 `mqlite "github.com/mqlitehq/mqlite-go"`. Its source floor is Go 1.13. Use the
 main module shown below when the same application also needs embedded mode,
 `Observe`, or managed access-key administration.

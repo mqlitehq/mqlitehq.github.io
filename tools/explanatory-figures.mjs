@@ -24,19 +24,19 @@ export const EXPLANATORY_FIGURES = Object.freeze([
   },
   {
     id: 'validation', file: 'turso.md', language: '',
-    documentSha256: '009bd6f0b56831e5d3dec54d29dfa234814458488fdbe6981d25499e2a35aa73',
+    documentSha256: '826a09b43cd12a950f0bdf928d2b074a923362d3a07eaa313e65b2a62290faab',
     sourceSha256: '64247b689cb1abfc244788d648ebe1eac51aaf1e1b2eed302a7e693e8c6e2fbf',
     title: { en: 'Turso validation lanes and their entry points', 'zh-CN': 'Turso 验证分层与测试入口' },
   },
   {
     id: 'shutdown-budget', file: 'operations.md', language: 'text',
-    documentSha256: '3f3c7d639e3da78a9c9c9361df6e1e89d21c6cd9041e4b14a426d86ea4eff8d1',
+    documentSha256: '72b9d4954238f5e561b7a1849649e20e297438217f45d5039fd69054b0f52862',
     sourceSha256: 'b6d90cd9a19a22f34050707f22fb90b8ce0afbc6604e35a8391f6c55e20d2b90',
     title: { en: 'The outer termination grace must exceed this total', 'zh-CN': '外层终止宽限期必须大于以下总和' },
   },
   {
     id: 'creation', file: 'concepts.md', language: '',
-    documentSha256: '93d4de5f0fccd7acc54ff091564aacc5ba1fc30bc46d091bdb75c57de65c6bde',
+    documentSha256: '7c836de85d036a90e1bb8d4a63e942ad8bf2d19ad9b69d32416658223bbcb1b9',
     sourceSha256: 'e1072d2553e38dd3c7c5136341949be4051e8fdbddf5ed03711ab745df0ed64c',
     title: { en: 'Two explicit creation operations', 'zh-CN': '两种显式创建操作' },
   },

@@ -45,7 +45,7 @@
   </div>
 </div></nav>
 <div class="wrap">
-  <div class="stamp">来源：<a href="https://github.com/mqlitehq/mqlite/blob/main/docs/deployment.md">mqlite main · docs/deployment.md</a> — 源码 v0.4.2（含未发布变更）。最新受支持版本：<a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.2">v0.4.2</a>。本文档跟随 main；使用已发布产物时，请查阅对应版本的文档。</div>
+  <div class="stamp">来源：<a href="https://github.com/mqlitehq/mqlite/blob/main/docs/deployment.md">mqlite main · docs/deployment.md</a> — 源码 v0.4.3（含未发布变更）。最新受支持版本：<a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.2">v0.4.2</a>。本文档跟随 main；使用已发布产物时，请查阅对应版本的文档。</div>
   <main class="prose">
 <h1 id="deploying-mqlite">部署 mqlite</h1>
 <p>mqlite 以<strong>一个纯 Go 二进制</strong>（或一个容器镜像）管理<strong>一个 SQLite 文件</strong>
@@ -129,8 +129,9 @@
 <h2 id="docker--ghcr">Docker / GHCR</h2>
 <blockquote>
 <p><strong>版本与升级兼容性。</strong>
-最新受支持版本为 <strong>v0.4.2</strong>，默认端口为 <strong>6754</strong>，schema token 为 <strong>7</strong>。
-应固定使用准确的 v0.4.2 二进制或镜像，不要依赖会变动的镜像别名。
+本源码的目标版本为 <strong>v0.4.3</strong>，默认端口为 <strong>6754</strong>，schema token 为 <strong>7</strong>。
+使用下方示例中的准确 v0.4.3 二进制或镜像前，请在
+<a href="https://github.com/mqlitehq/mqlite/releases">Releases</a> 核对标签与产物是否已经发布。
 v0.3.3 已撤回、不受支持，且由 v0.4.0 及后续版本声明撤回；
 其公开产物和准确镜像仅供取证或兼容性检查，不得部署。</p>
 <p>v0.4.x 无法打开 v0.3.x 的 schema-5 数据库，也没有原地迁移方式。
@@ -147,19 +148,19 @@ v0.4.0 也移除了<a href="observability.html#compatibility-and-v040-migration"
 订阅清单和删除仍是 <code>manage</code> 操作。浏览器访问根路径且明确优先接受 HTML 时，
 会进入已启用的控制台；curl 和 JSON 客户端仍然获得服务发现响应。
 协议契约不变，无需重建数据库。</p>
-<p>受支持的准确镜像为多架构镜像（amd64 + arm64）：</p>
-<pre><code class="language-bash"># v0.4.2, default port 6754
+<p>目标镜像为多架构镜像（amd64 + arm64），运行前应确认发布状态：</p>
+<pre><code class="language-bash"># v0.4.3 release target, default port 6754
 docker run -d --name mqlite -p 6754:6754 \
   -v mqlite-data:/data \
   -e MQLITE_DB=file:/data/mq.db \
   -e MQLITE_TOKENS=mqk_prod_CHANGEME \
   -e MQLITE_MONITOR_TOKENS=mqk_monitor_CHANGEME \
   -e MQLITE_SYNC=FULL \
-  ghcr.io/mqlitehq/mqlite:0.4.2
+  ghcr.io/mqlitehq/mqlite:0.4.3
 </code></pre>
 <ul>
 <li>命名卷 <code>mqlite-data</code> 使 SQLite 文件在重启后仍然保留。</li>
-<li>生产环境固定使用准确的 <code>0.4.2</code>。镜像 <code>&gt;= 0.3.0</code> 监听 <code>6754</code>；
+<li>生产环境固定使用准确的 <code>0.4.3</code>。镜像 <code>&gt;= 0.3.0</code> 监听 <code>6754</code>；
 <strong><code>0.2.x</code> 及更早版本监听 <code>8080</code></strong>。</li>
 <li>验证：<code>curl http://localhost:6754/</code>（服务发现卡片）和 <code>/healthz</code>。
 指标默认关闭。对于私有 broker，或已在入口阻断公开 <code>/metrics</code> 的部署，
@@ -174,7 +175,7 @@ curl 和 JSON 客户端继续获得服务发现卡片。</li>
 primary_region = &quot;sin&quot;            # pick a region near you
 
 [build]
-  image = &quot;ghcr.io/mqlitehq/mqlite:0.4.2&quot;   # latest supported exact image
+  image = &quot;ghcr.io/mqlitehq/mqlite:0.4.3&quot;   # exact release-target image
 
 [env]
   MQLITE_DB = &quot;file:/data/mq.db&quot;            # SQLite on the persistent volume
@@ -263,7 +264,7 @@ v0.3.2 及后续版本的只读指标抓取器或控制台监控视图，使用�
 <p>请遵循<a href="operations.html#consistent-backups">生产运维手册</a>，执行只读在线快照、离线目录复制、
 隔离恢复验证和回滚。使用全新恢复目录，避免旧 WAL/SHM 文件附着到快照。</p>
 <p><strong>v0.2.0 数据库使用 schema 2；v0.3.0/v0.3.1/v0.3.2 及已撤回的 v0.3.3 使用 schema 5；
-v0.4.0、v0.4.1 和 v0.4.2 使用 schema 7。</strong>
+v0.4.0 至 v0.4.3 使用 schema 7。</strong>
 中间阶段未打标签的生命周期构建使用 schema 6。这些 token 之间没有原地迁移方式。
 测试不同 token 前，先核对所有状态下保留的工作，保留旧二进制／数据库组合及一致备份，
 并另建 v0.4.x 数据库。不要重写旧文件的 schema 标记。

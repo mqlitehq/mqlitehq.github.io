@@ -45,10 +45,10 @@
   </div>
 </div></nav>
 <div class="wrap">
-  <div class="stamp"><a class="document-label" href="conformance.html" aria-current="page">一致性规范</a> · 来源：<a href="https://github.com/mqlitehq/mqlite/blob/main/docs/conformance.md">mqlite main · docs/conformance.md</a> — 源码 v0.4.2（含未发布变更）。最新受支持版本：<a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.2">v0.4.2</a>。本文档跟随 main；使用已发布产物时，请查阅对应版本的文档。</div>
+  <div class="stamp"><a class="document-label" href="conformance.html" aria-current="page">一致性规范</a> · 来源：<a href="https://github.com/mqlitehq/mqlite/blob/main/docs/conformance.md">mqlite main · docs/conformance.md</a> — 源码 v0.4.3（含未发布变更）。最新受支持版本：<a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.2">v0.4.2</a>。本文档跟随 main；使用已发布产物时，请查阅对应版本的文档。</div>
   <main class="prose">
 <h1 id="conformance--correct-mqlite-behavior-tck">一致性规范：mqlite 的正确行为（TCK）</h1>
-<p>本规范跟随 <code>main</code>，包含尚未发布的改动。使用已安装的 v0.4.2 发行版时，请阅读<a href="https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/conformance.md">该标签对应的一致性规范</a>；待发布的行为变化见 <a href="https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md#unreleased">CHANGELOG.md</a>。</p>
+<p>本规范跟随 <code>main</code>，目标版本为 v0.4.3。使用已安装的 v0.4.2 发行版时，请阅读<a href="https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/conformance.md">该标签对应的一致性规范</a>；各版本的行为变化见 <a href="https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md">CHANGELOG.md</a>。</p>
 <p>本文是 mqlite <strong>必须</strong>遵守的规范性行为要求：这些不变量定义何为“正确”，不依赖具体实现细节。每项都有交叉引用的隔离测试强制执行，共同构成 mqlite 的 TCK。破坏本文任一<strong>必须</strong>（MUST）要求的改动，属于行为变更，而非重构。</p>
 <p>默认 Peek-Lock 采用<strong>至少一次交付（at-least-once）</strong>：可能重投，因此处理函数必须幂等。接收即删除（receive-and-delete）由调用方显式选择，是 broker 侧至多一次移除的路径，消息在返回前即被删除；同一 receive attempt ID 可以重放保存的响应。其他已记录的丢弃路径包括配置为丢弃的消息 TTL、DLQ 保留策略、强制删除资源和固定订阅到期。（第 1.7、3、8、14 节）</p>
 <h2 id="1--peek-lock-lifecycle">1 · Peek-Lock 生命周期</h2>

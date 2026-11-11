@@ -45,7 +45,7 @@
   </div>
 </div></nav>
 <div class="wrap">
-  <div class="stamp"><a class="document-label" href="benchmark.html" aria-current="page">性能测试</a> · 来源：<a href="https://github.com/mqlitehq/mqlite/blob/main/docs/benchmark.md">mqlite main · docs/benchmark.md</a> — 源码 v0.4.2（含未发布变更）。最新受支持版本：<a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.2">v0.4.2</a>。本文档跟随 main；使用已发布产物时，请查阅对应版本的文档。</div>
+  <div class="stamp"><a class="document-label" href="benchmark.html" aria-current="page">性能测试</a> · 来源：<a href="https://github.com/mqlitehq/mqlite/blob/main/docs/benchmark.md">mqlite main · docs/benchmark.md</a> — 源码 v0.4.3（含未发布变更）。最新受支持版本：<a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.2">v0.4.2</a>。本文档跟随 main；使用已发布产物时，请查阅对应版本的文档。</div>
   <main class="prose">
 <h1 id="mqlite-benchmarks-sizing--tuning">mqlite 基准测试、容量规划与调优</h1>
 <p>本文展示 mqlite 引擎在真实工作负载下测得的、可复现的数据——<strong>并非</strong>单一吞吐量数字——并说明这些数据对<strong>部署容量规划</strong>与<strong>调优</strong>的意义。测试套件覆盖吞吐量、写放大、<strong>整个进程的内存与回收</strong>、<strong>数据库文件膨胀与回收</strong>、<strong>携带键值属性的丰富消息</strong>、<strong>消息体大小扫描</strong>，以及<strong>负载升降与消费者反复上线下线</strong>。测试分别在<strong>本地</strong>（高速多核机器）和有意选择的微型<strong>云端</strong>机器上运行，呈现不同条件下的真实表现。</p>

@@ -1,6 +1,6 @@
 # CLI 参考（`mqlite`）
 
-本文档跟随 `main`，包含尚未发布的更改。下文所述的跨调用本地结算和保留租约的维护行为不包含在 v0.4.2 中；如果使用该版本的已安装二进制程序，请参阅[该 tag 对应的 CLI 参考](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/cli.md)。另见 [CHANGELOG.md](../CHANGELOG.md#unreleased)。
+本文档跟随 `main`，目标版本为 v0.4.3。下文所述的跨调用本地结算和保留租约的维护行为不包含在 v0.4.2 中；如果使用该版本的已安装二进制程序，请参阅[该 tag 对应的 CLI 参考](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/cli.md)。另见 [CHANGELOG.md](../CHANGELOG.md)。
 
 一个二进制程序，**两种模式**——同一组命令既可访问本地 SQLite 数据库（嵌入式模式），也可访问运行中的 broker（客户端模式），由环境变量决定：
 

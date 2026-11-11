@@ -1,6 +1,6 @@
 # 核心概念与订阅过滤器
 
-本文跟随 `main`，包含尚未发布的改动。使用已安装的 v0.4.2 发行版时，请阅读[该标签对应的核心概念](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/concepts.md)；待发布的行为变化见 [CHANGELOG.md](../CHANGELOG.md#unreleased)。
+本文跟随 `main`，目标版本为 v0.4.3。使用已安装的 v0.4.2 发行版时，请阅读[该标签对应的核心概念](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/concepts.md)；各版本的行为变化见 [CHANGELOG.md](../CHANGELOG.md)。
 
 > 目标：清晰、完整地说明 MQLite 模型，并与 Azure Service Bus、AWS（SQS + SNS）和 GCP Pub/Sub 的相应服务对照。MQLite 从基本原则出发设计，强调单个 SQLite 文件、可嵌入和对智能体友好；在概念上最接近 Azure Service Bus，因此以 ASB 为主要参照，并在重要之处明确差异。第 1–5 节介绍模型，第 6–11 节介绍**订阅过滤器语言**（`expr`）。
 

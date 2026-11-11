@@ -127,14 +127,14 @@
   <strong>小型 HTTP broker</strong>。同一引擎、同一文件，由你选择。</p>
   <div class="chips">
     <a class="chip v" href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.2">最新受支持版本 v0.4.2</a>
-    <span class="chip">main 文档 · 源版本 v0.4.2（含未发布变更）</span>
+    <span class="chip">main 文档 · 源版本 v0.4.3（含未发布变更）</span>
     <span class="chip">纯 Go · 无需 CGO</span>
     <span class="chip">一个二进制文件 · 一个数据文件</span>
     <span class="chip">JSON over HTTP · 可用 curl 调用</span>
     <span class="chip">本地 SQLite 或远程 Turso</span>
     <span class="chip">MIT</span>
   </div>
-  <p class="sub">本网站跟随源版本 v0.4.2（含未发布变更），所在分支为 <code>main</code>。最新受支持版本为 v0.4.2；请使用
+  <p class="sub">本网站跟随源版本 v0.4.3（含未发布变更），所在分支为 <code>main</code>。最新受支持版本为 v0.4.2；请使用
   <a href="https://github.com/mqlitehq/mqlite/tree/v0.4.2/docs">v0.4.2 文档</a>
   与已发布产物配套使用。v0.3.3 已撤回、不再受支持，且自 v0.4.0 起被标记为撤销版本；其公开产物仅供取证或兼容性检查，不得部署。</p>
   <nav class="cta overflow-nav" data-overflow aria-label="开始使用">
@@ -191,7 +191,7 @@
     <div class="why"><h3><em>2</em>并发下可靠</h3>
       <p>默认 Peek-Lock 投递如实承诺 <strong>至少一次（at-least-once）</strong>；显式的接收即删除模式则选择在 broker 侧至多删除一次（at-most-once）。新的结算要求当前令牌和未过期租约；支持按配置启用发送去重、有界的接收与结算重放、单 broker 崩溃恢复，以及深积压下 O(log n) 的领取。即使消费者崩溃或锁到期，FIFO 组仍保持顺序。</p></div>
     <div class="why"><h3><em>3</em>简单、无歧义的接口</h3>
-      <p>每项操作都是 <strong>携带 JSON 正文的单次 HTTP POST</strong> ；源版本 v0.4.2（含未发布变更） 有 29 条路由，设计上均可用 curl 调用，每种结算结果只有一个动词（<code>Complete</code> /
+      <p>每项操作都是 <strong>携带 JSON 正文的单次 HTTP POST</strong> ；源版本 v0.4.3（含未发布变更） 有 29 条路由，设计上均可用 curl 调用，每种结算结果只有一个动词（<code>Complete</code> /
       <code>Abandon</code> / <code>Reject</code> / <code>Defer</code>），没有别名。人易于使用，也方便
       <a href="agents.html">智能体</a>。</p></div>
     <div class="why"><h3><em>4</em>借鉴 Service Bus，保持自身设计</h3>

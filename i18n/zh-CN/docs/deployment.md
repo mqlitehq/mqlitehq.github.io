@@ -47,8 +47,9 @@ broker 默认监听 `:6754`（`mqlite serve --addr :6754`）。完整端点与�
 ## Docker / GHCR
 
 > **版本与升级兼容性。**
-> 最新受支持版本为 **v0.4.2**，默认端口为 **6754**，schema token 为 **7**。
-> 应固定使用准确的 v0.4.2 二进制或镜像，不要依赖会变动的镜像别名。
+> 本源码的目标版本为 **v0.4.3**，默认端口为 **6754**，schema token 为 **7**。
+> 使用下方示例中的准确 v0.4.3 二进制或镜像前，请在
+> [Releases](https://github.com/mqlitehq/mqlite/releases) 核对标签与产物是否已经发布。
 > v0.3.3 已撤回、不受支持，且由 v0.4.0 及后续版本声明撤回；
 > 其公开产物和准确镜像仅供取证或兼容性检查，不得部署。
 >
@@ -67,21 +68,21 @@ v0.4.2 是基于 v0.4.1 的同 schema 补丁。
 会进入已启用的控制台；curl 和 JSON 客户端仍然获得服务发现响应。
 协议契约不变，无需重建数据库。
 
-受支持的准确镜像为多架构镜像（amd64 + arm64）：
+目标镜像为多架构镜像（amd64 + arm64），运行前应确认发布状态：
 
 ```bash
-# v0.4.2, default port 6754
+# v0.4.3 release target, default port 6754
 docker run -d --name mqlite -p 6754:6754 \
   -v mqlite-data:/data \
   -e MQLITE_DB=file:/data/mq.db \
   -e MQLITE_TOKENS=mqk_prod_CHANGEME \
   -e MQLITE_MONITOR_TOKENS=mqk_monitor_CHANGEME \
   -e MQLITE_SYNC=FULL \
-  ghcr.io/mqlitehq/mqlite:0.4.2
+  ghcr.io/mqlitehq/mqlite:0.4.3
 ```
 
 - 命名卷 `mqlite-data` 使 SQLite 文件在重启后仍然保留。
-- 生产环境固定使用准确的 `0.4.2`。镜像 `>= 0.3.0` 监听 `6754`；
+- 生产环境固定使用准确的 `0.4.3`。镜像 `>= 0.3.0` 监听 `6754`；
   **`0.2.x` 及更早版本监听 `8080`**。
 - 验证：`curl http://localhost:6754/`（服务发现卡片）和 `/healthz`。
   指标默认关闭。对于私有 broker，或已在入口阻断公开 `/metrics` 的部署，
@@ -99,7 +100,7 @@ app            = "your-mqlite"
 primary_region = "sin"            # pick a region near you
 
 [build]
-  image = "ghcr.io/mqlitehq/mqlite:0.4.2"   # latest supported exact image
+  image = "ghcr.io/mqlitehq/mqlite:0.4.3"   # exact release-target image
 
 [env]
   MQLITE_DB = "file:/data/mq.db"            # SQLite on the persistent volume
@@ -208,7 +209,7 @@ v0.3.2 及后续版本的只读指标抓取器或控制台监控视图，使用�
 隔离恢复验证和回滚。使用全新恢复目录，避免旧 WAL/SHM 文件附着到快照。
 
 **v0.2.0 数据库使用 schema 2；v0.3.0/v0.3.1/v0.3.2 及已撤回的 v0.3.3 使用 schema 5；
-v0.4.0、v0.4.1 和 v0.4.2 使用 schema 7。**
+v0.4.0 至 v0.4.3 使用 schema 7。**
 中间阶段未打标签的生命周期构建使用 schema 6。这些 token 之间没有原地迁移方式。
 测试不同 token 前，先核对所有状态下保留的工作，保留旧二进制／数据库组合及一致备份，
 并另建 v0.4.x 数据库。不要重写旧文件的 schema 标记。

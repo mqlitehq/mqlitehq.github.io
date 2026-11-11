@@ -45,13 +45,13 @@
   </div>
 </div></nav>
 <div class="wrap">
-  <div class="stamp"><a class="document-label" href="retention.html" aria-current="page">保留与回收</a> · 来源：<a href="https://github.com/mqlitehq/mqlite/blob/main/docs/retention.md">mqlite main · docs/retention.md</a> — 源码 v0.4.2（含未发布变更）。最新受支持版本：<a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.2">v0.4.2</a>。本文档跟随 main；使用已发布产物时，请查阅对应版本的文档。</div>
+  <div class="stamp"><a class="document-label" href="retention.html" aria-current="page">保留与回收</a> · 来源：<a href="https://github.com/mqlitehq/mqlite/blob/main/docs/retention.md">mqlite main · docs/retention.md</a> — 源码 v0.4.3（含未发布变更）。最新受支持版本：<a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.2">v0.4.2</a>。本文档跟随 main；使用已发布产物时，请查阅对应版本的文档。</div>
   <main class="prose">
 <h1 id="retention-deletion-and-storage-reclamation">保留、删除与存储空间回收</h1>
-<p>本页描述最新受支持版本 v0.4.2。v0.3.3 已撤回且不受支持；其公开产物仅供取证或兼容性检查，
+<p>本页跟随 <code>main</code>，目标版本为 v0.4.3。v0.3.3 已撤回且不受支持；其公开产物仅供取证或兼容性检查，
 不得部署。v0.4.2 保留 v0.4.0 对 v0.3.3 的撤回声明。
 v0.3.2 已有 DLQ 保留和自动本地空间回收，但除非明确注明版本差异，
-下述工作预算均描述 v0.4.2。
+下述工作预算均描述 v0.4.3 目标版本。
 v0.3.2 不具备 v0.4.0 引入的队列和订阅生命周期 API。</p>
 <h2 id="what-removes-retained-messages">哪些操作会移除保留中的消息</h2>
 <p>默认 Peek-Lock 投递提供至少一次语义。Receive-and-delete 是显式选择的至多一次 broker 移除方式，

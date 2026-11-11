@@ -1,8 +1,8 @@
 # Turso / libSQL：并发与嵌入式副本（MQLITE-4）
 
-本指南对应 `main`，包含尚未发布的驱动加固。使用已安装的
+本指南对应 `main`，目标版本为 v0.4.3。使用已安装的
 v0.4.2 版本时，请阅读[该标签下的 Turso 指南](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/turso.md)；
-待发布的行为变化见 [CHANGELOG.md](../CHANGELOG.md#unreleased)。
+各版本的行为变化见 [CHANGELOG.md](../CHANGELOG.md)。
 
 MQLite 在本地 SQLite 文件和远程
 [Turso](https://turso.tech)/libSQL 数据库上运行同一套引擎——设置 `MQLITE_DB=libsql://<db>.turso.io`
@@ -74,11 +74,12 @@ MQLite 对 `libsql://` 阻止了这种失效连接交接：兼容适配层会在
   控制 `query`/`queryRowScan`：读取具有幂等性，因此在新的池连接上重放读取总是安全的。
   `isConnErr` 覆盖整个传输故障族——`driver.ErrBadConn`、关闭的 Hrana 流，以及同类的
   `EOF` / `broken pipe` / `i/o timeout`（位于 Fly 等代理后面时，连接中断表现为 `EOF`，而不是 `RST`）。
-- **只有能够证明语句从未生效时才重试写入**——`retryableWrite =
-  remote && (ErrBadConn || isBusyErr)`。关闭的流（`ErrBadConn`）或 `SQLITE_BUSY`
-  （从未取得锁）保证写入没有执行，因此重放 `exec` / `inTx` 的提交不会重复生效。
-  重试次数受 `maxConnAttempts` 限制；耗尽后向调用方返回错误。
-  DSN 中的 `busy_timeout(5000)` pragma 仅适用于本地 modernc SQLite 连接，不适用于 Turso/libSQL。
+- **只有能够证明语句从未生效时才重试写入。** 派发前的 `driver.ErrBadConn`，或确定的
+  类型化 `SQLITE_BUSY` 拒绝，允许进行有界重试。错误必须标识单一提供方故障，且没有含糊的
+  HTTP 状态或调用方取消。仅在错误正文中出现 Busy，无法证明请求被拒绝。
+  详见[远程 HTTP 故障与写入重放边界](#remote-http-failure-and-write-replay-boundaries)。
+  重试次数受 `maxConnAttempts` 限制；耗尽后向调用方返回错误。DSN 中的
+  `busy_timeout(5000)` pragma 仅适用于本地 modernc SQLite 连接，不适用于 Turso/libSQL。
 - **写入确认回执丢失表示 _结果未知（outcome-unknown）_，不进行重试**（MQLITE-59）。写入／提交时
   发生的其他传输中断——主节点可能已经持久化提交，只是回执丢失——会以 `ErrOutcomeUnknown`
   （HTTP `503 outcome_unknown`）返回，而不是盲目重放造成重复插入。
@@ -110,6 +111,53 @@ broker→SDK 的错误传递由 `TestFailOutcomeUnknown`（server）和 `TestRem
 这种先写后读的结构解决的是单个 broker 或嵌入式 `Engine` 内的领取事务。
 远程重试仍然有界，其他操作仍可能返回 `SQLITE_BUSY`；该改动不意味着
 多个 broker 可以安全地同时访问同一个数据库。
+
+## 远程事务取消
+
+HTTP Hrana 事务的 COMMIT 使用原事务上下文，包括取消和截止时间（MQLITE-163）。
+需要限制提交等待时间时，应提供截止时间；Background 上下文本身不会增加请求超时。
+COMMIT 执行开始前检测到取消时，不发送 COMMIT，尝试回滚，并返回原调用方错误。
+一旦执行开始，中断且未收到确认的提交仍为 `ErrOutcomeUnknown`，即使提供方可能尚未执行。
+引擎不能把取消视为无效果证明并重放事务。已经确认的提交保持成功，
+即使取消与确认回执同时到达。
+
+ROLLBACK 使用独立的五秒请求上下文，因此调用方取消后仍会尝试清理。
+清理同步执行，操作总耗时可能包含这段时间；`Engine.Close` 会等待已接纳的操作结束。
+如果清理也失败或超时，回调错误或已确认的 COMMIT 前调用方取消仍是主要错误；
+主要错误和清理超时均无法确认提供方已回滚。独立的 stream-close 请求继续使用下文的
+尽力清理预算。本地 SQLite 的取消保护和 WebSocket 驱动保持原有行为。
+
+关停时，`Engine.Close` 先拒绝新的数据库操作并唤醒等待中的接收方。
+它给已接纳的操作最多五秒时间取得确认，再取消后台维护，避免仅因开始关停就中断健康的
+在途 COMMIT。宽限期结束后，被中断且未确认的提交仍为 `ErrOutcomeUnknown`；
+关停无法确认回滚，也无法授权安全重放。五秒宽限期与 ROLLBACK 清理预算独立；
+Close 仍会等待已接纳的前台操作和后台维护任务，因此总关停时间还受这些工作影响。
+这会排空引擎已接纳的 SQL 操作；应用消息处理函数及消费者需要单独停止并等待结束。
+
+终结请求契约由 `engine/storage_test.go` 中的以下测试覆盖。
+`TestHranaCommitHonorsTransactionContext`、
+`TestHranaCancellationBeforeDriverCommitRemainsNotStarted`、
+`TestHranaRollbackHasIndependentCleanupDeadline` 和
+`TestHranaLostCommitReplyRemainsOutcomeUnknown`。
+
+## 有界 HTTP 流清理
+
+MQLite 在内部保留固定驱动版本的 HTTP v2 兼容代码，用于实现范围有限的流清理修正
+（MQLITE-164）。源码版本、许可证和本地修改记录在 `internal/libsqlcompat/NOTICE` 与
+`UPSTREAM.json` 中。原有纯 Go 解析器、HTTP 客户端和 TCP/TLS 复用继续保留；
+正常 SQL 和传输复用继续保留。下文单独说明的确认校验会拒绝损坏的回执，
+无需增加请求，也不会重放结果不明确的写入。
+
+流清理异步执行并尽力完成。每个已打开的数据库句柄最多同时执行 16 个清理请求，
+每个请求在启动清理 goroutine 前就创建五秒截止时间。清理不排队；并发槽位耗尽时跳过
+该次清理请求，前台 SQL 无需持有连接等待槽位。已完成的清理 worker 对观察到的饱和，
+每个句柄最多报告一次固定警告；日志也是尽力操作，且不会在前台返回路径上执行。
+正常操作无需等待额外的清理往返。
+
+截止时间限制客户端请求的耗时。未确认的流可能继续占用提供方资源，直到提供方按其自身
+到期策略回收；这里不假定固定的提供方超时。客户端截止时间和 `Engine.Close` 都无法确认
+远程资源已释放或事务已回滚。已经确认的提交保持成功，丢失确认的提交继续按结果未知处理。
+`Close` 保持异步清理契约；WebSocket 与本地 SQLite 路径维持原有行为。
 
 ## 嵌入式副本——已评估，未采用
 
@@ -147,3 +195,32 @@ MQLITE_TEST_DB=libsql://<db>.turso.io MQLITE_TEST_DB_AUTH_TOKEN=<jwt> \
 ```
 
 未设置 `MQLITE_TEST_DB` 时，真实远程测试会跳过；隔离环境中的分类规则测试始终运行。
+
+## 远程 HTTP 故障与写入重放边界
+
+瞬态 HTTP 响应或正文中的 `SQLITE_BUSY` 文字，无法证明此前的写入失败。
+数据库提交后，提供方或中间代理仍可能丢失成功确认。已经发出的独立写入或 COMMIT
+遇到这类含糊响应时，返回 `ErrOutcomeUnknown`，并由调用方在重试前核对效果。
+
+读取和尚未尝试 COMMIT 的事务，对可识别的瞬态错误继续使用有界重试。
+经过证明的执行前 `driver.ErrBadConn` 和类型化 SQLite Busy 拒绝，与任意提供方正文分别判断。
+`RenewBatch` 的 `UPDATE RETURNING` 使用同一已发写入规则，包括结果扫描和中断的确认。
+SQL 发出前，在等待连接池容量时发生的取消，保留原调用方上下文错误。
+请求预算、远程连接池及本地单写入者行为保持原有契约。这些边界没有增加 Rust 技术预览后端支持。
+
+引擎管理事务回调中的 BEGIN、COMMIT 和 ROLLBACK。通过 `EngineTx.SQL()` 执行事务控制 SQL
+或接管这些边界，会绕过引擎的回滚和重试保证。
+
+非 200 HTTP 响应状态在内部保留，即使提供方错误正文的回退解析丢弃了数字状态。
+写入发出后收到瞬态状态，仍无法证明请求被拒绝；操作返回 `ErrOutcomeUnknown`，保留核账边界。
+
+## 畸形远程 SQL 确认
+
+HTTP Hrana 兼容层在接受成功结果前，会检查 pipeline 结果数量及类型、语句结果字段、
+行宽与值表示，以及批次步骤的实际执行条件。合法的条件跳过、明确的 SQL 错误、
+SQL NULL 和匹配的关闭回执继续保留原有含义。
+
+缺失或畸形的成功数据无法确认写入。已经发出的独立写入或 COMMIT 遇到这类响应时，
+返回 `ErrOutcomeUnknown`，调用方应核对实际效果后再重试。普通读取保留单独的协议错误，
+并对中断的网络读取使用有界重试。这些检查不会增加请求，也不改变固定驱动版本和清理预算；
+后端支持范围以实际验证结果为准。

@@ -2,7 +2,7 @@
   "goVersion": "1.21",
   "schemaVersion": "7",
   "brokerPort": "6754",
-  "sourceVersion": "0.4.2",
+  "sourceVersion": "0.4.3",
   "latestRelease": "v0.4.2",
   "hasUnreleasedChanges": true,
   "source": "https://github.com/mqlitehq/mqlite/tree/main/docs",
@@ -164,8 +164,8 @@
   "defaultLocale": "en",
   "agentGuideContract": {
     "formatVersion": 1,
-    "reviewedRevision": "7834304fd58a2d8a767e93829004515230c9342e",
-    "sourceDigest": "7e28be1c9ed8d0f6ae69ecccdf5b9dd8ea1e1996cb4a9f6b190c36268d18fc1a",
-    "filesReviewed": 93
+    "reviewedRevision": "6cff47d3c4f2236e8e6751562a3fc79da1a1838c",
+    "sourceDigest": "a95911c5f718c06d1c1f11fe46a87f101a37a7ea3358b0fdc0002f9b8c132e15",
+    "filesReviewed": 112
   }
 }

@@ -32,10 +32,10 @@ test('the real whole-site audit rejects both previously escaping cases in an iso
   assert.throws(() => packageSite(root, resolve(temporary, 'package')), /unregistered: download.html/);
   rmSync(resolve(root, 'download.html'));
   const retention = readFileSync(resolve(root, 'retention.html'), 'utf8');
-  const phrase = `This page describes ${initial.latestRelease}, the latest supported release.`;
   const wrong = initial.latestRelease === 'v9.9.9' ? 'v9.9.8' : 'v9.9.9';
-  assert.ok(retention.includes(phrase));
-  writeFileSync(resolve(root, 'retention.html'), retention.replace(phrase, `This page describes ${wrong}, the latest supported release.`));
+  assert.ok(retention.includes('</main>'));
+  const staleClaim = `<p>This page describes ${wrong}, the latest supported release.</p>`;
+  writeFileSync(resolve(root, 'retention.html'), retention.replace('</main>', `${staleClaim}</main>`));
   const errors = check().errors;
   assert.ok(errors.some((error) => /stale generated output: retention.html/.test(error)));
   assert.ok(errors.some((error) => error.includes(`retention.html: stale supported release ${wrong}`)));

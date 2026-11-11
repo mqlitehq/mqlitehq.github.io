@@ -1,9 +1,9 @@
 # 生产运维
 
-本手册对应 `main`，包含尚未发布的改动。最新受支持版本为 v0.4.2（端口 6754，schema token 7）；
-运行该二进制时，请使用 [v0.4.2 运维手册](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/operations.md)。
+本手册对应 `main` 的 v0.4.3 目标版本（端口 6754，schema token 7）。
+运行已安装的 v0.4.2 二进制时，请使用[对应版本运维手册](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/operations.md)。
 尤其是，下述保留租约的启动与本地维护、协同 broker 关停，以及调整后的托管 Receiver 行为
-尚未发布；参见 [CHANGELOG.md](../CHANGELOG.md#unreleased)。
+均包含在 v0.4.3 目标版本中；参见 [CHANGELOG.md](../CHANGELOG.md)。
 v0.3.3 已撤回且不受支持；其公开产物和准确镜像仅供取证或兼容性检查，不得部署。
 v0.4.2 保留 v0.4.0 对 v0.3.3 的撤回声明。
 从 v0.3.2 或其他 schema-5 版本升级时，必须按下述流程使用全新数据库。
@@ -84,7 +84,7 @@ v0.3.2 提供完整、仅含 active 项的 `ListSubscriptions` 操作，但没�
 
 ## Broker 优雅关停
 
-下面的协同关停和保留租约的重启契约要求尚未发布的 `main`；已安装的 v0.4.2 broker
+下面的协同关停和保留租约的重启契约要求 v0.4.3；已安装的 v0.4.2 broker
 不提供这些保证。它也不会排空应用消费者。取消 `Receiver.Run` 会取消在途处理函数的上下文。
 `Run` 仍会等待处理函数与结算返回，但不会在取消前给予处理函数自然完成的宽限期。
 被中断的投递可能消耗投递机会，或在达到配置上限时进入 DLQ。
@@ -144,6 +144,10 @@ Receive gate 是在领取轮次之间等待的调用所使用的禁止新领取�
 ```
 
 `Engine.Close` 会有意等待已获准工作结束，不会用不安全的超时在写入可能仍运行时释放所有权。
+它会立即拒绝新的数据库操作并唤醒等待中的接收方，随后给已获准操作最多五秒时间完成，
+再取消后台维护。这段内部宽限期避免中断健康的提交；宽限期结束后仍未收到确认的提交，
+继续按结果未知处理并需要对账。该宽限期独立于事务清理预算，也不限制 Close 的总耗时。
+它适用于引擎已接纳的 SQL 操作；应用消息处理函数需要单独安排优雅排空。
 因此，平台外层截止时间是最终硬上限。仓库的 `docker-compose.yml` 设置
 `stop_grace_period: 40s`；普通 Docker 默认只等待 10 秒，可能在刻意停滞的请求
 仍处于 25 秒 HTTP 排空阶段时发出 SIGKILL。
@@ -153,7 +157,7 @@ Turso/libSQL 替换仍须保持单活，先停再启；这些关停行为不意�
 
 ## 消费者停止与主机中断
 
-这些边界描述尚未发布的 `main` 与两个 Go 客户端的托管 `Receiver.Run`。
+这些边界描述 v0.4.3 目标版本与两个 Go 客户端的托管 `Receiver.Run`。
 SDK 不会安装进程信号处理器。宿主应用决定 SIGINT/SIGTERM、stdin EOF 和平台宽限期
 如何影响其上下文；`Consumer.Shutdown` 以及先停止准入、再排空的 API 均未实现。
 Ctrl-D 通常产生 stdin EOF，不是进程信号，也不会自动取消上下文；`mqlite serve` 不读取 stdin。

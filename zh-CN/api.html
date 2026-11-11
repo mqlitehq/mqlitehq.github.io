@@ -45,11 +45,11 @@
   </div>
 </div></nav>
 <div class="wrap">
-  <div class="stamp">来源：<a href="https://github.com/mqlitehq/mqlite/blob/main/docs/api-reference.md">mqlite main · docs/api-reference.md</a> — 源码 v0.4.2（含未发布变更）。最新受支持版本：<a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.2">v0.4.2</a>。本文档跟随 main；使用已发布产物时，请查阅对应版本的文档。</div>
+  <div class="stamp">来源：<a href="https://github.com/mqlitehq/mqlite/blob/main/docs/api-reference.md">mqlite main · docs/api-reference.md</a> — 源码 v0.4.3（含未发布变更）。最新受支持版本：<a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.2">v0.4.2</a>。本文档跟随 main；使用已发布产物时，请查阅对应版本的文档。</div>
   <main class="prose">
 <h1 id="mqlite-http-api-reference">mqlite HTTP API 参考</h1>
 <p>Broker 使用 <strong>Connect 风格的 HTTP JSON 协议</strong>。每个操作都是向 <code>/mqlite.v1.&lt;Service&gt;/&lt;Method&gt;</code> 发送一次携带 JSON 正文的 <code>POST</code> 请求，因此可直接使用 curl 调用。本文依据 <a href="https://github.com/mqlitehq/mqlite/blob/main/wire/wire.go"><code>wire/wire.go</code></a> 中的线协议契约（broker 与 Go SDK 共用的唯一事实来源，避免两者偏离）以及服务端错误映射生成。</p>
-<p>本参考跟随 <code>main</code>，包含尚未发布的变更。最新受支持的版本为 v0.4.2；使用该版本 broker 时，请查阅 <a href="https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/api-reference.md">v0.4.2 参考</a>。本文介绍的 broker 时间响应头、调整后的 Go 托管 Receiver 重试与续锁行为、1 秒至 1 小时的队列锁时长范围、保留租约的启动行为以及协调关停响应均尚未发布；参见 <a href="https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md#unreleased">CHANGELOG.md</a>。v0.3.3 已撤回且不再受支持；使用管理接口较少的 v0.3.2 时，请查阅其 tag 中的文档。</p>
+<p>本参考跟随 <code>main</code>，目标版本为 v0.4.3。使用已安装的 v0.4.2 broker 时，请查阅<a href="https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/api-reference.md">对应版本参考</a>。本文介绍的 broker 时间响应头、调整后的 Go 托管 Receiver 重试与续锁行为、1 秒至 1 小时的队列锁时长范围、保留租约的启动行为以及协调关停响应均包含在 v0.4.3 目标版本中；参见 <a href="https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md">CHANGELOG.md</a>。v0.3.3 已撤回且不再受支持；使用管理接口较少的 v0.3.2 时，请查阅其 tag 中的文档。</p>
 <p>每个 RPC 正文必须恰好是一个非 null 的 JSON 对象，包括没有其他请求字段的操作（<code>{}</code>）。未知字段和对象之后的额外数据会被拒绝。重复字段沿用 Go <code>encoding/json</code> 的行为：后出现的标量值覆盖先前的值，而重复的对象和 map 值可能合并。</p>
 <h2 id="conventions">约定</h2>
 <ul>
@@ -108,6 +108,12 @@
 <td>内部限制（参见 <a href="concepts.html#subscription-filters-expr">concepts.md</a>）</td>
 </tr>
 </tbody></table>
+<p>v0.4.3 目标版本还对新的 Peek、Receive 与 ReceiveDeferred 批次应用 32 MiB 序列化计量阈值。
+计量包含消息正文、base64 膨胀、JSON 转义及元数据。引擎返回使批次达到阈值的那条消息，
+然后停止领取下一条，因此上限是阈值加一条消息；已有的单条大消息仍能取得进展。
+Peek 使用 <code>from_seq</code> 翻页；ReceiveDeferred 调用方再次请求尚未返回的序号。
+已有 Receive attempt 继续重放其最初提交的完整批次，包括计量规则改变前创建的记录；
+重放时不会截断批次，也不会撤销仍未结算的 token。</p>
 <h2 id="the-base-url">基础 URL</h2>
 <p>下列所有示例都使用 <code>$BASE_URL</code>，因为端口无法靠猜测确定；明确写出它，就是为了避免猜错端口。</p>
 <pre><code class="language-bash"># Talking to the broker directly. mqlite serves JSON-over-HTTP on TCP 6754 and terminates

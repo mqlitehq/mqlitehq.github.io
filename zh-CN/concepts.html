@@ -45,10 +45,10 @@
   </div>
 </div></nav>
 <div class="wrap">
-  <div class="stamp">来源：<a href="https://github.com/mqlitehq/mqlite/blob/main/docs/concepts.md">mqlite main · docs/concepts.md</a> — 源码 v0.4.2（含未发布变更）。最新受支持版本：<a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.2">v0.4.2</a>。本文档跟随 main；使用已发布产物时，请查阅对应版本的文档。</div>
+  <div class="stamp">来源：<a href="https://github.com/mqlitehq/mqlite/blob/main/docs/concepts.md">mqlite main · docs/concepts.md</a> — 源码 v0.4.3（含未发布变更）。最新受支持版本：<a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.2">v0.4.2</a>。本文档跟随 main；使用已发布产物时，请查阅对应版本的文档。</div>
   <main class="prose">
 <h1 id="core-concepts--subscription-filters">核心概念与订阅过滤器</h1>
-<p>本文跟随 <code>main</code>，包含尚未发布的改动。使用已安装的 v0.4.2 发行版时，请阅读<a href="https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/concepts.md">该标签对应的核心概念</a>；待发布的行为变化见 <a href="https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md#unreleased">CHANGELOG.md</a>。</p>
+<p>本文跟随 <code>main</code>，目标版本为 v0.4.3。使用已安装的 v0.4.2 发行版时，请阅读<a href="https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/concepts.md">该标签对应的核心概念</a>；各版本的行为变化见 <a href="https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md">CHANGELOG.md</a>。</p>
 <blockquote>
 <p>目标：清晰、完整地说明 MQLite 模型，并与 Azure Service Bus、AWS（SQS + SNS）和 GCP Pub/Sub 的相应服务对照。MQLite 从基本原则出发设计，强调单个 SQLite 文件、可嵌入和对智能体友好；在概念上最接近 Azure Service Bus，因此以 ASB 为主要参照，并在重要之处明确差异。第 1–5 节介绍模型，第 6–11 节介绍<strong>订阅过滤器语言</strong>（<code>expr</code>）。</p>
 </blockquote>

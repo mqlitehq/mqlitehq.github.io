@@ -2,7 +2,7 @@
 
 Broker 使用 **Connect 风格的 HTTP JSON 协议**。每个操作都是向 `/mqlite.v1.<Service>/<Method>` 发送一次携带 JSON 正文的 `POST` 请求，因此可直接使用 curl 调用。本文依据 [`wire/wire.go`](../wire/wire.go) 中的线协议契约（broker 与 Go SDK 共用的唯一事实来源，避免两者偏离）以及服务端错误映射生成。
 
-本参考跟随 `main`，包含尚未发布的变更。最新受支持的版本为 v0.4.2；使用该版本 broker 时，请查阅 [v0.4.2 参考](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/api-reference.md)。本文介绍的 broker 时间响应头、调整后的 Go 托管 Receiver 重试与续锁行为、1 秒至 1 小时的队列锁时长范围、保留租约的启动行为以及协调关停响应均尚未发布；参见 [CHANGELOG.md](../CHANGELOG.md#unreleased)。v0.3.3 已撤回且不再受支持；使用管理接口较少的 v0.3.2 时，请查阅其 tag 中的文档。
+本参考跟随 `main`，目标版本为 v0.4.3。使用已安装的 v0.4.2 broker 时，请查阅[对应版本参考](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/api-reference.md)。本文介绍的 broker 时间响应头、调整后的 Go 托管 Receiver 重试与续锁行为、1 秒至 1 小时的队列锁时长范围、保留租约的启动行为以及协调关停响应均包含在 v0.4.3 目标版本中；参见 [CHANGELOG.md](../CHANGELOG.md)。v0.3.3 已撤回且不再受支持；使用管理接口较少的 v0.3.2 时，请查阅其 tag 中的文档。
 
 每个 RPC 正文必须恰好是一个非 null 的 JSON 对象，包括没有其他请求字段的操作（`{}`）。未知字段和对象之后的额外数据会被拒绝。重复字段沿用 Go `encoding/json` 的行为：后出现的标量值覆盖先前的值，而重复的对象和 map 值可能合并。
 
@@ -30,6 +30,13 @@ Broker 使用 **Connect 风格的 HTTP JSON 协议**。每个操作都是向 `/m
 | `Peek` 的 `max` | 默认 32，最大 1000 | 请求字段 |
 | 保留的订阅 | active 与 deleting 合计 10,000 | `MQLITE_MAX_SUBSCRIPTIONS`（serve）/ `Options.MaxSubscriptions` 或 `WithMaxSubscriptions`（嵌入式） |
 | 过滤器 `expr` 源码 | 限制长度与 AST 节点数 | 内部限制（参见 [concepts.md](concepts.md#subscription-filters-expr)） |
+
+v0.4.3 目标版本还对新的 Peek、Receive 与 ReceiveDeferred 批次应用 32 MiB 序列化计量阈值。
+计量包含消息正文、base64 膨胀、JSON 转义及元数据。引擎返回使批次达到阈值的那条消息，
+然后停止领取下一条，因此上限是阈值加一条消息；已有的单条大消息仍能取得进展。
+Peek 使用 `from_seq` 翻页；ReceiveDeferred 调用方再次请求尚未返回的序号。
+已有 Receive attempt 继续重放其最初提交的完整批次，包括计量规则改变前创建的记录；
+重放时不会截断批次，也不会撤销仍未结算的 token。
 
 ## 基础 URL
 

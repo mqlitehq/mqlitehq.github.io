@@ -45,12 +45,12 @@
   </div>
 </div></nav>
 <div class="wrap">
-  <div class="stamp"><a class="document-label" href="examples.html" aria-current="page">Examples</a> · Source: <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/examples.md">mqlite main · docs/examples.md</a> — source v0.4.2 with unreleased changes. Latest supported release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.2">v0.4.2</a>. These docs track main; use the linked release for published artifacts.</div>
+  <div class="stamp"><a class="document-label" href="examples.html" aria-current="page">Examples</a> · Source: <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/examples.md">mqlite main · docs/examples.md</a> — source v0.4.3 with unreleased changes. Latest supported release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.2">v0.4.2</a>. These docs track main; use the linked release for published artifacts.</div>
   <main class="prose">
 <h1 id="examples">Examples</h1>
-<p>These examples follow <code>main</code>, including unreleased behavior. For an installed
+<p>These examples follow <code>main</code> for release target v0.4.3. For an installed
 v0.4.2 release, use the <a href="https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/examples.md">examples at that tag</a>;
-see <a href="https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md#unreleased">CHANGELOG.md</a> for pending behavior changes.</p>
+see <a href="https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md">CHANGELOG.md</a> for version-specific behavior changes.</p>
 <p>For authenticated producer/consumer credentials, Go SDK key management, console and
 MCP workflows, see <a href="access-keys.html">Access keys</a> (v0.3.1 and later).</p>
 <p>Copy-runnable examples for the four ways to use mqlite: <strong>embedded</strong> in-process, the
@@ -175,7 +175,7 @@ the failed final attempt goes to the DLQ), with auto lock-renewal and configurab
 concurrency.</p>
 <p>The core calls in this example also work with MQLite Remote Client for Go, the
 standard-library-only, remote-only companion module. Install
-<code>github.com/mqlitehq/mqlite-go@v0.1.1</code> and change the import to
+<code>github.com/mqlitehq/mqlite-go@v0.1.2</code> and change the import to
 <code>mqlite &quot;github.com/mqlitehq/mqlite-go&quot;</code>. Its source floor is Go 1.13. Use the
 main module shown below when the same application also needs embedded mode,
 <code>Observe</code>, or managed access-key administration.</p>

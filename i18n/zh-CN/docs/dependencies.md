@@ -4,7 +4,7 @@ MQLite 将 `go.mod` 的最低版本固定为 **`go 1.21`**，使 SDK 仍可直�
 
 ## 仅远程访问的配套模块
 
-只调用 broker 的应用可以改用官方的 [MQLite Remote Client for Go](https://github.com/mqlitehq/mqlite-go)。其模块路径仍为 `github.com/mqlitehq/mqlite-go`；发布版本 `v0.1.1` 的源码最低要求是 Go 1.13，且仅使用标准库，因此不会链接嵌入式引擎、SQLite、libSQL/Turso 或 CGO。
+只调用 broker 的应用可以改用官方的 [MQLite Remote Client for Go](https://github.com/mqlitehq/mqlite-go)。其模块路径仍为 `github.com/mqlitehq/mqlite-go`；目标发布版本 `v0.1.2` 的源码最低要求是 Go 1.13，且仅使用标准库，因此不会链接嵌入式引擎、SQLite、libSQL/Turso 或 CGO。
 较低的最低版本是兼容性承诺，并不建议在生产环境运行已停止维护的工具链：应尽可能使用仍受支持的 Go 版本构建。应用需要嵌入式模式、事务发件箱（transactional outbox）、规范化观测数据解码或托管访问密钥管理时，应使用本主模块。
 
 ## 最低版本限制锁定了哪些依赖
@@ -23,6 +23,13 @@ MQLite 将 `go.mod` 的最低版本固定为 **`go 1.21`**，使 SDK 仍可直�
 CI 在受支持的 macOS runner 上，对 Go 1.21 测试二进制进行外部链接，以维持这一源码最低版本契约。Go 1.21 的内部 Darwin 链接器不会生成当前 macOS 所要求的 `LC_UUID`，而 Apple 外部链接器会生成。此例外仅用于兼容性门禁；发布二进制使用当前受支持的 Go 工具链及其正常链接器选择。
 
 MQLite 用一个范围很窄的单次连接租用适配器，约束已知的 HTTP 逻辑流生命周期缺陷：`libsql://` 驱动连接在其 `database/sql` 连接租用结束时被丢弃，而 Go 的共享 HTTP transport 继续复用物理 TCP/TLS 连接。迁移到受维护驱动，需要完整的本地/远程一致性测试、真实 Turso 生命周期及持续负载测试，以及全部发布平台构建。不能仅凭 API 相似就替换此依赖或移除适配器；目前不承诺替代方案或迁移日期。
+
+HTTP v2 传输及其协议／结果辅助代码，在 `internal/libsqlcompat` 中保留了同一固定版本的
+小型内部副本，用于实现有界的异步流清理（MQLITE-164）及成功确认校验（MQLITE-191）。
+不完整或不匹配的响应无法确认成功或授权重放写入。原有公开 SQL 解析器与 WebSocket
+驱动继续使用固定版本。源码／改动哈希和模块版本守卫用于检测漂移；无需库内 `replace`，也不依赖
+调用方的 vendor 目录。复制的 MIT 许可证和源码说明随二进制归档和容器镜像一起交付。
+内部辅助代码直接导入现有的 ANTLR，因此该依赖现列为直接依赖；依赖版本和实际选中的模块图保持一致。
 
 ## 安全策略
 

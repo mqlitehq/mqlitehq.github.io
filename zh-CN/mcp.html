@@ -45,7 +45,7 @@
   </div>
 </div></nav>
 <div class="wrap">
-  <div class="stamp"><a class="document-label" href="mcp.html" aria-current="page">MCP</a> · 来源：<a href="https://github.com/mqlitehq/mqlite/blob/main/docs/mcp.md">mqlite main · docs/mcp.md</a> — 源码 v0.4.2（含未发布变更）。最新受支持版本：<a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.2">v0.4.2</a>。本文档跟随 main；使用已发布产物时，请查阅对应版本的文档。</div>
+  <div class="stamp"><a class="document-label" href="mcp.html" aria-current="page">MCP</a> · 来源：<a href="https://github.com/mqlitehq/mqlite/blob/main/docs/mcp.md">mqlite main · docs/mcp.md</a> — 源码 v0.4.3（含未发布变更）。最新受支持版本：<a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.2">v0.4.2</a>。本文档跟随 main；使用已发布产物时，请查阅对应版本的文档。</div>
   <main class="prose">
 <h1 id="mcp-server-mqlite-mcp">MCP 服务（<code>mqlite-mcp</code>）</h1>
 <p><code>mqlite-mcp</code> 是一个 <a href="https://modelcontextprotocol.io">Model Context Protocol</a> 服务，将 mqlite broker 暴露为 <strong>agent 工具</strong>，让 AI agent（如 Claude）无须编写 HTTP 即可观察 broker 健康、创建队列、发送、接收、结算消息及管理访问密钥。它是轻量的<strong>无额外依赖</strong>转发器：使用 MCP（stdio 上的 JSON-RPC 2.0），把每次工具调用转换为向 broker 发送的一次 HTTP POST。仅使用标准库和仓内 <code>wire</code> 契约，不依赖 MCP SDK 或 CGO，与 mqlite 其他部分保持一致。</p>

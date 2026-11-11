@@ -1,6 +1,6 @@
 # mqlite 的工作原理：在一个 SQLite 文件上构建可靠队列
 
-本文跟随 `main`，包含尚未发布的改动。使用已安装的 v0.4.2 发行版时，请阅读[该标签对应的内部原理](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/internals.md)；待发布的行为变化见 [CHANGELOG.md](../CHANGELOG.md#unreleased)。
+本文跟随 `main`，目标版本为 v0.4.3。使用已安装的 v0.4.2 发行版时，请阅读[该标签对应的内部原理](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/internals.md)；各版本的行为变化见 [CHANGELOG.md](../CHANGELOG.md)。
 
 > 这是一份原理讲解：逐表、逐项决策说明 mqlite 的实际构造，以及这种构造*为什么*能支撑可信赖的队列。使用 mqlite 不必先读本文，但它有助于预测系统行为。配套阅读：[concepts.md](concepts.md) 从外部介绍模型；[conformance.md](conformance.md) 以测试固定下文的每项承诺。
 

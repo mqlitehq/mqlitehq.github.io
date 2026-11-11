@@ -45,10 +45,10 @@
   </div>
 </div></nav>
 <div class="wrap">
-  <div class="stamp">来源：<a href="https://github.com/mqlitehq/mqlite/blob/main/docs/internals.md">mqlite main · docs/internals.md</a> — 源码 v0.4.2（含未发布变更）。最新受支持版本：<a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.2">v0.4.2</a>。本文档跟随 main；使用已发布产物时，请查阅对应版本的文档。</div>
+  <div class="stamp">来源：<a href="https://github.com/mqlitehq/mqlite/blob/main/docs/internals.md">mqlite main · docs/internals.md</a> — 源码 v0.4.3（含未发布变更）。最新受支持版本：<a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.2">v0.4.2</a>。本文档跟随 main；使用已发布产物时，请查阅对应版本的文档。</div>
   <main class="prose">
 <h1 id="how-mqlite-works--building-a-reliable-queue-on-one-sqlite-file">mqlite 的工作原理：在一个 SQLite 文件上构建可靠队列</h1>
-<p>本文跟随 <code>main</code>，包含尚未发布的改动。使用已安装的 v0.4.2 发行版时，请阅读<a href="https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/internals.md">该标签对应的内部原理</a>；待发布的行为变化见 <a href="https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md#unreleased">CHANGELOG.md</a>。</p>
+<p>本文跟随 <code>main</code>，目标版本为 v0.4.3。使用已安装的 v0.4.2 发行版时，请阅读<a href="https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/internals.md">该标签对应的内部原理</a>；各版本的行为变化见 <a href="https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md">CHANGELOG.md</a>。</p>
 <blockquote>
 <p>这是一份原理讲解：逐表、逐项决策说明 mqlite 的实际构造，以及这种构造<em>为什么</em>能支撑可信赖的队列。使用 mqlite 不必先读本文，但它有助于预测系统行为。配套阅读：<a href="concepts.html">concepts.md</a> 从外部介绍模型；<a href="conformance.html">conformance.md</a> 以测试固定下文的每项承诺。</p>
 </blockquote>

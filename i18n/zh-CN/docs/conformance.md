@@ -1,6 +1,6 @@
 # 一致性规范：mqlite 的正确行为（TCK）
 
-本规范跟随 `main`，包含尚未发布的改动。使用已安装的 v0.4.2 发行版时，请阅读[该标签对应的一致性规范](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/conformance.md)；待发布的行为变化见 [CHANGELOG.md](../CHANGELOG.md#unreleased)。
+本规范跟随 `main`，目标版本为 v0.4.3。使用已安装的 v0.4.2 发行版时，请阅读[该标签对应的一致性规范](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/conformance.md)；各版本的行为变化见 [CHANGELOG.md](../CHANGELOG.md)。
 
 本文是 mqlite **必须**遵守的规范性行为要求：这些不变量定义何为“正确”，不依赖具体实现细节。每项都有交叉引用的隔离测试强制执行，共同构成 mqlite 的 TCK。破坏本文任一**必须**（MUST）要求的改动，属于行为变更，而非重构。
 

@@ -45,7 +45,7 @@
   </div>
 </div></nav>
 <div class="wrap">
-  <div class="stamp"><a class="document-label" href="dependencies.html" aria-current="page">Dependencies</a> · Source: <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/dependencies.md">mqlite main · docs/dependencies.md</a> — source v0.4.2 with unreleased changes. Latest supported release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.2">v0.4.2</a>. These docs track main; use the linked release for published artifacts.</div>
+  <div class="stamp"><a class="document-label" href="dependencies.html" aria-current="page">Dependencies</a> · Source: <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/dependencies.md">mqlite main · docs/dependencies.md</a> — source v0.4.3 with unreleased changes. Latest supported release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.2">v0.4.2</a>. These docs track main; use the linked release for published artifacts.</div>
   <main class="prose">
 <h1 id="dependency-policy--the-go-121-floor">Dependency policy &amp; the go 1.21 floor</h1>
 <p>MQLite pins its <code>go.mod</code> floor at <strong><code>go 1.21</code></strong> so the SDK stays drop-in
@@ -55,7 +55,7 @@ and how the freeze is enforced so it can&#39;t be lifted by accident.</p>
 <h2 id="remote-only-companion-module">Remote-only companion module</h2>
 <p>Applications that only call a broker can instead use the official
 <a href="https://github.com/mqlitehq/mqlite-go">MQLite Remote Client for Go</a>. Its module
-path remains <code>github.com/mqlitehq/mqlite-go</code>; release <code>v0.1.1</code> has a Go 1.13
+path remains <code>github.com/mqlitehq/mqlite-go</code>; release target <code>v0.1.2</code> has a Go 1.13
 source floor and uses only the standard library, so it does not link the embedded
 engine, SQLite, libSQL/Turso, or CGO.
 The low floor is a compatibility promise, not a recommendation to run an
@@ -118,6 +118,15 @@ physical TCP/TLS connections. Migration to a maintained driver requires the full
 local/remote conformance suite, live Turso lifecycle and sustained-load runs, and
 all release-platform builds. Do not swap this dependency or remove the adapter
 based only on API similarity; there is no promised replacement or migration date.</p>
+<p>The HTTP v2 transport and its protocol/result helpers are a small internal copy
+of that same pin (<code>internal/libsqlcompat</code>), with bounded asynchronous stream
+cleanup (MQLITE-164) and success-acknowledgement validation (MQLITE-191).
+Incomplete or mismatched replies cannot confirm success or authorize write replay. The original public SQL parser and WebSocket driver remain
+at the pin. Source/delta hashes and a module-version guard detect drift; there is
+no library-local <code>replace</code> or reliance on a caller&#39;s vendor directory. The copied
+MIT license and source notice ship with binary archives and container images.
+The existing ANTLR version is now listed directly because the copied helper
+imports it; dependency versions and the selected module graph are unchanged.</p>
 <h2 id="security-posture">Security posture</h2>
 <p>Freezing requires checking upstream defects as well as running scanners. CI runs
 <code>govulncheck</code> on source and uses the GoReleaser release matrix to scan both actual

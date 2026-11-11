@@ -15,7 +15,9 @@ const semver = 'v\\d+\\.\\d+\\.\\d+(?:-rc\\.\\d+)?';
 export function checkCurrentVersionClaims(texts, metadata) {
   for (const [file, text] of texts) {
     if (!/\.(?:html|txt)$/.test(file)) continue;
-    const visible = text.replace(/<[^>]*>/g, '').replace(/\*\*/g, '').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ');
+    const visible = text.replace(/<[^>]*>/g, '')
+      .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+      .replace(/\*\*/g, '').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ');
     const sourcePatterns = [new RegExp(`\\bsource\\s+(?:version[:\\s]*)?(${semver})`, 'gi'),
       new RegExp(`(?:源码(?:版本)?|源版本)[：:\\s]*(${semver})`, 'g')];
     const sourceClaims = sourcePatterns.flatMap((pattern) => [...visible.matchAll(pattern)].map((match) => match[1]));

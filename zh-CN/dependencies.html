@@ -45,12 +45,12 @@
   </div>
 </div></nav>
 <div class="wrap">
-  <div class="stamp"><a class="document-label" href="dependencies.html" aria-current="page">依赖与兼容性</a> · 来源：<a href="https://github.com/mqlitehq/mqlite/blob/main/docs/dependencies.md">mqlite main · docs/dependencies.md</a> — 源码 v0.4.2（含未发布变更）。最新受支持版本：<a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.2">v0.4.2</a>。本文档跟随 main；使用已发布产物时，请查阅对应版本的文档。</div>
+  <div class="stamp"><a class="document-label" href="dependencies.html" aria-current="page">依赖与兼容性</a> · 来源：<a href="https://github.com/mqlitehq/mqlite/blob/main/docs/dependencies.md">mqlite main · docs/dependencies.md</a> — 源码 v0.4.3（含未发布变更）。最新受支持版本：<a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.2">v0.4.2</a>。本文档跟随 main；使用已发布产物时，请查阅对应版本的文档。</div>
   <main class="prose">
 <h1 id="dependency-policy--the-go-121-floor">依赖策略与 go 1.21 最低版本</h1>
 <p>MQLite 将 <code>go.mod</code> 的最低版本固定为 <strong><code>go 1.21</code></strong>，使 SDK 仍可直接嵌入尚未升级工具链的项目（MQLITE-1）。这一决定锁定了两个依赖；本文说明锁定原因、代价，以及如何防止无意间解除限制。</p>
 <h2 id="remote-only-companion-module">仅远程访问的配套模块</h2>
-<p>只调用 broker 的应用可以改用官方的 <a href="https://github.com/mqlitehq/mqlite-go">MQLite Remote Client for Go</a>。其模块路径仍为 <code>github.com/mqlitehq/mqlite-go</code>；发布版本 <code>v0.1.1</code> 的源码最低要求是 Go 1.13，且仅使用标准库，因此不会链接嵌入式引擎、SQLite、libSQL/Turso 或 CGO。
+<p>只调用 broker 的应用可以改用官方的 <a href="https://github.com/mqlitehq/mqlite-go">MQLite Remote Client for Go</a>。其模块路径仍为 <code>github.com/mqlitehq/mqlite-go</code>；目标发布版本 <code>v0.1.2</code> 的源码最低要求是 Go 1.13，且仅使用标准库，因此不会链接嵌入式引擎、SQLite、libSQL/Turso 或 CGO。
 较低的最低版本是兼容性承诺，并不建议在生产环境运行已停止维护的工具链：应尽可能使用仍受支持的 Go 版本构建。应用需要嵌入式模式、事务发件箱（transactional outbox）、规范化观测数据解码或托管访问密钥管理时，应使用本主模块。</p>
 <h2 id="what-the-floor-freezes">最低版本限制锁定了哪些依赖</h2>
 <table>
@@ -80,6 +80,12 @@
 <p>纯 Go Hrana 客户端 <a href="https://github.com/tursodatabase/libsql-client-go"><code>github.com/tursodatabase/libsql-client-go</code></a> 保持固定版本，尽管上游现在已将仓库标为弃用。这是临时的兼容性选择，并非认为未维护的依赖是理想方案。上游推荐的 <a href="https://github.com/tursodatabase/go-libsql"><code>go-libsql</code></a> 使用 CGO，目前只为四种 Linux/macOS 目标发布原生库；较新的 <a href="https://github.com/tursodatabase/turso/tree/main/bindings/go"><code>tursogo</code></a> 模块要求 Go 1.24，实现的是本地数据库加远程同步，并非 MQLite 当前直接访问主库的 Hrana 路径。官方 <a href="https://github.com/tursodatabase/turso/tree/main/serverless/go"><code>tursogo-serverless</code></a> 模块是纯 Go 的 <code>database/sql</code> 驱动，通过 HTTP 直接连接 Turso Cloud，但其模块同样要求 Go 1.24，且尚未通过 MQLite 的本地/远程一致性、真实生命周期、持续负载及六种发布目标门禁。目前没有替代项同时满足 Go 1.21、无 CGO、六种目标平台和存储语义的完整契约。</p>
 <p>CI 在受支持的 macOS runner 上，对 Go 1.21 测试二进制进行外部链接，以维持这一源码最低版本契约。Go 1.21 的内部 Darwin 链接器不会生成当前 macOS 所要求的 <code>LC_UUID</code>，而 Apple 外部链接器会生成。此例外仅用于兼容性门禁；发布二进制使用当前受支持的 Go 工具链及其正常链接器选择。</p>
 <p>MQLite 用一个范围很窄的单次连接租用适配器，约束已知的 HTTP 逻辑流生命周期缺陷：<code>libsql://</code> 驱动连接在其 <code>database/sql</code> 连接租用结束时被丢弃，而 Go 的共享 HTTP transport 继续复用物理 TCP/TLS 连接。迁移到受维护驱动，需要完整的本地/远程一致性测试、真实 Turso 生命周期及持续负载测试，以及全部发布平台构建。不能仅凭 API 相似就替换此依赖或移除适配器；目前不承诺替代方案或迁移日期。</p>
+<p>HTTP v2 传输及其协议／结果辅助代码，在 <code>internal/libsqlcompat</code> 中保留了同一固定版本的
+小型内部副本，用于实现有界的异步流清理（MQLITE-164）及成功确认校验（MQLITE-191）。
+不完整或不匹配的响应无法确认成功或授权重放写入。原有公开 SQL 解析器与 WebSocket
+驱动继续使用固定版本。源码／改动哈希和模块版本守卫用于检测漂移；无需库内 <code>replace</code>，也不依赖
+调用方的 vendor 目录。复制的 MIT 许可证和源码说明随二进制归档和容器镜像一起交付。
+内部辅助代码直接导入现有的 ANTLR，因此该依赖现列为直接依赖；依赖版本和实际选中的模块图保持一致。</p>
 <h2 id="security-posture">安全策略</h2>
 <p>固定依赖版本不仅需要运行扫描器，也需要检查上游缺陷。CI 对源码运行 <code>govulncheck</code>，并使用 GoReleaser 发布矩阵扫描全部六种操作系统/架构组合上的两种实际二进制。发布钩子会再次执行二进制扫描，Docker 也扫描其实际构建产物。产物保留符号，使扫描器能够识别实际链接的代码，而不是退回到模块级匹配。没有排除任何安全公告。发现可达漏洞时，必须修复漏洞或明确调整兼容性最低版本；最低版本要求不能凌驾于安全之上。</p>
 <p>例如，<a href="https://pkg.go.dev/vuln/GO-2026-5024">GO-2026-5024</a> 影响当前 MQLite 二进制没有调用的一个 <code>x/sys/windows</code> 函数。Windows 源码分析和保留符号的二进制扫描都确认了这一边界。后续代码或依赖改动如果增加了调用，二进制门禁仍必须通过。</p>

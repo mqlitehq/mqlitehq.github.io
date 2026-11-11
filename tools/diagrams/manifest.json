@@ -11,7 +11,7 @@
       "zh-CN": "直接发送的消息进入 orders 队列。主题本身不存储消息，每个匹配订阅在独立支撑队列中获得副本。死信仍是各自队列内部的状态。"
     },
     "artworkSha256": "6167fac31917aeaa9d8c3f1cf134cc86869646d1e2b3dbcca179b0d43ae18e50",
-    "documentSha256": "93d4de5f0fccd7acc54ff091564aacc5ba1fc30bc46d091bdb75c57de65c6bde",
+    "documentSha256": "7c836de85d036a90e1bb8d4a63e942ad8bf2d19ad9b69d32416658223bbcb1b9",
     "translationSha256": "f60f68050a9037ef300f2238aae2fc03952eef141f935c873993d710d3bf6f88"
   },
   {
@@ -26,7 +26,7 @@
       "zh-CN": "scheduled、active、locked、deferred 和 dead_lettered 都属于同一队列。图中列出投递计数、重试、续锁、过期与删除条件；removed 表示行已删除，并非另一种消息状态。"
     },
     "artworkSha256": "fbc5dfac9b6d291d10533f005cc6f3a34deb8641b2a862b4f17d49c499c7d572",
-    "documentSha256": "93d4de5f0fccd7acc54ff091564aacc5ba1fc30bc46d091bdb75c57de65c6bde",
+    "documentSha256": "7c836de85d036a90e1bb8d4a63e942ad8bf2d19ad9b69d32416658223bbcb1b9",
     "translationSha256": "5ad85385d856e2c8a8722c8033445f969d9abac06fb22053eaf302c6dcf23417"
   },
   {
@@ -41,7 +41,7 @@
       "zh-CN": "Subscribe 编译并检查过滤表达式的类型，有效程序会被缓存，无效表达式返回 HTTP 400。Publish 按订阅执行已缓存的程序，仅在匹配时创建消息副本。"
     },
     "artworkSha256": "0c849ad79cd77a764d427e49cb9883525d36762bcfb198a1df1f206d77336f25",
-    "documentSha256": "93d4de5f0fccd7acc54ff091564aacc5ba1fc30bc46d091bdb75c57de65c6bde",
+    "documentSha256": "7c836de85d036a90e1bb8d4a63e942ad8bf2d19ad9b69d32416658223bbcb1b9",
     "translationSha256": "0d4d1434967a8b2b779f916f4b02e3a6e316f8dbaca492ffed066fdcb3ee2a78"
   }
 ]

@@ -1,6 +1,6 @@
 # 示例
 
-这些示例跟随 `main`，包含未发布行为。已安装 v0.4.2 时，请使用[该 tag 的示例](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/examples.md)；待发布行为变更参见 [CHANGELOG.md](../CHANGELOG.md#unreleased)。
+这些示例跟随 `main`，目标版本为 v0.4.3。已安装 v0.4.2 时，请使用[该 tag 的示例](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/examples.md)；各版本的行为变化参见 [CHANGELOG.md](../CHANGELOG.md)。
 
 经认证的生产者/消费者凭据、Go SDK 密钥管理、控制台和 MCP 流程，参见[访问密钥](access-keys.md)（v0.3.1 及更新版本）。
 
@@ -122,7 +122,7 @@ func main() {
 
 通过 HTTP 连接运行中的 broker。`Receiver` 运行托管消费循环：返回 `nil` → Complete，返回错误 → Abandon（低于最大次数时重投，最后一次尝试失败则进入 DLQ），并提供自动续锁和可配置并发。
 
-本例核心调用也适用于 MQLite Remote Client for Go，即仅标准库、仅远程的配套模块。安装 `github.com/mqlitehq/mqlite-go@v0.1.1`，将导入改为 `mqlite "github.com/mqlitehq/mqlite-go"`。它的源码下限为 Go 1.13。同一应用还需要嵌入式、`Observe` 或托管访问密钥管理时，使用下面展示的主模块。
+本例核心调用也适用于 MQLite Remote Client for Go，即仅标准库、仅远程的配套模块。安装 `github.com/mqlitehq/mqlite-go@v0.1.2`，将导入改为 `mqlite "github.com/mqlitehq/mqlite-go"`。它的源码下限为 Go 1.13。同一应用还需要嵌入式、`Observe` 或托管访问密钥管理时，使用下面展示的主模块。
 
 ```go
 package main
