@@ -45,6 +45,12 @@ jobs:
       - name: Install generator dependencies
         working-directory: tools
         run: npm ci
+      - name: Use the official Ubuntu archive for browser dependencies
+        run: |
+          apt_sources_file=/etc/apt/sources.list.d/ubuntu.sources
+          grep -Fxq 'URIs: mirror+file:/etc/apt/apt-mirrors.txt' "$apt_sources_file"
+          sudo sed -i 's|^URIs: mirror+file:/etc/apt/apt-mirrors\.txt$|URIs: https://archive.ubuntu.com/ubuntu/|' "$apt_sources_file"
+          grep -Fxq 'URIs: https://archive.ubuntu.com/ubuntu/' "$apt_sources_file"
       - name: Install Chromium for browser checks
         working-directory: tools
         run: npx playwright install --with-deps chromium
