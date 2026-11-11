@@ -164,8 +164,8 @@
   "defaultLocale": "en",
   "agentGuideContract": {
     "formatVersion": 1,
-    "reviewedRevision": "6cff47d3c4f2236e8e6751562a3fc79da1a1838c",
-    "sourceDigest": "a95911c5f718c06d1c1f11fe46a87f101a37a7ea3358b0fdc0002f9b8c132e15",
+    "reviewedRevision": "08ab915f3ad6baff2667a85974334039664164bc",
+    "sourceDigest": "968b236efe9bd7b727b7eb11e95705d8df2bd0d97287c920c495004f887a82e0",
     "filesReviewed": 112
   }
 }

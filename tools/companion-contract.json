@@ -1,6 +1,6 @@
 {
   "formatVersion": 1,
-  "reviewedRevision": "68b087de54537b12e182d0c202b27c4da1fa187c",
+  "reviewedRevision": "b424c8243e1915da21029a0e3639bb444e80a016",
   "reviewNote": "Reviewed the remote-only SDK delivery-batch validation, Send acknowledgements, conservative legacy renewals, output-before-settlement CLI and broker-version permission guidance. The source targets v0.1.2 with a Go 1.13 floor and standard-library-only runtime. Tagged broker compatibility and final source-pair qualification are recorded separately.",
   "files": {
     ".github/workflows/ci.yml": "def545c145cebe60212de62bc4217fa0a544b8889fd502eb12b56bd689a63c9c",
