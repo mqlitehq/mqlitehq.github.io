@@ -603,7 +603,7 @@ retain application-side evidence when reconciliation must outlive this window.</
 </tr>
 <tr>
 <td><code>Abandon</code></td>
-<td><code>delay_ms</code> (int, optional)</td>
+<td><code>delay_ms</code> (nonnegative int, optional)</td>
 <td>release the lock without incrementing <code>delivery_count</code>: below max, redeliver after <code>delay_ms</code> (a delayed head keeps holding its group&#39;s line on ordered queues); at max, move to the DLQ</td>
 </tr>
 <tr>
@@ -644,6 +644,11 @@ via <code>ReceiveDeferred</code> and settled (other groups proceed). Normal <cod
 returns a deferred message, and with no TTL there is no auto-recovery, so recover a
 lost <code>seq_number</code> via <code>Peek</code> with <code>state=deferred</code>.</p>
 </blockquote>
+<p>Abandon rejects a negative delay or a new absolute visibility deadline that
+overflows epoch milliseconds with <code>invalid_argument</code>, without changing the live
+delivery. An exact request that already committed can still replay its live
+receipt after the clock advances. Go SDK delays must be zero or at least 1ms;
+positive sub-millisecond durations are rejected before any HTTP request.</p>
 <blockquote>
 <p><strong>Abandon + ordering.</strong> With <code>delay_ms &gt; 0</code> the message parks as <code>scheduled</code> until the
 backoff lapses and — like a deferred head — holds its head-of-line position on ordered

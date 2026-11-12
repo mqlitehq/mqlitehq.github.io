@@ -1,11 +1,11 @@
 {
   "formatVersion": 1,
-  "reviewedRevision": "b424c8243e1915da21029a0e3639bb444e80a016",
-  "reviewNote": "Reviewed the remote-only SDK delivery-batch validation, Send acknowledgements, conservative legacy renewals, output-before-settlement CLI and broker-version permission guidance. The source targets v0.1.2 with a Go 1.13 floor and standard-library-only runtime. Tagged broker compatibility and final source-pair qualification are recorded separately.",
+  "reviewedRevision": "d39298049f0a39e781a7adff51fc9130f9a20068",
+  "reviewNote": "Reviewed the remote-only SDK delivery-batch validation, Send acknowledgements, conservative legacy renewals, output-before-settlement CLI and broker-version permission guidance. The source targets v0.1.2 with a Go 1.13 floor and standard-library-only runtime. Tagged broker compatibility and final source-pair qualification are recorded separately. Additionally reviewed Abandon validation on current main: negative/sub-millisecond client rejection, non-mutating timestamp overflow rejection, zero-delay behavior and exact live receipt replay after clock movement. Matching English/Chinese API, summary and agent guidance were reviewed; complete code/load evidence is separate from unpublished release acceptance.",
   "files": {
     ".github/workflows/ci.yml": "def545c145cebe60212de62bc4217fa0a544b8889fd502eb12b56bd689a63c9c",
     ".github/workflows/release.yml": "0afd94c9ba93b354beb35300347f55fe5721625ac42ea92d58869d2024a0c8fd",
-    "README.md": "548c862847fea8564525cbb4b2972d1a06c69b15ffd9e40332f8a1a08734c582",
+    "README.md": "d918026d90696d30abecfef5e1cd4ec8d6e8f4d25ef930b090de5347354fd969",
     "api.go": "902842c2eee7eb68f0a215f3ecfb4bd55d52823be7ad76ba6c201ddbd778c4ed",
     "client.go": "e35a46527db33c5416cc9e9f3c0161a9e74c445be7e85ab59ff8f4f674f46712",
     "cmd/mqlitec/main.go": "7325f7cf7dcabd771bee0dd167863e89d38daedfe8922a35f0e4dffa6cd31384",
@@ -14,7 +14,7 @@
     "internal/version/version.go": "dd032b3b9b3f0d5d22842bafeeb3855ffe57017eb491e162ec47f96193d655a9",
     "internal/wire/responses.go": "266006400694eacb83c53d567bfc5c790f9a9f119c63d0c22b126d7be586b08c",
     "internal/wire/wire.go": "5e87957c7e487215cbadb6b40497293071d07e3577f980c75a7e0df562949641",
-    "message.go": "377a6644a52370b9eae72663232e7fec2b5b32597c0dcdb589aa91e33e171e56",
+    "message.go": "7336454ac90b4756158528dc5f637ddd760e17cb9958051b7125f5941c7854c9",
     "receiver.go": "540d3bfada18b3e23e19960bdce3d871c2f9c888988e95ad5dba5a1c72a24264",
     "types.go": "abd4de258d70863e5296efd454d88c44c9f706a5ce497b85f05a5850ff6ba724"
   }

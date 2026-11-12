@@ -215,7 +215,7 @@ curl -H "Authorization: Bearer $T" -H 'Content-Type: application/json' \
 | 方法 | 附加字段 | 效果 |
 |---|---|---|
 | `Complete` | — | 删除消息（处理完成） |
-| `Abandon` | `delay_ms`（int，可选） | 释放锁且不增加 `delivery_count`：低于最大次数时在 `delay_ms` 后重投（有序队列中，延迟的队首仍占据所属组的队首位置）；达到最大次数时转入 DLQ |
+| `Abandon` | `delay_ms`（非负 int，可选） | 释放锁且不增加 `delivery_count`：低于最大次数时在 `delay_ms` 后重投（有序队列中，延迟的队首仍占据所属组的队首位置）；达到最大次数时转入 DLQ |
 | `Reject` | `dead_letter_reason`、`dead_letter_description`（可选） | 转入 DLQ |
 | `Defer` | — | 暂存到一旁，之后按序号通过 `ReceiveDeferred` 取回 |
 | `Renew` | — | 延长同一次有效租约，不改变状态、token 或 `delivery_count`；不能复活过期租约 |
@@ -227,6 +227,8 @@ curl -H "Authorization: Bearer $T" -H 'Content-Type: application/json' \
 `max_delivery_count` 在一次持锁尝试失败时判断，而不是在授予最后一次普通 Peek-Lock 领取 时判断。例如最大次数为 10 时，普通 Peek-Lock `Receive` 可返回 `delivery_count=10`；消费者仍可反复续锁并成功 Complete。如果改为 Abandon、让租约过期，或留下锁供显式嵌入式活租约回收，则消息进入 DLQ，不会按普通路径被 领取 第十一次。启动默认会保留租约尚未过期的最后一次尝试；到期后仍执行相同的 DLQ 边界规则。`ReceiveDeferred` 当前有所不同，见下文。
 
 > **Defer 与顺序。** 延后处理的消息仍占据队首位置：在 `group_fifo`/`strict_fifo`（或其他带分组）队列中，后续消息——同组消息，或 `strict_fifo` 下的**整个队列**——会一直阻塞，直到通过 `ReceiveDeferred` 取回并结算该消息（其他组可继续）。普通 `Receive` 不返回 deferred 消息；没有 TTL 时，也不会自动恢复。若丢失 `seq_number`，可用 `Peek` 配合 `state=deferred` 找回。
+
+Abandon 对负延迟或会使绝对可见截止时间超出纪元毫秒范围的新请求返回 `invalid_argument`，且不改变当前有效投递。时钟推进后，已经提交的完全相同请求仍可重放其有效回执。Go SDK 的延迟必须为零或至少 1ms；正的亚毫秒时长会在发送任何 HTTP 请求前被拒绝。
 
 > **Abandon 与顺序。** `delay_ms > 0` 时，消息会以 `scheduled` 状态停放到退避结束，并与 deferred 队首一样，在有序队列中继续占据队首位置：同组消息（`strict_fifo` 下为整个队列）不能抢先交付。低于最大次数且没有延迟时会立即重投；达到最大次数时，无论 `delay_ms` 如何，Abandon 都将消息转入 DLQ。Abandon 和调度器不增加 `delivery_count`，只有下一次 领取 才增加。由于 `Cancel` 仅适用于从未交付过的定时发送（`delivery_count=0`），无法移除停放于此的重试消息。
 

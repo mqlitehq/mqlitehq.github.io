@@ -47,6 +47,9 @@
     QueueService/Complete {"queue":"jobs","seq_number":N,"lock_token":"..."}  完成
     QueueService/Abandon  {...,"delay_ms":60000}   未达上限则重试；达到上限 -> DLQ
     QueueService/Reject   {...}                    放弃处理 -> 死信队列
+  在本文对应源码中，Abandon 的 delay_ms 必须非负，新可见截止时间
+  必须在时间戳范围内。Go SDK 延迟为零或至少 1ms；
+  非法输入不改变仍有效的投递。
   如果不结算，锁会过期（默认 30s）。恢复处理会将
   消息移回 active，或在最后一次尝试失败后将其送入 DLQ。达到
   上限不会中断最后一次领取：它仍可续锁或完成。

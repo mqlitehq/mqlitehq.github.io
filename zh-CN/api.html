@@ -351,7 +351,7 @@ curl &quot;$BASE_URL/healthz&quot;             # ok
 </tr>
 <tr>
 <td><code>Abandon</code></td>
-<td><code>delay_ms</code>（int，可选）</td>
+<td><code>delay_ms</code>（非负 int，可选）</td>
 <td>释放锁且不增加 <code>delivery_count</code>：低于最大次数时在 <code>delay_ms</code> 后重投（有序队列中，延迟的队首仍占据所属组的队首位置）；达到最大次数时转入 DLQ</td>
 </tr>
 <tr>
@@ -376,6 +376,7 @@ curl &quot;$BASE_URL/healthz&quot;             # ok
 <blockquote>
 <p><strong>Defer 与顺序。</strong> 延后处理的消息仍占据队首位置：在 <code>group_fifo</code>/<code>strict_fifo</code>（或其他带分组）队列中，后续消息——同组消息，或 <code>strict_fifo</code> 下的<strong>整个队列</strong>——会一直阻塞，直到通过 <code>ReceiveDeferred</code> 取回并结算该消息（其他组可继续）。普通 <code>Receive</code> 不返回 deferred 消息；没有 TTL 时，也不会自动恢复。若丢失 <code>seq_number</code>，可用 <code>Peek</code> 配合 <code>state=deferred</code> 找回。</p>
 </blockquote>
+<p>Abandon 对负延迟或会使绝对可见截止时间超出纪元毫秒范围的新请求返回 <code>invalid_argument</code>，且不改变当前有效投递。时钟推进后，已经提交的完全相同请求仍可重放其有效回执。Go SDK 的延迟必须为零或至少 1ms；正的亚毫秒时长会在发送任何 HTTP 请求前被拒绝。</p>
 <blockquote>
 <p><strong>Abandon 与顺序。</strong> <code>delay_ms &gt; 0</code> 时，消息会以 <code>scheduled</code> 状态停放到退避结束，并与 deferred 队首一样，在有序队列中继续占据队首位置：同组消息（<code>strict_fifo</code> 下为整个队列）不能抢先交付。低于最大次数且没有延迟时会立即重投；达到最大次数时，无论 <code>delay_ms</code> 如何，Abandon 都将消息转入 DLQ。Abandon 和调度器不增加 <code>delivery_count</code>，只有下一次 领取 才增加。由于 <code>Cancel</code> 仅适用于从未交付过的定时发送（<code>delivery_count=0</code>），无法移除停放于此的重试消息。</p>
 </blockquote>

@@ -198,6 +198,9 @@ Rules:
     QueueService/Complete {"queue":"jobs","seq_number":N,"lock_token":"..."}  done
     QueueService/Abandon  {...,"delay_ms":60000}   retry below limit; at limit -> DLQ
     QueueService/Reject   {...}                    give up -> dead-letter queue
+  On the documented source, Abandon delay_ms is nonnegative and a new visibility
+  deadline must fit the timestamp range. Go SDK delays are zero or at least 1ms;
+  invalid input leaves a live delivery unchanged.
   If you settle nothing, the lock expires (default 30s). Recovery returns the
   message to active, or sends a failed final attempt to the DLQ. Reaching the
   limit does not interrupt that final claim: it may still be renewed or completed.

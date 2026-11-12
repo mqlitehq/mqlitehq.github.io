@@ -69,6 +69,12 @@ preserving the matching old binary/database pair and starting v0.4.2 with a fres
   reclaims them at startup. Use the matching release runbook when planning maintenance.
   DLQ age/count/byte settings are asynchronous retention targets, so retained state
   may temporarily exceed them between bounded cleanup passes.
+- Abandon input validation in the documented source: delay_ms must be nonnegative
+  and a new absolute visibility deadline must fit epoch milliseconds. Go SDKs reject
+  negative or positive sub-millisecond durations before HTTP; delays are zero or
+  at least 1ms, with the existing millisecond precision. Invalid input leaves a live
+  delivery unchanged. An exact committed request can still replay its unexpired
+  settlement receipt after the clock advances.
 - Ordering: standard (per-group_id FIFO, cross-group parallel), group_fifo
   (group_id required), strict_fifo (whole-queue serial). Order holds across
   crashes and lock expiry. Abandon with delay_ms > 0 parks the message in scheduled
