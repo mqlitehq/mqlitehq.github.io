@@ -1,11 +1,16 @@
 mqlite main — full documentation bundle.
-Source version: v0.4.2. Latest supported release: [v0.4.2](https://github.com/mqlitehq/mqlite/releases/tag/v0.4.2).
+Source version: v0.4.3. Latest supported release: [v0.4.2](https://github.com/mqlitehq/mqlite/releases/tag/v0.4.2).
+Source includes unreleased changes.
 These docs track main; consult release notes for published artifacts and upgrade requirements.
 Source of truth: https://github.com/mqlitehq/mqlite/tree/main/docs
 
-<!-- ===== mqlite main · source v0.4.2; latest supported release v0.4.2 · docs/concepts.md ===== -->
+<!-- ===== mqlite main · source v0.4.3; latest supported release v0.4.2 · docs/concepts.md ===== -->
 
 # Core concepts & subscription filters
+
+This document follows `main` for release target v0.4.3. For an installed
+v0.4.2 release, use the [concepts at that tag](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/concepts.md);
+see [CHANGELOG.md](https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md) for version-specific behavior changes.
 
 > Goal: explain MQLite's model once, clearly, and place it against the comparable
 > services from Azure Service Bus, AWS (SQS + SNS) and GCP Pub/Sub. MQLite is designed
@@ -111,11 +116,13 @@ Every transition, with its trigger and the condition under which it fires:
   `Abandon`, lock expiry, and the scheduler do not. With `max=10`, the ordinary
   Peek-Lock `Receive` that returns `count=10` is a complete final attempt: it may renew
   its live lease repeatedly and still `Complete`. Reaching 10 does not itself move
-  the row. If that attempt is abandoned, its lease expires, or startup recovery
-  finds it locked, the row goes to the DLQ instead of receiving ordinary Peek-Lock
-  attempt number 11. Explicit `ReceiveDeferred` currently differs: it increments `count` but does
-  not currently refuse the claim based on `max`, so do not treat the configured
-  maximum as an admission limit for that by-sequence recovery path.
+  the row. If that attempt is abandoned, its lease expires, or an embedded owner
+  explicitly reclaims live leases, the row goes to the DLQ instead of receiving
+  ordinary Peek-Lock attempt number 11. Startup preserves it by default while the
+  lease remains live; expiry still applies the same boundary. Explicit `ReceiveDeferred`
+  currently differs: it increments `count` but does not currently refuse the claim
+  based on `max`, so do not treat the configured maximum as an admission limit for
+  that by-sequence recovery path.
 - **The DLQ is not a separate queue.** It is messages in the same queue with
   `state='dead_lettered'`. A message lands there when a failed locked attempt is
   abandoned, reaped, or recovered with `delivery_count >= max_delivery_count`, on
@@ -136,7 +143,9 @@ Every transition, with its trigger and the condition under which it fires:
   and delivery attempt, and cannot revive an expired lease. A live receipt can
   replay an already committed settlement only for the same queue, sequence, token,
   operation and effect-bearing arguments, including after the original lease
-  expires.
+  expires. Receipts expire 30 minutes after recording; replay does not extend
+  that deadline, and resource deletion or fixed subscription expiry can end
+  replay earlier.
 - **Lease, message TTL, and subscription lifetime are different clocks.** The lease
   temporarily fences one delivery attempt. Message TTL bounds normal delivery
   eligibility and can expire a message while locked; expiry moves it to the DLQ by
@@ -222,7 +231,9 @@ publish.
 - Name resolution at publish/send is unambiguous in the supported namespace: an
   active plain-queue or backing-queue name addresses that queue; an implicit topic
   name addresses its active subscription rows; any other name returns
-  `ErrQueueNotFound`. A valid name can never be both a queue and a topic, so a
+  `ErrQueueNotFound`. That sentinel also matches the broader `ErrNotFound` via
+  `errors.Is`, consistently in embedded mode and with a resource-aware remote
+  broker. A valid name can never be both a queue and a topic, so a
   `Send` is never silently rerouted.
 
 ```
@@ -576,9 +587,13 @@ network I/O APIs are exposed; `now()` can read the wall clock:
   for the filter rules MQLite guarantees.
 
 
-<!-- ===== mqlite main · source v0.4.2; latest supported release v0.4.2 · docs/internals.md ===== -->
+<!-- ===== mqlite main · source v0.4.3; latest supported release v0.4.2 · docs/internals.md ===== -->
 
 # How mqlite works — building a reliable queue on one SQLite file
+
+This document follows `main` for release target v0.4.3. For an installed
+v0.4.2 release, use the [internals at that tag](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/internals.md);
+see [CHANGELOG.md](https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md) for version-specific behavior changes.
 
 > This is the teaching document: how mqlite is actually built, table by table and
 > decision by decision — and *why* this construction yields a queue you can trust.
@@ -885,18 +900,25 @@ allowance. Those two rows per subscription still consume the shared 4,096-row
 budget. Exact affected-row checks keep this safe even when foreign keys are off.
 Subscriptions with any retained state remain on the ordinary fair row/byte path.
 
-**Crash recovery is one statement.** On `Open`, every `locked` row is an orphan
-of a previous process (locks are rows, remember) and is reclaimed — back to
-`active`, or straight to the dead-letter state if it died on its final allowed
-attempt. Same rule as the reaper; a crash never buys an extra delivery.
+**Startup lease recovery is one statement.** Open preserves rows whose
+`locked_until` is still in the future because a new process cannot prove that no
+remote or out-of-process handler still owns the persisted fencing token. It
+reclaims only expired rows on active resources by default. A single-process
+embedded owner that knows all prior handlers are gone may explicitly reclaim live
+leases. Resource lifecycle and message TTL remain authoritative. Every reclaimed
+row returns to `active`, or goes straight to the dead-letter state if it used its
+final allowed attempt. The rule is the same as the reaper, and preserving a live
+attempt does not increment `delivery_count`.
 
 **Ordinary retries are bounded by data.** `delivery_count` is incremented *at
 claim time* inside the claim UPDATE itself, so no failure mode can lose count.
 Reaching the maximum does not interrupt that claim: with `max_delivery_count=10`,
-ordinary Peek-Lock claim 10 is a full final attempt that can be renewed repeatedly and
-completed. If it is Abandoned, its lock expires, or startup recovery finds it
-still locked, that transition sees `delivery_count >= max_delivery_count` and
-moves it to `state='dead_lettered'` instead of allowing ordinary Peek-Lock claim 11.
+ordinary Peek-Lock claim 10 is a full final attempt that can be renewed repeatedly
+and completed. If it is Abandoned, its lock expires, or an embedded owner explicitly
+reclaims live leases, that transition sees `delivery_count >= max_delivery_count`
+and moves it to `state='dead_lettered'` instead of allowing ordinary Peek-Lock claim
+11. Default startup preserves that final attempt until its deadline; expiry then
+applies the same transition.
 `ReceiveDeferred` is the explicit exception described in §4: it increments the
 count without a maximum admission check. The DLQ is not a separate queue, just a
 state you can `Peek`, `Redrive` (back to active, count reset) or `Purge`, with
@@ -912,7 +934,9 @@ to make the *window* small and the *retries* safe:
 
 - **`settlement_receipts`** — when a settle (Complete/Abandon/Reject/Defer)
   succeeds, a receipt for the *request* is written *in the same transaction*
-  (kept ~30 minutes). If the client's response got lost and it retries, the
+  (logically valid for 30 minutes from recording; replay does not extend it).
+  Resource deletion or fixed subscription expiry can end replay earlier. If the
+  client's response got lost and it retries within that window, the
   settle matches zero rows — but finds an unexpired receipt, and returns success instead
   of a spurious `lock_lost`. Acknowledgements are idempotent.
 
@@ -928,14 +952,32 @@ to make the *window* small and the *retries* safe:
   receipt can replay the original effect after the original lease expires, but cannot
   grant a new effect or renew that expired lease.
 - **`receive_attempts`** — a client may tag `Receive` with an `attempt_id`. The
-  claimed batch is recorded under that id (same transaction again); a retry of
-  the same attempt **replays the exact same messages and lock tokens** instead of
-  claiming fresh ones and burning delivery counts.
+  claimed batch is recorded under that id (same transaction again); Peek-Lock
+  stores only the ordered sequence/token/deadline roster, then reconstructs the
+  immutable message fields from the locked rows while validating the whole batch
+  in one query. This avoids duplicating every live message body in the replay
+  table. A retry replays the exact same messages and lock tokens only while the
+  record is unexpired and every token still owns a live lease. If explicit embedded live-lease recovery,
+  startup recovery of an expired lease, ordinary lease expiry, or settlement
+  invalidated any token, the same transaction removes the stale response and
+  makes a safe new claim; a stale or
+  partially owned batch never reaches the caller. Tokenless ReceiveAndDelete
+  retains the full response because its message rows are gone. Both modes retain
+  the record for the greater of five minutes and the queue lock duration when
+  recorded, capped by a fixed subscription expiry. Neither replay nor lease
+  renewal extends that record's deadline. After it expires, the same ID may claim
+  new work even while a renewed original token remains live.
+  Managed local and remote receivers both retain AttemptID replay:
+  even an in-process database commit can return an uncertain outcome.
 - **`dedup`** — on the producer side, a `message_id` within the queue's dedup
   window collapses resends into the original row (no id? the body's SHA-256 is
   used as a content-addressed key). Same id with a *different* body is a loud
   conflict, never a silent overwrite — a single send gets `409`; in a batch the
-  offending slot is skipped (seq `0`) while the rest commit.
+  offending slot is skipped (seq `0`) while the rest commit. Dedup is off by
+  default. When enabled, its window starts at the last new enqueue for that key;
+  duplicate sends do not refresh it, and completion does not erase it. The
+  conflict check covers body bytes, not metadata, TTL or scheduled time, so a
+  duplicate does not update the original message.
 
 Notice the pattern: each idempotency mechanism is **a small table written in the
 same transaction as the operation it protects**. No timeouts-and-hope, no
@@ -995,8 +1037,9 @@ Every claim in this document is enforced by something that fails loudly:
   exceeds its delivery bound.
 - **A crash-injection layer** — a real worker process, hard-killed (`SIGKILL`)
   mid-transaction and restarted, proving the outbox is atomic across the crash
-  and every producer commit acknowledged to the harness survives. `Open` reclaims orphaned locks
-  to active or DLQ at the delivery limit. It re-execs the test binary, so
+  and every producer commit acknowledged to the harness survives. The crash
+  worker uses embedded recovery, which reclaims its orphaned locks to active or
+  DLQ at the delivery limit. It re-execs the test binary, so
   it is gated behind the `crash_injection` build tag and run on Linux in its own
   CI job: `make crash`, with the race detector, separately from the default package
   matrix. This tests *process* death, not power loss.
@@ -1019,7 +1062,8 @@ hear it from us:
 
 If your problem fits inside those lines — one node, thousands-per-second, must
 never lie to you — then the whole stack under your queue is a ~30 MB process,
-one file on disk (copyable with `cp` when stopped; use `VACUUM INTO` for a hot backup —
+one SQLite database (copy the complete DB/WAL/SHM set while stopped; use
+read-only `VACUUM INTO` for a hot backup —
 see [operations runbook](https://github.com/mqlitehq/mqlite/blob/main/docs/operations.md#consistent-backups)), and a set of promises you can
 re-verify by running `go test`.
 
@@ -1099,7 +1143,7 @@ with the conformance suite as the judge.
 [benchmark.md](https://github.com/mqlitehq/mqlite/blob/main/docs/benchmark.md).*
 
 
-<!-- ===== mqlite main · source v0.4.2; latest supported release v0.4.2 · docs/api-reference.md ===== -->
+<!-- ===== mqlite main · source v0.4.3; latest supported release v0.4.2 · docs/api-reference.md ===== -->
 
 # mqlite HTTP API reference
 
@@ -1109,9 +1153,13 @@ construction. This document is generated from the wire contract in
 [`wire/wire.go`](https://github.com/mqlitehq/mqlite/blob/main/wire/wire.go) (the single source of truth shared by the broker
 and the Go SDK, so the two can't drift) and the server's error mapping.
 
-This reference describes v0.4.2, the latest supported release. v0.3.3 is
-withdrawn and unsupported; use the documentation in the v0.3.2 tag when working
-with its smaller management surface.
+This reference follows `main` for release target v0.4.3. Use the [v0.4.2 reference](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/api-reference.md)
+for that installed broker. The broker time header, revised Go managed Receiver
+retry and renewal behavior, 1-second through 1-hour queue lock-duration bounds,
+lease-preserving startup, and coordinated shutdown responses documented here
+are included in the v0.4.3 release target; see [CHANGELOG.md](https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md). v0.3.3 is withdrawn
+and unsupported; use the documentation in the v0.3.2 tag when working with its
+smaller management surface.
 
 Every RPC body must be exactly one non-null JSON object, including operations
 whose request is otherwise empty (`{}`). Unknown fields and data after that object
@@ -1122,9 +1170,38 @@ values replace earlier ones, while repeated object and map values may merge.
 
 - **Transport:** HTTP `POST`, `Content-Type: application/json`. Discovery and
   health use open `GET` endpoints; opt-in metrics uses authenticated `GET` on the same port.
+- **Go SDK transport:** RPC clients never follow HTTP redirects. The default
+  client keeps up to 64 idle connections per broker for concurrent receivers and
+  releases its own idle connections on `Client.Close`. A client passed through
+  `WithHTTPClient` remains caller-owned; MQLite preserves its transport and timeout
+  but still disables redirects for RPCs. Size a custom transport's
+  `MaxIdleConnsPerHost` to at least Receiver concurrency plus effective prefetch
+  (the managed pipeline's maximum network work in flight). If an application has
+  replaced the process-wide `http.DefaultTransport` with an opaque wrapper,
+  MQLite preserves that wrapper for instrumentation/mock compatibility and does
+  not close it; its underlying connection-pool sizing remains the application's
+  responsibility because a generic `http.RoundTripper` cannot be cloned or tuned.
 - **`body`** is **base64** in JSON (Go marshals `[]byte` as base64).
 - **Timestamps** are **epoch milliseconds** (UTC) integers. Message durations use
   `*_ms`; observability durations explicitly named `*_seconds` retain fractional seconds.
+- **Broker time header:** every broker response includes
+  `X-Mqlite-Server-Time-Ms`, the UTC epoch-millisecond value from the same clock
+  used for lease, TTL, scheduling, and settlement decisions. The managed Go
+  client trusts it only on successful broker responses and maps absolute lease
+  deadlines onto its local monotonic clock with a conservative transport budget.
+  Older clients ignore the additive header. With an older broker, the client can
+  use HTTP `Date` at its one-second precision; a short lower bound dominated by
+  that precision uses bounded degraded-clock pacing. Without either header the
+  public absolute deadline is retained, but the managed Receiver reports one
+  diagnostic, confirms the lease before dispatch, and keeps a bounded
+  untrusted-clock cadence instead of using that foreign timestamp as a local
+  schedule. New and reconfigured queues accept either `0` (the 30-second default)
+  or a lock duration from 1 second through 1 hour. Legacy databases containing a
+  duration outside that range remain readable, but this no-header fallback may
+  fail closed when it cannot prove enough lease remains for a very short lease.
+  Raw HTTP callers should preserve one time header, map broker time, or synchronize
+  clocks.
+  CORS-enabled brokers expose this header to browser clients.
 - **Sequence numbers** (`seq_number`) are broker-assigned integers, strictly increasing
   and **never reused** (they may gap) — **the handle you settle with**, valid only while
   the message lives. You never set them.
@@ -1156,6 +1233,17 @@ reasonable (they count toward the JSON request you send, not toward the body cap
 | `Peek` `max` | 32 default, 1000 max | request field |
 | retained subscriptions | 10,000 active + deleting | `MQLITE_MAX_SUBSCRIPTIONS` (serve) / `Options.MaxSubscriptions` or `WithMaxSubscriptions` (embedded) |
 | filter `expr` source | capped length + AST node count | internal (see [concepts.md](https://github.com/mqlitehq/mqlite/blob/main/docs/concepts.md#subscription-filters-expr)) |
+
+The v0.4.3 release target applies a 32 MiB serialization-accounting threshold to
+new Peek, Receive, and ReceiveDeferred batches. The accounting includes message
+bodies, base64 expansion, JSON escaping and metadata. The engine returns the
+message that reaches the threshold, then stops before claiming another one;
+the bound is therefore the threshold plus one message, not a hard per-message
+rejection limit. This allows existing individually large messages to make
+progress. Peek continues with `from_seq`; ReceiveDeferred callers request the
+unreturned sequence numbers again. An existing Receive attempt replays its
+original committed batch, including records created before this accounting
+change; it is never truncated and its outstanding tokens are not revoked.
 
 ## The base URL
 
@@ -1446,13 +1534,51 @@ Peek-Lock (default) or Receive-and-Delete; long-polls up to `wait_time_ms`.
 Receive-and-Delete removes the row before returning it and grants no lease:
 `lock_token` is empty and `locked_until_ms` is zero (omitted when empty), including
 replays with the same receive attempt ID. The SDK exposes a zero `LockedUntil` time.
-Every newly granted `Receive` claim increments `delivery_count`; replaying a live
-`receive_attempt_id` returns the saved claim and does not increment it again.
+Every newly granted `Receive` claim increments `delivery_count`. A Peek-Lock
+`receive_attempt_id` returns its saved claim without another increment only while
+every saved token still owns a live lease. If explicit embedded live-lease
+recovery, startup recovery of an expired lease, settlement, or ordinary lease
+expiry invalidates any token, the broker discards that stale response and the
+retry performs a safe new claim; it never returns ownership the caller no longer
+has.
+Use an attempt ID only to retry the exact Receive whose response was not observed.
+Once the response arrives, do not reuse that ID for another Receive or after
+settling part of its batch. Invalidating a partially stale cached response does
+not revoke the other live leases from the original response: their original
+tokens remain valid until settlement or lease expiry, preventing concurrent
+delivery while the original caller may still be processing them. A replacement
+claim may therefore return fewer messages or different currently eligible work.
+Receive-and-Delete keeps replaying its tokenless saved response for the attempt lifetime.
+For either mode, the saved record expires after the greater of five minutes and
+the queue lock duration at the time it is recorded, capped by a fixed subscription
+expiry. Replaying or renewing a message does not extend that record's deadline.
+After record expiry the same ID can make a new claim, even if a previously renewed
+token is still live. An attempt ID is therefore a bounded recovery key, not a
+permanent delivery identity.
+A live non-empty saved response also binds that attempt ID to its original
+`receive_mode`; reusing it with the other mode is `400 invalid_argument`. Empty
+results are not saved, and an expired record no longer binds the ID.
+
+The managed Go Receiver keeps that attempt ID across all transient retries in one
+Receive round. Its first transient failure adds no client-generated delay unless
+HTTP 429/503 may supply a valid `Retry-After` pacing hint. Continued failures use
+equal-jitter exponential backoff with a 500 ms base and a three-second generated
+cap. A valid hint may raise one wait up to 60 seconds; when it raises the generated
+delay, the error handler is called before waiting, including on the first failure.
+`Retry-After: 0` cannot remove later backoff. The Receiver accepts delta-seconds
+and HTTP-date forms. An absolute date uses
+the same response's parseable `Date`, otherwise the local response receipt time;
+malformed, negative, and overflowing values are ignored. Cancellation interrupts
+the wait. A successful response, including an empty batch, starts a fresh round
+with a new attempt ID. HTTP 500–599 are transient under the 5xx rule; status 600
+is terminal. Renew and settlement use separate retry policies.
 
 - **Request** `ReceiveRequest`: `queue`, `max_messages` (int, default 1, max 256),
   `wait_time_ms` (int, long-poll; max 20000), `receive_mode` (int: `0` peek-lock,
-  `1` receive-and-delete), `receive_attempt_id` (string, optional idempotency key —
-  a retry replays the same batch / same lock tokens).
+  `1` receive-and-delete; any other value is `400 invalid_argument`),
+  `receive_attempt_id` (string, optional idempotency key —
+  a Peek-Lock retry replays the same batch while all saved leases remain valid;
+  Receive-and-Delete replays its tokenless saved response).
 - **Response** `ReceiveResponse`: `messages` ([Message]) — each carries a
   `lock_token` to settle with (peek-lock mode).
 
@@ -1480,11 +1606,15 @@ already counts as expired, even if the background reaper has not run. The broker
 time after local writer admission and afresh for each statement and remote retry. A
 live exact-request receipt can replay a previously committed settlement after its
 original lease deadline; it cannot authorize a different request or revive a lease.
+The receipt expires 30 minutes after it is recorded. Replaying it does not refresh
+that deadline, and resource deletion or fixed subscription expiry can end replay
+earlier. After expiry, `lock_lost` does not prove the original settlement failed;
+retain application-side evidence when reconciliation must outlive this window.
 
 | Method | Extra fields | Effect |
 |---|---|---|
 | `Complete` | — | delete the message (done) |
-| `Abandon` | `delay_ms` (int, optional) | release the lock without incrementing `delivery_count`: below max, redeliver after `delay_ms` (a delayed head keeps holding its group's line on ordered queues); at max, move to the DLQ |
+| `Abandon` | `delay_ms` (nonnegative int, optional) | release the lock without incrementing `delivery_count`: below max, redeliver after `delay_ms` (a delayed head keeps holding its group's line on ordered queues); at max, move to the DLQ |
 | `Reject` | `dead_letter_reason`, `dead_letter_description` (optional) | move to the DLQ |
 | `Defer` | — | set aside; retrieve later by seq via `ReceiveDeferred` |
 | `Renew` | — | extend the same live lease without changing state, token, or `delivery_count`; cannot revive an expired lease |
@@ -1501,8 +1631,10 @@ current deadline; once the lease is expired, Renew fails with `409 lock_lost`.
 ordinary Peek-Lock claim is granted. For example, with a maximum of 10, an ordinary Peek-Lock `Receive`
 may return `delivery_count=10`; that consumer can renew the lease repeatedly and
 Complete successfully. If it instead Abandons, lets the lease expire, or leaves the
-lock for startup recovery, the message goes to the DLQ and is not ordinarily claimed
-an eleventh time. `ReceiveDeferred` currently differs, as described below.
+lock for explicit embedded live-lease recovery, the message goes to the DLQ and is
+not ordinarily claimed an eleventh time. Startup preserves that final attempt by
+default while its lease is unexpired; expiry still applies the same DLQ boundary. `ReceiveDeferred` currently
+differs, as described below.
 
 > **Defer + ordering.** A deferred message keeps its head-of-line position: in a
 > `group_fifo`/`strict_fifo` (or otherwise grouped) queue the messages behind it — its
@@ -1510,6 +1642,12 @@ an eleventh time. `ReceiveDeferred` currently differs, as described below.
 > via `ReceiveDeferred` and settled (other groups proceed). Normal `Receive` never
 > returns a deferred message, and with no TTL there is no auto-recovery, so recover a
 > lost `seq_number` via `Peek` with `state=deferred`.
+
+Abandon rejects a negative delay or a new absolute visibility deadline that
+overflows epoch milliseconds with `invalid_argument`, without changing the live
+delivery. An exact request that already committed can still replay its live
+receipt after the clock advances. Go SDK delays must be zero or at least 1ms;
+positive sub-millisecond durations are rejected before any HTTP request.
 
 > **Abandon + ordering.** With `delay_ms > 0` the message parks as `scheduled` until the
 > backoff lapses and — like a deferred head — holds its head-of-line position on ordered
@@ -1536,6 +1674,11 @@ a Complete-per-message N+1 (the cheap path for draining).
   for a stale/expired lock on that item (not fatal to the batch). Each item is fenced +
   idempotent exactly like `Complete`.
 
+The Go SDK requires exactly one result per requested message in the same order,
+with no renewal deadline on a completion result. A malformed successful
+acknowledgement returns `ErrOutcomeUnknown`, because some completions may already
+have committed.
+
 ### RenewBatch
 
 Extend the lock lease of a whole received batch in **one round-trip**.
@@ -1550,15 +1693,35 @@ against a 2 s lock, and most of the locks expire mid-pass.
   `ok=false` for a stale/expired lock on that item (not fatal to the batch); each item is fenced
   on its own `lock_token`, exactly like `Renew`.
 
-`locked_until_ms` is the deadline the broker actually committed — renew again before it. And
-`ok=true` means the lease was live **when the broker's statement finished** — not when the answer
-reaches you. The result still has to be mapped, encoded and travel back, so on a very short lease
-it can lapse on the way. **`locked_until_ms` is the authoritative fact: compare it against your own
-clock.** (If the write itself outlived the lock, you get `ok=false` rather than a lock you never
-really held.) Like single-message Renew, the batch operation leaves token, state, and
+`locked_until_ms` is the absolute broker deadline that was actually committed — renew again before
+it. And `ok=true` means the lease was live **when the broker's statement finished** — not when the
+answer reaches you. The result still has to be mapped, encoded and travel back, so on a very short
+lease it can lapse on the way. Current brokers return `X-Mqlite-Server-Time-Ms` from the same clock
+as the lease; the managed Receiver combines that observation with local monotonic time and a
+conservative transport budget instead of directly comparing two hosts' wall clocks. It performs a
+bounded synchronous Renew before dispatch when a deadline is unusable, separates renewal cadence
+from the request watchdog, reserves two observed round trips for the next request, and never extends
+a lease merely because the local wall clock falls in a wide uncertainty interval. A confirmed exact
+lease below the 50 ms minimum cadence fails closed instead of entering a renewal hot loop. Older
+brokers use HTTP `Date` when available; without either time header they retain the public absolute
+deadline but never use it as a managed local schedule. The Receiver emits one diagnostic, confirms
+ownership before dispatch, and keeps a conservative 250ms cadence. Because no relative lease
+duration is available in that fallback, preserve one time header. New and
+reconfigured queues enforce an explicit lock duration range of 1 second through
+1 hour; zero selects the 30-second default. Legacy configurations outside that
+range remain readable, but a very short lease can fail closed when safe renewal
+cannot be proven.
+Raw `RenewBatch` callers should map the broker clock likewise (or keep clocks synchronized) and
+must not turn clock offset alone into `ErrLockLost`. (If the write itself outlived the lock, you get
+`ok=false` rather than a lock you never really held.) Like single-message Renew, the batch
+operation leaves token, state, and
 `delivery_count` unchanged and commits the later of the existing deadline and the
 broker's fresh `now + lock_duration` candidate (capped by a fixed subscription
 lifetime).
+
+The Go SDK requires exactly one ordered result per request item. A successful
+renewal must have a positive `locked_until_ms`; a failed renewal must not claim a
+deadline. Malformed renewal results are rejected rather than treated as renewed.
 
 > **Why 512?** Renewal is a claim about the *future* ("this lease is live"), and that claim is
 > only keepable within a single statement: across several, the first batch's lease can expire —
@@ -1766,13 +1929,13 @@ rejected with `409 name_conflict` instead of silently taking over
 **Response** `{}` (Empty).
 
 **Request** `CreateQueueRequest`: `name` (valid UTF-8, 1–128 bytes) + `config`
-(`QueueConfigJSON`, all fields optional — omit one to take its default). Every duration is **epoch milliseconds**.
+(`QueueConfigJSON`, all fields optional — omit one to take its default). Every duration is in **milliseconds**.
 Config is **queue-level**: it's set here, not per `Send`/`Receive`.
 
 | Field | Type | Default | Meaning |
 |---|---|---|---|
 | `kind` | string | `queue` | `queue` (normal). `subscription` can reconfigure an existing legitimate backing queue through the advanced engine/wire surface, but cannot create a backing queue without a topic mapping; use `Subscribe` to create one. |
-| `lock_duration_ms` | int (ms) | `30000` (30s) | the **peek-lock window**. At `locked_until_ms`, new settlement and renewal fail immediately; the reaper later returns the row to `active` below the delivery limit or dead-letters it at the limit. `Renew` uses this duration to extend the same live attempt; the committed deadline is never earlier than the existing one. There is **no per-`Receive` override** — it's fixed by the queue. `0` → the 30s default. |
+| `lock_duration_ms` | int (ms) | `30000` (30s) | the **peek-lock window**. At `locked_until_ms`, new settlement and renewal fail immediately; the reaper later returns the row to `active` below the delivery limit or dead-letters it at the limit. `Renew` uses this duration to extend the same live attempt; the committed deadline is never earlier than the existing one. There is **no per-`Receive` override** — it's fixed by the queue. `0` selects the 30s default; an explicit value must be from `1000` through `3600000` (1s–1h), inclusive. Existing databases with an older value outside that range still open, but an explicit reconfiguration must satisfy the range. Upgrade and reconfiguration do not rewrite or shorten a `locked_until_ms` already issued to a consumer. |
 | `max_delivery_count` | int | `10` | ordinary delivery-attempt budget. The Nth ordinary Peek-Lock `Receive` is a usable final attempt; it is dead-lettered with `reason=MaxDeliveryCountExceeded` only if that locked attempt is abandoned, its lease expires, or it is recovered on startup at `delivery_count >= N`. `ReceiveDeferred` increments the count but currently does not use N as an admission check. `0` → the default of 10. |
 | `default_ttl_ms` | int (ms) | `0` = unlimited | default **and ceiling** for message TTL. A shorter positive Send `ttl_ms` is honored; a longer one is capped. For a scheduled Send the effective TTL starts at scheduled visibility. On expiry normal delivery ends and the message goes to the DLQ or is discarded — see `dead_letter_on_expire`. |
 | `dead_letter_on_expire` | bool | `true` | on TTL expiry: `true` → move to the DLQ; `false` → discard silently. |
@@ -2000,7 +2163,17 @@ collision?**
 | queue dedup | effect of `message_id` |
 |---|---|
 | **off** (`dedup_window_ms = 0`, the **default**) | purely informational metadata. **No uniqueness is enforced and a collision is impossible** — send the same `message_id` a thousand times and you get a thousand independent messages (each its own `seq_number`). Use it as an idempotency hint your *own* consumer checks. |
-| **on** (`dedup_window_ms > 0`) | within the sliding window, keyed by **`(queue, message_id)`**: <br>• same id **+ same body** → collapses to one enqueue (the duplicate is silently dropped; you get the original `seq_number` back). <br>• same id **+ different body** → a **conflict**: a single `Send` returns `409 already_exists` (`ErrDedupConflict`); in a multi-message `Send` that one slot comes back as `seq 0` (skipped) while the rest commit. <br>• empty id → the body's SHA-256 is the key (content-addressed dedup). |
+| **on** (`dedup_window_ms > 0`) | within the window, keyed by **`(queue, message_id)`**: <br>• same id **+ same body** → collapses to one enqueue (the duplicate is silently dropped; you get the original `seq_number` back). <br>• same id **+ different body** → a **conflict**: a single `Send` returns `409 already_exists` (`ErrDedupConflict`); in a multi-message `Send` that one slot comes back as `seq 0` (skipped) while the rest commit. <br>• empty id → the body's SHA-256 is the key (content-addressed dedup). |
+
+- **The window starts at the last new enqueue for that key.** Duplicate sends do
+  not slide or refresh it. At exact window expiry, the key can enqueue a new
+  message. Completing the original message does not end the dedup window: a
+  duplicate within it still returns the original sequence number, even though
+  that message may already be gone.
+- **The conflict check compares body bytes.** Subject, properties, routing metadata,
+  requested TTL and scheduled time are not part of that comparison. Sending the
+  same key and body with different metadata does not update the original message.
+  Keep the whole request stable when retrying an uncertain send.
 
 - **Dedup is per-queue.** The key is `(queue, message_id)`, so the same `message_id` in two
   different queues — or fanned out to two subscriptions' backing queues — never collides;
@@ -2011,7 +2184,9 @@ collision?**
 
 ## Errors
 
-Errors are a JSON envelope `{"code": "...", "message": "..."}` with an HTTP status:
+Errors are a JSON envelope `{"code": "...", "message": "..."}` with an HTTP
+status. A `not_found` response may add an optional `resource` discriminator
+(`"queue"` or `"subscription"`); older clients safely ignore this additive field:
 
 | HTTP | `code` | When |
 |---|---|---|
@@ -2019,7 +2194,7 @@ Errors are a JSON envelope `{"code": "...", "message": "..."}` with an HTTP stat
 | 400 | `group_required` | a `group_fifo` send with no `group_id` |
 | 401 | `unauthenticated` | missing/invalid Bearer token (auth is on by default; only `MQLITE_TOKENS=off` disables it) |
 | 403 | `permission_denied` | a valid key lacks permission, or key management was attempted with auth disabled (`mqlite.ErrPermissionDenied`) |
-| 404 | `not_found` | the queue, exact topic/subscription pair, or message doesn't exist; or an unknown path |
+| 404 | `not_found` | the queue, exact topic/subscription pair, or message doesn't exist; or an unknown path. Missing queues and subscriptions include the corresponding `resource` when the broker can identify it. |
 | 409 | `already_exists` | single-message dedup conflict (same id, different body) |
 | 409 | `name_conflict` | a queue/subscription/topic name collision at creation time, including a name reserved by a deleting queue — the namespace is one and disjoint (`Subscribe`/`CreateQueue`) |
 | 409 | `key_conflict` | a managed key ID or token digest is already registered (`mqlite.ErrKeyConflict`); no existing secret is returned |
@@ -2028,7 +2203,8 @@ Errors are a JSON envelope `{"code": "...", "message": "..."}` with an HTTP stat
 | 409 | `subscription_not_empty` | subscription deletion found retained messages in at least one state |
 | 429 | `resource_exhausted` | the active plus deleting subscription capacity is full (`mqlite.ErrSubscriptionLimit`) |
 | 413 | `message_too_large` | a message body over `MaxMessageBytes` (default 1 MiB), or request decoding that exceeds `server.MaxBodyBytes` (default 32 MiB) |
-| 499 | `canceled` | the client canceled the request |
+| 499 | `canceled` | the request context was canceled. A managed Receiver whose own context is still live treats a received 499 as transient and retries the same Receive attempt. Caller cancellation stops Receive retries and cancels handler contexts; `Run` still joins active handlers, renewals, and bounded cleanup settlement before returning. See [consumer stop boundaries](https://github.com/mqlitehq/mqlite/blob/main/docs/operations.md#consumer-stops-and-host-interruptions). |
+| 503 | `unavailable` | graceful broker drain fenced a `Receive` before its first claim round. The response includes `Retry-After: 1` (also exposed to browser code when CORS is enabled); retry with the **same** `receive_attempt_id`, because this request may itself be replaying a claim whose earlier response was lost. A long poll that had already completed a confirmed empty round instead wakes with `200` and an empty `messages` list. |
 | 503 | `outcome_unknown` | a remote (Turso/libSQL) write lost its commit acknowledgement — it **may or may not** have applied. **Do not blindly retry**; reconcile messages by `message_id`/dedup, or key operations by their retained public key ID (`mqlite.ErrOutcomeUnknown`). Only occurs against a remote store, never a local file/`:memory:`. |
 | 500 | `internal` | unexpected server error |
 
@@ -2043,10 +2219,27 @@ works in both embedded and client mode. An accepted queue or subscription
 deletion is a successful operation even when its typed HTTP result is
 `state:"deleting"`.
 
+With a resource-aware broker, a missing queue matches both
+`mqlite.ErrQueueNotFound` and the broader `mqlite.ErrNotFound`; this is the same
+hierarchy as embedded mode. A new client connected to an older broker receives
+the legacy envelope without `resource` and can only match `ErrNotFound`.
 
-<!-- ===== mqlite main · source v0.4.2; latest supported release v0.4.2 · docs/cli.md ===== -->
+The Go SDK bounds ordinary successful response bodies at 64 MiB and error bodies
+at 64 KiB. Outside lifecycle deletion's explicit `ErrOutcomeUnknown` cases, a
+non-2xx response is available through `errors.As` as `*mqlite.HTTPError`; its
+`StatusCode` and `HTTPStatus()` retain the HTTP status even when an intermediary
+returned no JSON error code. Redirect errors report only the status and never copy
+the untrusted `Location` value into the error.
+
+
+<!-- ===== mqlite main · source v0.4.3; latest supported release v0.4.2 · docs/cli.md ===== -->
 
 # CLI reference (`mqlite`)
+
+This reference follows `main` for release target v0.4.3. Cross-invocation
+local settlement and lease-preserving maintenance below are not included in
+v0.4.2; use the [CLI reference at that tag](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/cli.md)
+for that installed binary. See [CHANGELOG.md](https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md).
 
 One binary, **two modes** — the same commands work against a local SQLite DB
 (embedded) or a running broker (client), chosen by environment:
@@ -2113,12 +2306,11 @@ Two things are the CLI's own, and are *not* claims about the HTTP response:
 The CLI also doesn't expose *every* HTTP operation (batch send, attempt ids). For the complete
 contract — all routes, all fields — see [api-reference.md](https://github.com/mqlitehq/mqlite/blob/main/docs/api-reference.md).
 
-> **Settling across invocations needs a broker.** `receive --no-ack` locks a message and
-> prints its `lock-token`; you settle it later with `complete/abandon/reject/defer/renew
-> <queue> <seq> <token>`. This works against a running broker (client mode), which holds
-> the lock between calls. In **embedded** mode each invocation opens the DB fresh and
-> reclaims orphaned locks, so a `--no-ack` lock does not survive to the next command — use
-> a broker (`mqlite serve` + `--endpoint`) when you need manual settle-later.
+> **Settling across invocations.** `receive --no-ack` locks a message and prints its
+> `lock-token`; settle it later with `complete/abandon/reject/defer/renew <queue> <seq>
+> <token>`. Both broker and local embedded CLI invocations preserve that token until
+> its deadline. Prefer a broker for multi-process consumers: the local DB still permits
+> only one owning process at a time, and an expired token cannot be revived.
 
 ## Commands
 
@@ -2220,7 +2412,7 @@ mqlite create-queue orders --lock 30s --max-delivery 5 --dedup 10m --ordering st
 ```
 | Flag | Default | |
 |---|---|---|
-| `--lock` | 0 → 30s | Peek-Lock duration (`0` inherits the engine default, 30s) |
+| `--lock` | 0 → 30s | Peek-Lock duration (`0` inherits the 30s engine default; an explicit value must be from 1s through 1h) |
 | `--max-delivery` | 0 → 10 | ordinary Peek-Lock claim budget: the Nth claim is a usable final attempt; only failure of that locked attempt sends it to the DLQ (`0` inherits 10) |
 | `--ttl` | 0 (unlimited) | default **and ceiling** for message TTL; a shorter Send TTL is honored, a longer one is capped |
 | `--dedup` | 0 (off) | dedup window |
@@ -2389,7 +2581,8 @@ reject it otherwise). New local DBs use `auto_vacuum=INCREMENTAL`, so the defaul
 checkpoints and exhausts the current incremental freelist; `--full` runs a full
 `VACUUM` (rewrites the file, global lock). The running broker also performs a
 bounded pass every 60 seconds once at least 256 pages are free. Not applicable to
-a remote Turso/libSQL store.
+a remote Turso/libSQL store. Opening the stopped broker DB for vacuum preserves
+every unexpired delivery and its fencing token.
 ```bash
 MQLITE_DB=file:/data/mq.db mqlite vacuum          # incremental
 MQLITE_DB=file:/data/mq.db mqlite vacuum --full   # full rewrite
@@ -2397,8 +2590,9 @@ MQLITE_DB=file:/data/mq.db mqlite vacuum --full   # full rewrite
 
 ### `complete` / `abandon` / `reject` / `defer` / `renew` — settle a message
 Settle a message received earlier with `receive --no-ack` (which printed its
-`lock-token`). Positional args are always `<queue> <seq> <lock-token>`. Client mode only
-in practice (a broker holds the lock between calls — see the note under Global flags).
+`lock-token`). Positional args are always `<queue> <seq> <lock-token>`. A broker is
+recommended for concurrent consumers; local embedded invocations can also settle
+a token while its lease remains live (see the note under Global flags).
 ```bash
 mqlite complete orders 42 lt_9f3a…                 # done
 mqlite abandon  orders 42 lt_9f3a… --delay 60s     # retry after backoff, or DLQ at the limit
@@ -2524,7 +2718,7 @@ See also: [api-reference.md](https://github.com/mqlitehq/mqlite/blob/main/docs/a
 [examples.md](https://github.com/mqlitehq/mqlite/blob/main/docs/examples.md) (Go SDK).
 
 
-<!-- ===== mqlite main · source v0.4.2; latest supported release v0.4.2 · docs/access-keys.md ===== -->
+<!-- ===== mqlite main · source v0.4.3; latest supported release v0.4.2 · docs/access-keys.md ===== -->
 
 # Access keys
 
@@ -2702,7 +2896,7 @@ revocation state or discard newer credentials. Review keys using a configured
 administrator before reopening traffic. See [backup and upgrade procedures](https://github.com/mqlitehq/mqlite/blob/main/docs/operations.md).
 
 
-<!-- ===== mqlite main · source v0.4.2; latest supported release v0.4.2 · docs/deployment.md ===== -->
+<!-- ===== mqlite main · source v0.4.3; latest supported release v0.4.2 · docs/deployment.md ===== -->
 
 # Deploying mqlite
 
@@ -2754,9 +2948,10 @@ and error reference: [api-reference.md](https://github.com/mqlitehq/mqlite/blob/
 ## Docker / GHCR
 
 > **Version and upgrade compatibility.**
-> The latest supported release is **v0.4.2**, with default port **6754** and
-> schema token **7**. Pin the exact v0.4.2 binary or image rather than relying on
-> a moving image alias. v0.3.3 is withdrawn, unsupported, and retracted by
+> This source targets **v0.4.3**, with default port **6754** and
+> schema token **7**. Verify its tag and assets on
+> [Releases](https://github.com/mqlitehq/mqlite/releases) before using the exact
+> v0.4.3 binary or image in these examples. v0.3.3 is withdrawn, unsupported, and retracted by
 > v0.4.0 and later; its public assets and exact image remain available for
 > forensic or compatibility inspection and must not be deployed.
 >
@@ -2776,21 +2971,21 @@ remain `manage` operations. Browser root requests that explicitly prefer HTML
 enter the enabled console, while curl and JSON clients retain the discovery
 response. The wire contract is unchanged and no database rebuild is required.
 
-The exact supported image is multi-arch (amd64 + arm64):
+The target image is multi-arch (amd64 + arm64); confirm publication before running:
 
 ```bash
-# v0.4.2, default port 6754
+# v0.4.3 release target, default port 6754
 docker run -d --name mqlite -p 6754:6754 \
   -v mqlite-data:/data \
   -e MQLITE_DB=file:/data/mq.db \
   -e MQLITE_TOKENS=mqk_prod_CHANGEME \
   -e MQLITE_MONITOR_TOKENS=mqk_monitor_CHANGEME \
   -e MQLITE_SYNC=FULL \
-  ghcr.io/mqlitehq/mqlite:0.4.2
+  ghcr.io/mqlitehq/mqlite:0.4.3
 ```
 
 - The named volume `mqlite-data` persists the SQLite file across restarts.
-- Pin exact `0.4.2` in production. Images `>= 0.3.0` listen on `6754`;
+- Pin exact `0.4.3` in production. Images `>= 0.3.0` listen on `6754`;
   **`0.2.x` and earlier listen on `8080`**.
 - Verify: `curl http://localhost:6754/` (discovery card) and `/healthz`. Metrics is
   disabled by default. For a private broker or an ingress that blocks public
@@ -2809,7 +3004,7 @@ app            = "your-mqlite"
 primary_region = "sin"            # pick a region near you
 
 [build]
-  image = "ghcr.io/mqlitehq/mqlite:0.4.2"   # latest supported exact image
+  image = "ghcr.io/mqlitehq/mqlite:0.4.3"   # exact release-target image
 
 [env]
   MQLITE_DB = "file:/data/mq.db"            # SQLite on the persistent volume
@@ -2923,7 +3118,7 @@ online snapshots, offline directory copies, isolated restore validation and roll
 Use a fresh restore directory so an old WAL/SHM cannot attach to the snapshot.
 
 **v0.2.0 databases use schema 2; v0.3.0/v0.3.1/v0.3.2 and withdrawn
-v0.3.3 use schema 5; v0.4.0, v0.4.1, and v0.4.2 use schema 7.**
+v0.3.3 use schema 5; v0.4.0 through v0.4.3 use schema 7.**
 Intermediate untagged lifecycle builds used schema 6. There is no in-place
 migration between these tokens. Before testing a different token, account for
 retained work in every state, keep the old binary/database pair and a consistent
@@ -2987,7 +3182,7 @@ curl -H "Authorization: Bearer $T" -H 'Content-Type: application/json' \
 - [ ] Enable `MQLITE_METRICS=on` for authenticated Prometheus scraping on the API port; use private routing or public-ingress path filtering to keep `/metrics` private — see [observability.md](https://github.com/mqlitehq/mqlite/blob/main/docs/observability.md).
 
 
-<!-- ===== mqlite main · source v0.4.2; latest supported release v0.4.2 · docs/observability.md ===== -->
+<!-- ===== mqlite main · source v0.4.3; latest supported release v0.4.2 · docs/observability.md ===== -->
 
 # Observability
 
@@ -3535,7 +3730,7 @@ An occupied-resource or capacity rejection is an application outcome, not a
 storage failure.
 
 
-<!-- ===== mqlite main · source v0.4.2; latest supported release v0.4.2 · docs/observability-cloud.md ===== -->
+<!-- ===== mqlite main · source v0.4.3; latest supported release v0.4.2 · docs/observability-cloud.md ===== -->
 
 # Cloud and Kubernetes monitoring
 
@@ -3684,12 +3879,16 @@ validation steps. Local integration evidence must not be presented as a managed-
 deployment test.
 
 
-<!-- ===== mqlite main · source v0.4.2; latest supported release v0.4.2 · docs/operations.md ===== -->
+<!-- ===== mqlite main · source v0.4.3; latest supported release v0.4.2 · docs/operations.md ===== -->
 
 # Production operations
 
-This runbook describes v0.4.2, the latest supported release (port 6754, schema
-token 7). v0.3.3 is withdrawn and
+This runbook follows `main` for release target v0.4.3 (port 6754, schema token 7).
+Use the [v0.4.2 runbook](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/operations.md)
+when operating that binary. In particular, lease-preserving startup and local
+maintenance, coordinated broker shutdown, and the revised managed Receiver
+behavior below are included in the v0.4.3 release target; see [CHANGELOG.md](https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md).
+v0.3.3 is withdrawn and
 unsupported; its public assets and exact image remain available for forensic or
 compatibility inspection and must not be deployed. v0.4.2 retains v0.4.0's
 retraction of v0.3.3. Upgrading from v0.3.2 or another schema-5 release
@@ -3730,7 +3929,25 @@ Still quiesce clients and avoid overlapping brokers during the binary replacemen
   snapshot can repeat work whose external side effects already happened. Reuse
   stable `MessageID`/body, receive `AttemptID`, and the exact settlement request
   when retrying within their documented retention windows; do not treat an HTTP
-  timeout as proof that a write failed.
+  timeout as proof that a write failed. Send deduplication is off by default:
+  enable a positive queue dedup window that covers the retry period before
+  relying on `MessageID`, and keep metadata, TTL and scheduled time stable too.
+  Duplicate sends do not extend that window. Settlement receipts expire after
+  30 minutes without extension on replay; resource deletion or fixed subscription
+  expiry can end replay earlier. Keep an application-side ledger when reconciliation
+  must outlive those bounds. A Peek-Lock AttemptID replays only while its saved
+  record is unexpired and
+  its entire saved batch still owns live leases. A broker restart preserves those
+  unexpired leases and tokens; after lease expiry or settlement, the broker
+  invalidates a stale response and safely re-evaluates eligible work in a fresh
+  claim instead of returning obsolete ownership. Reuse that AttemptID only when
+  the original Receive response was not observed. Once a response is available,
+  retain its tokens and use a new AttemptID for later Receive calls; invalidating
+  a partially stale cached batch deliberately leaves its other live leases with
+  the original caller rather than creating concurrent delivery. For a planned
+  broker replacement, keep the outage shorter than the remaining leases, or
+  quiesce new receives and let handlers settle first. A lease that expires during
+  the outage follows normal redelivery/final-attempt DLQ rules.
 
 The next three boundaries apply to v0.4.0 and later. v0.3.2 has
 the complete active-only `ListSubscriptions` operation, but it does not provide
@@ -3778,6 +3995,141 @@ Choose and record the application's recovery objectives before launch: acceptabl
 snapshot age (RPO), recovery time (RTO), backlog age, and capacity limits. Measure
 restore time with representative data. A successful backup command alone is not a
 restore test.
+
+## Graceful broker shutdown
+
+The coordinated shutdown and lease-preserving restart contract below requires
+v0.4.3; an installed v0.4.2 broker does not provide these guarantees.
+It also does not drain application consumers. Canceling `Receiver.Run` cancels
+its in-flight handler contexts. `Run` still waits for handlers and settlement to
+return, but offers no grace period for handlers to finish before cancellation.
+Interrupted deliveries can consume delivery attempts or reach the DLQ at the
+configured limit. Quiesce and drain consumers at the application layer before
+canceling them when a planned consumer stop must finish its work.
+
+`mqlite serve` treats the first SIGINT or SIGTERM as a graceful-shutdown request.
+It stops accepting new HTTP connections and closes an internal no-new-claim gate for
+Receive. A call parked between claim rounds wakes with `200` and an empty message list;
+managed Receivers can therefore reconnect after the broker restarts. Caller-initiated
+cancellation remains `499`. Stop and claim admission share one atomic boundary: a round
+admitted before shutdown retains the caller's context and returns its real message or
+error, while no database operation starts for a later round. Only a call that already
+completed a confirmed empty round receives the `200` wake-up. A Receive fenced before
+its first round gets `503 unavailable` with `Retry-After` (CORS-exposed when enabled),
+preserving its AttemptID in case it is replaying a committed claim whose earlier
+response was lost. Other admitted
+requests retain their contexts and receive up to
+25 seconds to drain; the broker does not abort an in-flight Send or settlement just
+to wake a long poll. A handler that does not finish (for example, a client stalled
+while uploading a request body) consumes that drain budget. The broker then closes
+the engine's operation admission, joins admitted database work and background
+maintenance, closes the database, and releases the local file lock. Engine and
+diagnostic-log close failures make the command exit non-zero.
+
+Broker startup preserves an unexpired Peek-Lock lease on an active resource, its
+fencing token and its delivery count. Resource lifecycle and message TTL remain
+authoritative. A remote handler that outlives a short broker restart can
+therefore renew or complete the same delivery after reconnecting; the restart
+does not by itself duplicate the message or consume another delivery attempt.
+If the downtime reaches `locked_until`, startup recovery (or the reaper) applies
+the ordinary expiry rule: the message returns to active below the delivery limit
+or enters the DLQ on its final attempt. Size lock durations and deployment grace
+periods so planned restarts normally finish inside the remaining lease.
+Measure the full interval from stopping the old broker until the replacement
+listener is ready, including database open and schema checks. The default lease
+is 30 seconds; use a longer configured lease when measured remote-store restart
+time and renewal/settlement latency need more margin.
+The managed Go clients also have bounded renewal and settlement retry budgets:
+terminal Complete/Abandon cleanup gets up to five seconds in total, including the
+first request and all replays. Returning before lease
+expiry is therefore necessary but not sufficient to preserve a particular
+handler's settlement; an exhausted retry budget does not resume automatically
+when the broker later returns. Retaining a valid token does not guarantee that an
+external side effect ran only once.
+
+A stopped broker's database may be opened by a local CLI inspection or maintenance
+command without revoking an unexpired delivery: every Open preserves live leases by
+default. The local file still has a single owner, so stop the broker first and never
+open the same DB concurrently. Programmatic servers must use `WithBrokerMode` before
+`Serve` to select its shutdown and lifecycle contract. A single-process embedded
+owner may use `WithReclaimUnexpiredLeases` only when it knows every previous handler
+is gone; that explicit takeover invalidates live tokens and may send final attempts
+to the DLQ.
+
+After the first signal has been observed, normal operating-system signal behavior
+is restored before graceful shutdown starts. A second SIGINT or SIGTERM therefore
+forces process termination immediately. Use that escalation only when abandoning
+the remaining HTTP handlers and cleanup is preferable to waiting: the process
+cannot run additional settlement or close code after the second signal. SQLite
+transactions still recover atomically. A committed, unexpired Peek-Lock lease is
+preserved on the next broker open; once its deadline passes it is eligible for
+redelivery or final-attempt DLQ. Application side effects may already have happened
+and must remain idempotent. Ctrl-D is terminal input EOF, not a shutdown signal;
+the broker does not read stdin.
+
+The Receive gate is the no-new-claim barrier for a call parked between claim rounds.
+An already-admitted claim transaction keeps the caller's request context and may return
+work committed before shutdown began. Quiesce
+consumers before a planned broker replacement when even that in-flight boundary
+matters.
+
+Set the platform's outer termination grace longer than:
+
+```text
+25s HTTP drain + Engine.Close duration + log and process-exit margin
+```
+
+`Engine.Close` deliberately waits for admitted work and has no unsafe timeout that
+releases ownership while a write may still be running. It immediately refuses new
+database operations and wakes parked receivers, then gives admitted operations up
+to five seconds to finish before canceling background maintenance. This internal
+grace avoids interrupting a healthy commit; after it expires, an unacknowledged
+commit remains outcome-unknown and must be reconciled. The grace is separate from
+transaction cleanup and does not bound the total Close duration. This grace applies
+to engine-admitted SQL operations; it does not give application message handlers a
+graceful-drain phase. The outer platform deadline
+is therefore the final hard bound. The repository's `docker-compose.yml` sets
+`stop_grace_period: 40s`; plain Docker otherwise defaults to only 10 seconds and
+can send SIGKILL while a deliberately stalled handler is still inside the 25-second
+HTTP drain. Kubernetes commonly defaults to a 30-second termination grace, leaving
+only about 5 seconds after the worst-case HTTP drain for engine close and process
+exit; configure at least 40 seconds, and more when measured remote-store close time
+requires it. Keep Turso/libSQL replacement single-active and stop-then-start; this
+shutdown behavior does not make overlapping brokers safe.
+
+## Consumer stops and host interruptions
+
+These boundaries describe release target v0.4.3 and both Go clients' managed
+`Receiver.Run`. The SDK does not install process signal handlers. The host
+application decides how SIGINT/SIGTERM, stdin EOF, and platform grace periods
+affect its contexts; `Consumer.Shutdown` and a stop-admission-then-drain API are
+not implemented. Ctrl-D normally produces stdin EOF, not a process signal or
+automatic context cancellation; `mqlite serve` does not read stdin.
+
+| Event | Current behavior and required action |
+|---|---|
+| Broker stops and restarts within the remaining lease | A live Receiver retries and can reuse the persisted token. Renewal and settlement must also finish inside their retry budgets. Keep a single active broker and leave the Receiver's controlling context live. |
+| Broker outage reaches lease expiry | The original token cannot renew or create a new settlement effect. The delivery returns to active below `MaxDeliveryCount`, or enters the DLQ at the limit. A retained exact-request receipt can still confirm an earlier committed settlement. |
+| Application cancels `Run` | Receive retries stop and handler/renewal contexts are canceled immediately. `Run` still waits for workers and cleanup. A returning handler's `nil` result requests Complete; a non-nil result requests Abandon on a fresh context with up to five seconds, unless terminal renewal failure already made settlement unsafe. Cancellation offers no handler grace period. |
+| Handler, error callback, or custom transport ignores cancellation | Shutdown can remain blocked while joining that work. Context cancellation is cooperative; it is not a goroutine kill or a hard return deadline. |
+| Application calls a Close method | `Receiver.Close` is a no-op; `Client.Close` releases only SDK-owned idle HTTP connections. Neither cancels an active Run. `Embedded.Close` joins admitted database work, not application handlers. Cancel and join the Receiver before closing its client or engine. |
+| Consumer is killed, SIGSTOPped, or container-paused while the broker stays available | A killed process cannot settle; a paused process cannot renew. Expired leases follow the ordinary redelivery/DLQ rule. A resumed handler may already have made an external change even though its old token is fenced. |
+| Broker is killed | There is no HTTP drain or cleanup guarantee. Local transactions recover atomically; default startup preserves still-valid leases. If the response is lost around a commit, the caller must reconcile the result (for example through the exact-request receipt); process death alone does not prove rollback. `:memory:` loses all state when its process exits. |
+| Screen turns off or locks; machine sleeps, freezes, or loses power | Turning off or locking the screen alone does not signal a process or cancel its contexts; the OS may separately suspend the host. During host sleep or failure, do not assume continued serving, renewal, or cleanup; broker-clock deadlines may be past on resumption. SIGSTOP, container pause/restart, and SIGKILL are process fault models, not proofs of host-sleep or power-loss behavior. |
+
+For a planned consumer stop, arrange application-level admission control and let
+work settle before canceling it, or use an explicit Receive loop whose lifecycle
+the application owns. An interrupted final delivery can reach the DLQ without a
+business-handler failure. Do not repeatedly restart or redrive a non-idempotent
+handler without reconciling its external side effects.
+
+A successful Send acknowledgement means the transaction committed under the
+configured storage contract. It does not acknowledge completion of a consumer's
+external work. Local `NORMAL` protects against process crashes; power-loss
+durability requires `FULL` and a storage stack that honors flushes. Turso/libSQL
+durability is the remote service's contract, not a setting proved by a local
+container test. Recovery tests must state which of these failure models they
+actually exercise.
 
 ## Startup and routine checks
 
@@ -3914,13 +4266,16 @@ is still writing needs its own documented consistency guarantees.
    binary against it on an isolated endpoint, with authentication and `FULL`, while
    business clients remain stopped. Do not attach the original database as well.
 4. Verify configuration, subscriptions, message identities and body hashes against
-   recorded expectations. On startup every orphaned lock is reclaimed: below the
-   queue's delivery limit it becomes active; at the limit it goes to DLQ with
-   `MaxDeliveryCountExceeded`. Delivery count and payload survive, and the old lock
-   token is invalid. A queue already marked `deleting` never participates in lock
-   recovery; startup first continues one bounded cleanup pass, then the background
-   loop resumes it. Old receive-attempt snapshots may replay old handles for active
-   queues; that does not give those handles ownership of a recovered message.
+   recorded expectations. Broker startup preserves a locked row whose lease is
+   still unexpired; it retains the original token and delivery count until the
+   holder settles it or the deadline passes. An already-expired lock is reclaimed:
+   below the queue's delivery limit it becomes active; at the limit it goes to DLQ
+   with `MaxDeliveryCountExceeded`, and its old token is invalid. A queue already
+   marked `deleting` never participates in lock recovery; startup first continues
+   one bounded cleanup pass, then the background loop resumes it. A saved
+   receive-attempt response may replay only while every token in its batch still
+   owns a preserved live lease. If expiry or recovery invalidates any token, the
+   stale response is removed and cannot recreate ownership.
 5. Check deferred/scheduled/DLQ work and topic filters, then run the authenticated
    canary. A restore replays the snapshot's state: later completions, sends, dedup
    records and external business effects require reconciliation against the
@@ -3931,8 +4286,10 @@ is still writing needs its own documented consistency guarantees.
 
 The repeatable [restore drill](https://github.com/mqlitehq/mqlite/blob/main/test/production/restore/README.md) verifies all
 schema tables and columns, complete payloads, auxiliary records, outbox data and
-the expected recovery transformations. Run it for a candidate and rehearse the
-same procedure on representative operational data before relying on a backup.
+the explicitly requested embedded recovery transformations. Default preservation
+of live leases is covered separately by the engine and real Serve restart tests; the
+restore drill does not replace those checks. Run it for a candidate and rehearse
+the same procedure on representative operational data before relying on a backup.
 
 ## Upgrade and rollback
 
@@ -3945,6 +4302,14 @@ establish database compatibility, and MQLite does not run schema migrations.
 | Different schema token | Keep the old database with its old binary. Account for all retained work, then create a new database using the candidate. Do not edit the schema token or point the candidate at the old file as a migration. |
 | Rollback before candidate accepts business writes | Stop the candidate and restore the matched old binary plus old snapshot/configuration; verify before resuming clients. |
 | Rollback after candidate accepts business writes | First preserve candidate data and reconcile new messages and external effects. Blindly restoring the old snapshot would discard those new writes. |
+
+Lease recovery behavior is implemented by the binary, not recorded in the schema
+token. A build from before the safe-open default may reclaim every live lock when
+it opens the database, even when the file itself is schema-compatible. Before such
+a downgrade, stop new claims, drain and settle in-flight work (or wait for every
+lease to expire), and verify every queue reports `locked=0`. Do not use an older
+local CLI for inspection or vacuum during a maintenance window that still has live
+tokens.
 
 For a cutover from **v0.3.0, v0.3.1, v0.3.2 or withdrawn v0.3.3 to v0.4.0**,
 the schema changes
@@ -4036,9 +4401,13 @@ in this release, so do not improvise a direct SQL table copy between schemas.
 rules behind these procedures.
 
 
-<!-- ===== mqlite main · source v0.4.2; latest supported release v0.4.2 · docs/turso.md ===== -->
+<!-- ===== mqlite main · source v0.4.3; latest supported release v0.4.2 · docs/turso.md ===== -->
 
 # Turso / libSQL: concurrency & embedded replicas (MQLITE-4)
+
+This guide follows `main` for release target v0.4.3. For an installed
+v0.4.2 release, use the [Turso guide at that tag](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/turso.md);
+see [CHANGELOG.md](https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md) for version-specific behavior changes.
 
 MQLite runs the same engine on a local SQLite file or a remote
 [Turso](https://turso.tech)/libSQL database — set `MQLITE_DB=libsql://<db>.turso.io`
@@ -4130,12 +4499,14 @@ still bounded as follows:
   connection is always safe. `isConnErr` spans the whole transport-failure family —
   `driver.ErrBadConn`, a closed Hrana stream, and their siblings `EOF` / `broken pipe` /
   `i/o timeout` (behind a proxy like Fly a dropped connection reads as `EOF`, not `RST`).
-- **Writes retry only when the statement provably never applied** — `retryableWrite =
-  remote && (ErrBadConn || isBusyErr)`. A closed stream (`ErrBadConn`) or a `SQLITE_BUSY`
-  (lock never acquired) guarantees the write never ran, so replaying `exec` / the `inTx`
-  commit cannot double-apply. The retry is bounded by `maxConnAttempts`; exhaustion is
-  returned to the caller. The `busy_timeout(5000)` DSN pragma belongs to local modernc
-  SQLite connections and does not apply to Turso/libSQL.
+- **Writes retry only when the statement provably never applied.** A pre-dispatch
+  `driver.ErrBadConn` or a definite typed `SQLITE_BUSY` rejection permits a bounded
+  retry. The error must identify one provider failure, with no ambiguous HTTP status
+  or caller cancellation. An error body mentioning Busy alone cannot establish
+  rejection. See [remote HTTP failure and write replay boundaries](#remote-http-failure-and-write-replay-boundaries).
+  The retry is bounded by `maxConnAttempts`; exhaustion is returned to the caller.
+  The `busy_timeout(5000)` DSN pragma belongs to local modernc SQLite connections
+  and does not apply to Turso/libSQL.
 - **A lost write acknowledgement is _outcome-unknown_, not retried** (MQLITE-59). Any
   other transport drop on a write/commit — the primary may have durably committed before
   the ack was lost — surfaces as `ErrOutcomeUnknown` (HTTP `503 outcome_unknown`) instead
@@ -4176,6 +4547,71 @@ This write-first shape addresses claim transactions in one broker or embedded
 `Engine`. Remote retries remain bounded, other operations may still surface
 `SQLITE_BUSY`, and the change does not make overlapping brokers against one database
 safe.
+
+## Remote transaction cancellation
+
+For HTTP Hrana transactions, COMMIT uses the original transaction context,
+including its cancellation and deadline (MQLITE-163). Supply a deadline when a
+bounded commit wait is required; a background context adds no request timeout.
+Cancellation detected before COMMIT execution starts sends no COMMIT, attempts
+rollback, and returns the original caller error. Once execution starts, an
+interruption without confirmation remains `ErrOutcomeUnknown`, even when the
+provider may not have applied it. The engine must not replay that transaction as
+though cancellation proved it had no effect. A confirmed commit remains successful
+even if cancellation arrives at the same time as its acknowledgement.
+
+ROLLBACK uses an independent five-second request context, so canceling the caller
+does not skip cleanup. This cleanup is synchronous: an operation can include that
+interval, and `Engine.Close` waits for its admitted operation to finish. A callback
+error or known pre-COMMIT caller cancellation remains the primary error if cleanup
+also fails or times out; neither that primary error nor a cleanup timeout confirms
+that the provider rolled back. Detached stream-close requests still follow their
+separate best-effort budget below. Local SQLite cancellation protection and the
+WebSocket driver are unchanged.
+
+At shutdown, `Engine.Close` first refuses new database operations and wakes parked
+receivers. It gives already-admitted operations up to five seconds to acknowledge
+before canceling background maintenance. This avoids interrupting a healthy
+in-flight COMMIT solely because shutdown began. If that opportunity expires, an
+interrupted unacknowledged commit still remains `ErrOutcomeUnknown`; shutdown
+does not confirm rollback or make replay safe. The five seconds is separate from
+the ROLLBACK cleanup budget and is not a total shutdown deadline: Close still joins
+admitted foreground work and background cleanup.
+This drains engine-admitted SQL operations, not application message handlers;
+stop and join application consumers separately.
+
+The terminal-request contracts are covered by
+`TestHranaCommitHonorsTransactionContext`,
+`TestHranaCancellationBeforeDriverCommitRemainsNotStarted`,
+`TestHranaRollbackHasIndependentCleanupDeadline`, and
+`TestHranaLostCommitReplyRemainsOutcomeUnknown` in `engine/storage_test.go`.
+
+## Bounded HTTP stream cleanup
+
+MQLite carries the pinned driver's HTTP v2 compatibility code internally, with a
+narrow stream-cleanup patch (MQLITE-164). Its source revision, license and local
+changes are recorded in `internal/libsqlcompat/NOTICE` and `UPSTREAM.json`. The
+original pure-Go parser, HTTP client and TCP/TLS transport reuse are retained;
+normal SQL and transport reuse are retained. The separate acknowledgement
+checks below reject damaged replies without adding requests or replaying
+ambiguous writes.
+
+Stream cleanup is asynchronous and best effort. Each opened database handle has a fixed cap of
+16 active cleanup requests, each with a five-second deadline created before the
+cleanup goroutine starts. There is no cleanup queue. A saturated cap skips that
+cleanup request rather than holding a SQL lease while waiting
+for a cleanup slot. Completed cleanup workers report observed saturation with
+one fixed warning at most per handle; logging is also best effort and never
+runs on the foreground return path. Normal operations do
+not wait for an extra cleanup round trip.
+
+The deadline bounds the client's request, not the provider's resource lifetime.
+Unconfirmed streams may remain allocated until the provider reclaims them under
+its own expiration policy; no fixed provider timeout is assumed. Neither the
+client deadline nor `Engine.Close` confirms remote resource release or transaction
+rollback. An acknowledged commit stays successful, and a lost commit
+acknowledgement remains outcome-unknown. This does not add synchronous cleanup
+draining to `Close` or change the WebSocket and local SQLite paths.
 
 ## Embedded replicas — evaluated, not adopted
 
@@ -4221,16 +4657,56 @@ MQLITE_TEST_DB=libsql://<db>.turso.io MQLITE_TEST_DB_AUTH_TOKEN=<jwt> \
 Without `MQLITE_TEST_DB` the live tests skip; the hermetic classifier test always
 runs.
 
+## Remote HTTP failure and write replay boundaries
 
-<!-- ===== mqlite main · source v0.4.2; latest supported release v0.4.2 · docs/retention.md ===== -->
+A transient HTTP response or a body mentioning `SQLITE_BUSY` does not prove
+that a preceding write failed. The provider or an intermediary can lose the
+success acknowledgement after the database committed. An issued standalone
+write or COMMIT with such an ambiguous response returns `ErrOutcomeUnknown` and
+is not transparently replayed. Reconcile the effect before retrying.
+
+Reads and transactions that have not attempted COMMIT retain bounded retries
+for recognized transient errors. A proven pre-execution `driver.ErrBadConn` or
+typed SQLite busy rejection remains distinct from arbitrary provider text.
+`RenewBatch` uses the same issued-write rules for its `UPDATE RETURNING`,
+including response scanning and interrupted acknowledgements. Before SQL is
+issued, cancellation while waiting for pool capacity stays the original caller
+context error. Request budgets, the remote pool and local single-writer behavior
+are unchanged. These boundaries do not add Rust-preview backend support.
+
+The engine manages BEGIN, COMMIT and ROLLBACK in a transaction callback. Do not
+issue transaction-control SQL or take over those boundaries through
+`EngineTx.SQL()`; doing so bypasses its rollback and retry guarantees.
+
+Non-200 HTTP response statuses are preserved internally even when a provider
+error-body fallback omits the numeric status. A transient status received after
+a write was issued does not prove rejection; the operation returns
+`ErrOutcomeUnknown` without replay.
+
+## Malformed remote SQL acknowledgements
+
+The HTTP Hrana compatibility layer checks pipeline result counts and types,
+statement result fields, row widths and value representations, and the actual
+conditions of batch steps before accepting success. It preserves valid
+conditional skips, explicit SQL errors, SQL NULL and matching close replies.
+
+Missing or malformed success data cannot confirm a write. After an issued
+standalone write or COMMIT it is `ErrOutcomeUnknown`, without transparent replay;
+reconcile its actual effect before retrying. Ordinary reads retain distinct
+protocol errors and bounded retries for interrupted network reads. These checks
+add no requests, do not change the pinned driver or cleanup budgets, and do not
+extend backend support beyond the verified scope.
+
+
+<!-- ===== mqlite main · source v0.4.3; latest supported release v0.4.2 · docs/retention.md ===== -->
 
 # Retention, deletion, and storage reclamation
 
-This page describes v0.4.2, the latest supported release. v0.3.3 is withdrawn and
+This page follows `main` for release target v0.4.3. v0.3.3 is withdrawn and
 unsupported; its public artifacts remain available for forensic or compatibility
 inspection and must not be deployed. v0.4.2 retains v0.4.0's retraction of
 v0.3.3. v0.3.2 has DLQ retention
-and automatic local reclamation, but the work budgets below describe v0.4.2
+and automatic local reclamation, but the work budgets below describe the v0.4.3 release target
 unless a version difference is stated.
 v0.3.2 does not have the
 queue and subscription lifecycle APIs introduced in v0.4.0.
@@ -4386,14 +4862,14 @@ archive remains at-least-once, so the archive consumer must be idempotent; Redri
 does not make the external archival handoff one transaction.
 
 
-<!-- ===== mqlite main · source v0.4.2; latest supported release v0.4.2 · docs/benchmark.md ===== -->
+<!-- ===== mqlite main · source v0.4.3; latest supported release v0.4.2 · docs/benchmark.md ===== -->
 
 # mqlite benchmarks, sizing & tuning
 
 Measured, reproducible numbers for the mqlite engine across realistic workloads —
 **not** a single throughput figure — plus what they mean for **deployment sizing** and
 **tuning**. The suite exercises throughput, write amplification, **whole-process memory
-+ reclamation**, **DB-file bloat vs reclamation**, **KV-property (enriched) messages**, a
+and reclamation**, **DB-file bloat vs reclamation**, **KV-property (enriched) messages**, a
 **body-size sweep**, and **load ramp / consumer churn**. Run **locally** (a fast
 multi-core box) and on a deliberately tiny **cloud** box so the two tell different truths.
 
@@ -4666,6 +5142,10 @@ additional remote database query. `metadata.json`, `windows.jsonl`,
 `summary.json`, `summary.md` and the test log are retained for 14 days. Errors,
 body mismatches, accounting failures, final backlog or exact cleanup failures
 fail the run, while the evidence written before a failure remains uploadable.
+Foreground failures and per-window storage errors include the safe generated
+category, HTTP/SQLite status where available, and a one-way error fingerprint.
+Provider text, URLs, credentials and message bodies are never copied into this
+evidence; the fingerprint is only a correlation key for private logs.
 
 A single non-final `Stats` or settlement-receipt-count sample that fails with the
 `connection` category is recorded as a gap and may recover at the next scheduled
@@ -4875,9 +5355,13 @@ the table as historical evidence and rerun the commands above before using the
 numbers for a current deployment decision.
 
 
-<!-- ===== mqlite main · source v0.4.2; latest supported release v0.4.2 · docs/conformance.md ===== -->
+<!-- ===== mqlite main · source v0.4.3; latest supported release v0.4.2 · docs/conformance.md ===== -->
 
 # Conformance — correct mqlite behavior (TCK)
+
+This specification follows `main` for release target v0.4.3. For an installed
+v0.4.2 release, use the [conformance specification at that tag](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/conformance.md);
+see [CHANGELOG.md](https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md) for version-specific behavior changes.
 
 This is the normative spec of how mqlite **must** behave — the invariants that define
 "correct," independent of any one implementation detail. Each is enforced by a
@@ -4896,7 +5380,10 @@ resource deletion, and fixed subscription expiry. (§1.7, §3, §8, §14)
 - **1.1** `Receive` claims an `active` message, moving it to `locked` for the queue's
   lock duration, and returns a `lock_token`. *(engine/functional_test.go)*
 - **1.2** A `locked` message MUST be invisible to other `Receive` calls until it is
-  settled or its lock expires — no message is delivered to two consumers at once.
+  settled, its lock expires, or explicit embedded startup recovery invalidates the
+  orphaned lock. Ordinary startup MUST preserve an unexpired lease on an active
+  resource because another holder may survive that open; resource lifecycle and
+  message TTL still apply. Within one running broker, no live lease is granted twice.
   *(engine/functional_test.go `TestCompetingConsumersNoDouble`)*
 - **1.3** Each newly granted `Receive` or `ReceiveDeferred` claim increments
   `delivery_count` exactly once. Renewal, settlement, lock reaping, scheduled
@@ -4918,6 +5405,15 @@ resource deletion, and fixed subscription expiry. (§1.7, §3, §8, §14)
 - **1.7 Receive-and-delete** removes each returned row and grants no lease: its
   lock token is empty and deadline is zero, including a cached attempt replay.
   Peek-lock retains its token and lease deadline. *(sdk_test.go: TestSDKReceiveDeleteLeaseShape)*
+
+- **1.8 Queue lock configuration.** A new or explicitly reconfigured queue MUST
+  use `0` (the 30-second default) or a lock duration from 1 second through 1 hour,
+  inclusive. Values outside that range fail with `ErrInvalidArgument` before any
+  mutation. Existing databases with a legacy value outside the range remain
+  readable; an update that does not overwrite the backing queue configuration may
+  preserve that value. *(engine/engine_test.go: TestQueueLockDurationValidation,
+  TestLegacyOutOfRangeQueuesRemainReadable; sdk_test.go:
+  TestQueueLockDurationValidationBeforeTransport)*
 
 ## 2 · Settlement (fenced on `lock_token`)
 
@@ -4969,7 +5465,7 @@ and an unexpired lease, with the exact-request replay exception in §2.6.
 - **2.8 RenewBatch** extends a whole batch's leases in ONE statement, fenced per item on its own
   `lock_token`, and reports the deadline it committed. `ok=true` means the lease was live when the
   broker's STATEMENT finished — the answer still has to travel, so `locked_until_ms` is the
-  authoritative fact and the caller compares it against its own clock. A renewal whose write
+  authoritative fact and remote callers map it from broker time onto a local monotonic clock. A renewal whose write
   outlived the lock reports `ok=false` rather than handing back a lock the caller never held, and a
   renewal never *shortens* a lease. Each successful item uses the same deadline rule
   as §2.5 and preserves state, token, and `delivery_count`. Capped at 512 messages —
@@ -4978,13 +5474,22 @@ and an unexpired lease, with the exact-request replay exception in §2.6.
 
 ## 3 · Idempotency & at-least-once
 
-- **3.1** On `Open`, every orphaned `locked` row (a crash leftover) MUST be
-  reclaimed under the same rule as the reaper: back to `active`, or to
-  `dead_lettered` (`MaxDeliveryCountExceeded`) once `delivery_count >=
-  max_delivery_count` — a crash never buys an extra delivery.
-  *(engine/engine_test.go: TestCrashRecoveryRespectsMaxDelivery)*
+- **3.1** Every `Open` MUST preserve an unexpired lease on an active resource and
+  reclaim only `locked_until <= now` by default, because a new process cannot
+  prove that no remote or out-of-process holder may still renew or settle its
+  persisted token. An embedded owner MAY explicitly request immediate live-lease
+  recovery only when all prior handlers are known to be gone. Resource lifecycle
+  and message TTL remain authoritative.
+  Reclamation follows the reaper rule: back to `active`, or to `dead_lettered`
+  (`MaxDeliveryCountExceeded`) once `delivery_count >= max_delivery_count`.
+  Preserving a live lease MUST NOT increment `delivery_count`.
+  *(engine/engine_test.go: TestExplicitCrashRecoveryRespectsMaxDelivery,
+  TestOpenPreservesUnexpiredLeaseByDefault,
+  TestOpenReclaimsExpiredLeasesByDefault)*
 - **3.2** While its exact-request receipt is live, a settle whose response was lost MUST
   replay as success, not `ErrLockLost` — and ONLY when it is the same request.
+  The receipt expires 30 minutes after recording; replay MUST NOT refresh that
+  deadline. Resource deletion or fixed subscription expiry can end replay earlier.
   A `settlement_receipt` identifies
   `queue + seq_number + lock_token + operation + effect-bearing arguments`; a call that
   differs in ANY of them is not a replay and MUST return `ErrLockLost`, never a success
@@ -4993,19 +5498,50 @@ and an unexpired lease, with the exact-request replay exception in §2.6.
   TestReceiptsAreBoundToTheirArguments, TestSettlementReceiptsAreVerbSpecific,
   TestSettlementReceiptIdentityMatrix;
   engine/model_test.go: TestEngineMatchesTheModel, TestModelRejectReceiptArguments)*
-- **3.3** A `Receive` retried with the same `AttemptID` MUST replay the same batch /
-  same lock tokens while its attempt record is live. Record expiry MUST be checked against
-  fresh time after writer admission; a record that expires during the wait MUST NOT replay.
-  *(engine/ga_fixes_test.go; engine/functional_test.go: TestReceiveAttemptExpiryAfterWriterWait)*
-- **3.4** No message loss + no content corruption: a contiguous `1..N` sequence with
-  random bodies (hashed into a property), consumed concurrently with redelivery, is
-  delivered completely (every value once) and intact (each body matches its hash).
+- **3.3** A Peek-Lock `Receive` retried with the same `AttemptID` MUST replay the
+  same batch and tokens only while its record is live and every cached token still owns the corresponding
+  live, unexpired lock. If any token is stale, the broker MUST invalidate the whole
+  cached batch and safely perform a new claim in the same transaction; it MUST NOT
+  return a stale or partially owned batch. This invalidation MUST NOT revoke any
+  other token from that response that still owns a live lease; the caller that
+  observed the original response may still be processing it. AttemptID is therefore
+  only an exact retry key for a Receive whose response was not observed, and MUST
+  NOT be reused for a new Receive after the response arrives or after partial
+  settlement. A tokenless Receive-and-Delete response
+  remains replayable for the attempt lifetime. For either mode, a record's
+  lifetime is the greater of five minutes and the queue lock duration when
+  recorded, capped by fixed subscription expiry. Replay and lease renewal MUST
+  NOT extend the record's deadline. A live non-empty saved response is
+  bound to its original receive mode; an empty result creates no record, and an
+  expired record no longer binds the ID. Unknown modes MUST be rejected. Record and
+  lease expiry MUST be checked against fresh time after writer admission.
+  *(engine/ga_fixes_test.go; engine/functional_test.go:
+  TestReceiveAttemptExpiryAfterWriterWait,
+  TestReceiveAttemptDoesNotReplayStaleLeaseAfterRestart,
+  TestReceiveAttemptDoesNotReplayDeadLetteredLeaseAfterRestart,
+  TestReceiveAndDeleteAttemptStillReplaysAfterRestart,
+  TestReceiveAttemptDoesNotReplayExpiredLease,
+  TestReceiveAttemptRejectsModeMismatchWithoutDestroyingReplay,
+  TestReceiveRejectsUnknownModeWithoutMutation,
+  TestEmptyReceiveAttemptDoesNotBindMode,
+  TestExpiredReceiveAttemptDoesNotBindMode,
+  TestReceiveAttemptInvalidatesWholePartiallySettledBatch)*
+- **3.4** No message loss + no content corruption: the hermetic integrity workload
+  sends a contiguous `1..N` sequence with random bodies (hashed into a property),
+  then consumes concurrently with intentional redelivery and a sufficient delivery
+  budget. Every identity MUST be completed and each received body MUST match its
+  hash. Repeated receives are expected; this is not an exactly-once handler guarantee.
   *(engine/integrity_test.go `TestMessageIntegrity`)*
 
 ## 4 · Deduplication
 
 - **4.1** Within a queue's `dedup_window`, a repeat `message_id` (empty → body SHA-256)
-  MUST collapse to a single enqueue. *(engine/functional_test.go, engine/turso_test.go)*
+  with the same body MUST collapse to a single enqueue. Dedup is disabled when
+  the configured window is zero (the default). Its window starts at the last new
+  enqueue for the key; duplicates MUST NOT refresh it. Completion MUST NOT erase
+  the retained dedup identity. Only body bytes participate in the conflict check;
+  duplicate metadata, TTL and scheduled time MUST NOT update the original message.
+  *(engine/functional_test.go, engine/turso_test.go)*
 - **4.2** A *single* `Send` whose `message_id` conflicts with a different body MUST
   return `ErrDedupConflict` (HTTP 409). *(server/send_dedup_test.go)*
 - **4.3** In a *multi-message* `Send`, a conflicting slot comes back as seq `0`
@@ -5102,12 +5638,15 @@ and an unexpired lease, with the exact-request replay exception in §2.6.
   the static admin console under `/ui` (when enabled — its own API calls still carry a
   token); a missing/invalid/expired/revoked token → 401 `unauthenticated`.
   *(server/errors_test.go, server/index_test.go, server/console_test.go)*
-- **9.2** Errors use a JSON envelope `{code,message}` with the documented HTTP status:
+- **9.2** Errors use a JSON envelope `{code,message}` with the documented HTTP status;
+  `not_found` may add the backward-compatible `resource` discriminator `queue` or
+  `subscription`:
   400 `invalid_argument`/`group_required` · 401 `unauthenticated` · 403
   `permission_denied` · 404 `not_found` · 409
   `already_exists`/`lock_lost`/`name_conflict`/`key_conflict`/
   `queue_not_empty`/`subscription_not_empty` · 413 `message_too_large` ·
-  429 `resource_exhausted` · 500 `internal` · 503 `outcome_unknown`.
+  429 `resource_exhausted` · 499 `canceled` · 500 `internal` ·
+  503 `unavailable`/`outcome_unknown`.
   *(server/errors_test.go; see [api-reference.md](https://github.com/mqlitehq/mqlite/blob/main/docs/api-reference.md))*
 - **9.3** Every registered RPC MUST bind a permission in the route registration.
   Send/Schedule/Cancel require send; all other QueueService methods require listen;
@@ -5158,6 +5697,49 @@ and an unexpired lease, with the exact-request replay exception in §2.6.
   TestAccessKeySortValidationAndIndex; server/errors_test.go:
   TestAccessKeyCreationOrderHTTP; wire/wire_test.go:
   TestAccessKeyCreationOrderResponseValidation; test/api_tests.py)*
+- **9.7** Every HTTP response MUST carry `X-Mqlite-Server-Time-Ms`, sampled from
+  the same injectable epoch-millisecond broker clock used for lease and TTL
+  decisions when the response is first written. The additive header is valid on
+  both success and error responses; a client MUST NOT use a proxy-generated
+  failure or redirect as evidence of broker time. A remote lease scheduler MUST
+  apply transport and timestamp-precision uncertainty conservatively, reserve
+  observed round-trip headroom for the next renewal, and MUST NOT extend a lease
+  merely because its local wall clock falls inside that interval. A confirmed
+  exact lease shorter than the managed Receiver's safe renewal interval MUST fail
+  closed rather than enter an unbounded renewal loop.
+  CORS-enabled responses MUST list the header in `Access-Control-Expose-Headers`.
+  *(server/errors_test.go: TestJSONResponsesCarryServerTime;
+  receiver_internal_test.go: TestClientMapsBrokerDeadlineOntoLocalMonotonicClock,
+  TestClientLongPollNeverExtendsLeaseFromLocalWallClock,
+  TestClientLongPollObservationDoesNotContaminateShortRenewal,
+  TestClientRejectsPathologicallyShortConfirmedLease)*
+- **9.8** A managed Receiver that receives HTTP 499 while its own controlling
+  context is still live MUST treat it as transient. A Receive replay MUST retain
+  the same attempt ID. If the caller context is already canceled, it MUST stop
+  without another request. *(receiver_internal_test.go:
+  TestReceiverRetriesBrokerCanceledReceiveWithSameAttemptID,
+  TestReceiverDoesNotRetryBrokerCanceledResponseAfterCallerCancel)*
+- **9.9** A managed Receiver MUST retain one non-empty AttemptID across every
+  transient retry of one Receive round. Its first transient failure MUST add no
+  client-generated delay unless a valid HTTP 429/503 `Retry-After` provides a
+  positive pacing hint. Later failures use equal-jitter exponential backoff with
+  a 500 ms base, doubling nominal windows and a three-second generated-delay cap.
+  A valid hint MAY raise one wait above that cap but MUST be limited to 60 seconds;
+  when it raises the generated delay, the error handler MUST be called before the
+  wait, including on the first failure. `Retry-After: 0` MUST NOT erase later
+  generated backoff. Delta-seconds and HTTP-date forms are accepted.
+  An absolute date uses the same response's parseable `Date`, otherwise the local
+  response receipt time; malformed, negative, or overflowing values are ignored.
+  Every wait MUST be interruptible by the controlling context. An HTTP status is
+  transient under the 5xx rule only when `status / 100 == 5`; status 600 is not a
+  5xx and MUST be terminal. Any successful Receive, including an empty response,
+  ends the round, resets its failure count, and gives the next round a fresh
+  AttemptID. Renew and settlement retry policies MUST remain independent.
+  *(receiver_internal_test.go: TestReceiverRetryScheduleKeepsAttemptAndResetsAfterSuccess,
+  TestReceiverRetryAfterIsBoundedManagedReceivePacing, TestParseRetryAfter,
+  TestManagedReceiverHonorsHTTPRetryAfterAndKeepsAttemptID,
+  TestReceiverCancellationInterruptsRetryAfterWait,
+  TestReceiverReturnsNonRetryableHTTPError)*
 
 ## 10 · Storage & schema invariants
 
@@ -5358,7 +5940,10 @@ engine to grade itself — an engine with a bug reports that everything is fine.
   *(engine/concurrency_test.go: TestConcurrentSettlementPicksExactlyOneWinner)*
 - **14.3 No zombie delivery.** A completed message MUST NOT be delivered again.
   *(engine/concurrency_test.go)*
-- **14.4 No loss.** Every message sent is eventually completed — not most of them.
+- **14.4 No loss in the concurrency workload.** With successful sends, live
+  consumers, a sufficient delivery budget and no configured discard or expiry,
+  every sent identity MUST be completed. This does not override final-attempt
+  DLQ, explicit deletion, retention, message TTL or fixed subscription expiry.
   *(engine/concurrency_test.go)*
 - **14.5 Shutdown fences the store.** `Close` closes admission before anything else: DB work
   that begins after shutdown starts MUST fail fast with `ErrClosed`; work already admitted —
@@ -5395,13 +5980,24 @@ recovery, not filesystem durability.
     two-*commit* gap is supplementary coverage, not a per-run guarantee.
 
   *(test/crash/crash_test.go: TestCrashOutboxAtomicity)*
-- **15.2 Orphaned locks reset on restart.** After a crash while messages are `locked`, `Open` reclaims
-  every orphaned lock — to `active`, or to `dead_lettered` with `MaxDeliveryCountExceeded` if the
-  message was already on its last permitted delivery (the same rule the reaper applies, §3.1). Either
-  way nothing is stranded `locked`. The last-delivery case preserves the message body and delivery
-  count, clears the lock, and excludes it from normal receive.
+- **15.2 Startup recovery respects lease ownership.** `Open` preserves an
+  unexpired lock on an active resource by default, including its token and delivery
+  count, so a holder can continue across another process opening the store; a cached
+  Peek-Lock attempt may replay that same valid token. Once the lease is expired,
+  startup reclaims it to `active`, or to `dead_lettered` with
+  `MaxDeliveryCountExceeded` if it was the last permitted delivery (the same rule
+  the reaper applies, §3.1). A cached attempt MUST NOT replay a token invalidated by
+  that recovery; its retry either obtains a currently valid new lease or observes
+  no available message. Explicit embedded live-lease recovery follows the same
+  transition immediately and is invalid in broker mode.
   *(test/crash/crash_test.go: TestCrashRecoveryResetsOrphanedLocks,
-  TestCrashRecoveryDeadLettersLastDelivery)*
+  TestCrashRecoveryDeadLettersLastDelivery,
+  TestCrashRecoveryInvalidatesReceiveAttemptLease; engine/functional_test.go:
+  TestReceiveAttemptDoesNotReplayStaleLeaseAfterRestart,
+  TestReceiveAttemptDoesNotReplayDeadLetteredLeaseAfterRestart;
+  engine/engine_test.go: TestOpenPreservesUnexpiredLeaseByDefault,
+  TestOpenReclaimsExpiredLeasesByDefault; shutdown_internal_test.go:
+  TestReceiverSurvivesBrokerRestart)*
 - **15.3 Acknowledged commits survive recovery.** Every producer commit acknowledged to and
   observed by the harness before a kill MUST still be present after recovery. The harness checks
   those acknowledged transaction identities against both recovered business rows and messages.
@@ -5419,7 +6015,7 @@ in the OS/Go matrix; tagged crash tests run with `-race` in their own Linux job.
 run separately without `-race`; the large no-loss sweep also runs weekly without `-race`.*
 
 
-<!-- ===== mqlite main · source v0.4.2; latest supported release v0.4.2 · docs/dependencies.md ===== -->
+<!-- ===== mqlite main · source v0.4.3; latest supported release v0.4.2 · docs/dependencies.md ===== -->
 
 # Dependency policy & the go 1.21 floor
 
@@ -5432,7 +6028,7 @@ and how the freeze is enforced so it can't be lifted by accident.
 
 Applications that only call a broker can instead use the official
 [MQLite Remote Client for Go](https://github.com/mqlitehq/mqlite-go). Its module
-path remains `github.com/mqlitehq/mqlite-go`; release `v0.1.1` has a Go 1.13
+path remains `github.com/mqlitehq/mqlite-go`; release target `v0.1.2` has a Go 1.13
 source floor and uses only the standard library, so it does not link the embedded
 engine, SQLite, libSQL/Turso, or CGO.
 The low floor is a compatibility promise, not a recommendation to run an
@@ -5471,6 +6067,12 @@ local/remote parity, live lifecycle, sustained-load or six-target release gates.
 None currently satisfies the complete Go 1.21, CGO-free, six-target and
 storage-semantics contract.
 
+CI keeps that source-floor contract on supported macOS runners by externally
+linking the Go 1.21 test binaries. Go 1.21's internal Darwin linker does not emit
+the `LC_UUID` required by current macOS releases; the external Apple linker does.
+This exception applies only to the compatibility gate. Release binaries use the
+current supported Go toolchain and its normal linker selection.
+
 MQLite contains the known HTTP logical-stream lifecycle defect behind a narrow
 single-lease adapter: a `libsql://` driver connection is discarded when its
 `database/sql` lease ends, while Go's shared HTTP transport continues to reuse
@@ -5478,6 +6080,16 @@ physical TCP/TLS connections. Migration to a maintained driver requires the full
 local/remote conformance suite, live Turso lifecycle and sustained-load runs, and
 all release-platform builds. Do not swap this dependency or remove the adapter
 based only on API similarity; there is no promised replacement or migration date.
+
+The HTTP v2 transport and its protocol/result helpers are a small internal copy
+of that same pin (`internal/libsqlcompat`), with bounded asynchronous stream
+cleanup (MQLITE-164) and success-acknowledgement validation (MQLITE-191).
+Incomplete or mismatched replies cannot confirm success or authorize write replay. The original public SQL parser and WebSocket driver remain
+at the pin. Source/delta hashes and a module-version guard detect drift; there is
+no library-local `replace` or reliance on a caller's vendor directory. The copied
+MIT license and source notice ship with binary archives and container images.
+The existing ANTLR version is now listed directly because the copied helper
+imports it; dependency versions and the selected module graph are unchanged.
 
 ## Security posture
 
@@ -5555,7 +6167,7 @@ requirement is dropped, or a security CVE forces it): bump `go.mod`, update
 let the held bumps (`modernc.org/sqlite`, `golang.org/x/sys`) flow in together.
 
 
-<!-- ===== mqlite main · source v0.4.2; latest supported release v0.4.2 · docs/mcp.md ===== -->
+<!-- ===== mqlite main · source v0.4.3; latest supported release v0.4.2 · docs/mcp.md ===== -->
 
 # MCP server (`mqlite-mcp`)
 
@@ -5765,9 +6377,13 @@ Environment tokens are not listed or revocable through these tools. Key tools ar
 unavailable when broker authentication is explicitly disabled.
 
 
-<!-- ===== mqlite main · source v0.4.2; latest supported release v0.4.2 · docs/examples.md ===== -->
+<!-- ===== mqlite main · source v0.4.3; latest supported release v0.4.2 · docs/examples.md ===== -->
 
 # Examples
+
+These examples follow `main` for release target v0.4.3. For an installed
+v0.4.2 release, use the [examples at that tag](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/examples.md);
+see [CHANGELOG.md](https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md) for version-specific behavior changes.
 
 For authenticated producer/consumer credentials, Go SDK key management, console and
 MCP workflows, see [Access keys](https://github.com/mqlitehq/mqlite/blob/main/docs/access-keys.md) (v0.3.1 and later).
@@ -5834,6 +6450,10 @@ Commit a business write **and** the enqueue in **one** SQLite transaction — th
 message is enqueued if and only if the business change commits. No dual-write race,
 no separate outbox poller. Embedded-only (same DB).
 
+Run this demonstration once in a fresh directory: it creates `app.db` and inserts
+the fixed sample order ID `42`. A real application supplies its own order identity
+and retry/reconciliation policy.
+
 ```go
 package main
 
@@ -5852,7 +6472,19 @@ func main() {
 		log.Fatal(err)
 	}
 	defer mq.Close()
-	_ = mq.CreateQueue(ctx, "order-events", mqlite.QueueConfig{})
+	if err := mq.CreateQueue(ctx, "order-events", mqlite.QueueConfig{}); err != nil {
+		log.Fatal(err)
+	}
+
+	// Initialize this example's application-owned table. Real applications can
+	// create their business schema through their normal migration process.
+	if err := mq.Tx(ctx, func(tx *engine.EngineTx) error {
+		_, err := tx.SQL().ExecContext(tx.Context(),
+			`CREATE TABLE IF NOT EXISTS orders (id INTEGER PRIMARY KEY, total INTEGER NOT NULL)`)
+		return err
+	}); err != nil {
+		log.Fatal(err)
+	}
 
 	// Your app tables live in the same DB. Tx gives you that transaction.
 	err = mq.Tx(ctx, func(tx *engine.EngineTx) error {
@@ -5891,7 +6523,7 @@ concurrency.
 
 The core calls in this example also work with MQLite Remote Client for Go, the
 standard-library-only, remote-only companion module. Install
-`github.com/mqlitehq/mqlite-go@v0.1.1` and change the import to
+`github.com/mqlitehq/mqlite-go@v0.1.2` and change the import to
 `mqlite "github.com/mqlitehq/mqlite-go"`. Its source floor is Go 1.13. Use the
 main module shown below when the same application also needs embedded mode,
 `Observe`, or managed access-key administration.
@@ -5920,17 +6552,25 @@ func main() {
 	}
 
 	// nil -> Complete; error -> Abandon (retry below max; DLQ at max).
-	// Auto-renew the lock; keep up to 4 messages in flight.
+	// Auto-renew the lock; run up to 4 handlers concurrently.
 	err = cli.Receiver("orders", mqlite.WithAutoRenew(), mqlite.WithConcurrency(4)).
 		Run(ctx, func(ctx context.Context, m *mqlite.Message) error {
-			return process(m.Body) // MUST be idempotent (at-least-once)
+			return process(ctx, m.Body) // honor cancellation; MUST stay idempotent
 		})
 	if err != nil {
 		log.Fatal(err)
 	}
 }
 
-func process(body []byte) error { log.Printf("got: %s", body); return nil }
+func process(ctx context.Context, body []byte) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+		log.Printf("got: %s", body)
+		return nil
+	}
+}
 ```
 
 `WithAutoRenew` keeps the current delivery attempt alive; it does not spend another
@@ -5938,8 +6578,21 @@ func process(body []byte) error { log.Printf("got: %s", body); return nil }
 deadline and the broker's fresh `now + lock_duration` candidate (capped at a fixed
 subscription expiry), rather than adding a duration to the old deadline. It must
 arrive before the current lease expires and it cannot extend message TTL or a fixed
-subscription lifetime. Renewal or its response can still fail late, so the handler
-remains idempotent: another consumer may receive the message after the lease is lost.
+subscription lifetime. The Receiver retries transient renewal failures while the
+known lease still leaves time. It starts earlier when the previous response measured
+a material round trip, leaving transport headroom before the conservative local
+deadline. If an exact confirmed lease is shorter than the minimum safe cadence, or
+renewal is rejected or cannot be confirmed before that deadline, it cancels the
+individual handler context and skips Complete/Abandon for that stale delivery. The
+handler must honor `ctx.Done()` and remain idempotent:
+another consumer may receive the message after the lease is lost. Exact Complete and
+Abandon requests share a five-second total settlement budget, including the first
+request and replays after a lost acknowledgement; the broker's settlement receipt
+makes that replay safe.
+If a broker or intermediary returns HTTP 499, it is retried while the Receiver's
+own context remains live, using the same Receive attempt ID. If a proxy removes
+both broker-time headers, `WithErrorHandler` receives one degraded-clock
+diagnostic.
 
 ## 4. Topic subscription lifecycle
 

@@ -6,19 +6,33 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>CLI reference · mqlite</title>
 <meta name="description" content="Run, produce, consume, and administer queues with the command-line client.">
+<link rel="alternate" hreflang="en" href="cli.html">
+<link rel="alternate" hreflang="zh-CN" href="zh-CN/cli.html">
+<link rel="alternate" hreflang="x-default" href="cli.html">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="assets/site.css">
 <script src="assets/highlight.min.js" defer></script>
 <script src="assets/site.js" defer></script>
 </head>
 <body>
-<nav class="top"><div class="wrap">
+<nav class="top" aria-label="Main navigation"><div class="wrap">
   <a class="brand" href="./"><img src="logo.svg" alt="" width="24" height="24"> mqlite</a>
-  <div class="links">
+  <div class="links overflow-nav" data-overflow>
+    <div class="overflow-primary"></div>
+    <details class="language-picker" data-language-picker name="header-menu">
+      <summary aria-label="Language: English" title="Choose language"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.25"><circle cx="8" cy="8" r="6"/><ellipse cx="8" cy="8" rx="2.5" ry="6"/><path d="M2 8h12"/></svg><span>EN</span></summary>
+      <ul class="language-options" aria-label="Available languages">
+<li><a data-language-switch href="cli.html" hreflang="en" lang="en" aria-current="true">English</a></li>
+<li><a data-language-switch href="zh-CN/cli.html" hreflang="zh-CN" lang="zh-CN">简体中文</a></li>
+      </ul>
+    </details>
+    <details class="overflow-more has-current" name="header-menu">
+      <summary aria-label="More navigation links">More</summary>
+      <div class="overflow-items">
     <a href="concepts.html">Concepts</a>
     <a href="internals.html">Internals</a>
     <a href="api.html">API</a>
-    <a href="cli.html">CLI</a>
+    <a href="cli.html" aria-current="page">CLI</a>
     <a href="access-keys.html">Access keys</a>
     <a href="deployment.html">Deployment</a>
     <a href="observability.html">Observability</a>
@@ -26,13 +40,18 @@
     <a href="operations.html">Operations</a>
     <a href="agents.html">For AI agents</a>
     <a class="gh" href="https://github.com/mqlitehq/mqlite">GitHub ↗</a>
+      </div>
+    </details>
   </div>
 </div></nav>
 <div class="wrap">
-  <div class="stamp">Source: <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/cli.md">mqlite main · docs/cli.md</a> — source v0.4.2. Latest supported release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.2">v0.4.2</a>.
-  These docs track main; use the linked release for published artifacts.</div>
+  <div class="stamp">Source: <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/cli.md">mqlite main · docs/cli.md</a> — source v0.4.3 with unreleased changes. Latest supported release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.2">v0.4.2</a>. These docs track main; use the linked release for published artifacts.</div>
   <main class="prose">
 <h1 id="cli-reference-mqlite">CLI reference (<code>mqlite</code>)</h1>
+<p>This reference follows <code>main</code> for release target v0.4.3. Cross-invocation
+local settlement and lease-preserving maintenance below are not included in
+v0.4.2; use the <a href="https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/cli.md">CLI reference at that tag</a>
+for that installed binary. See <a href="https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md">CHANGELOG.md</a>.</p>
 <p>One binary, <strong>two modes</strong> — the same commands work against a local SQLite DB
 (embedded) or a running broker (client), chosen by environment:</p>
 <ul>
@@ -138,11 +157,10 @@ omits <code>lock_token</code>; raw Peek-Lock Receive always returns one.</li>
 <p>The CLI also doesn&#39;t expose <em>every</em> HTTP operation (batch send, attempt ids). For the complete
 contract — all routes, all fields — see <a href="api.html">api-reference.md</a>.</p>
 <blockquote>
-<p><strong>Settling across invocations needs a broker.</strong> <code>receive --no-ack</code> locks a message and
-prints its <code>lock-token</code>; you settle it later with <code>complete/abandon/reject/defer/renew &lt;queue&gt; &lt;seq&gt; &lt;token&gt;</code>. This works against a running broker (client mode), which holds
-the lock between calls. In <strong>embedded</strong> mode each invocation opens the DB fresh and
-reclaims orphaned locks, so a <code>--no-ack</code> lock does not survive to the next command — use
-a broker (<code>mqlite serve</code> + <code>--endpoint</code>) when you need manual settle-later.</p>
+<p><strong>Settling across invocations.</strong> <code>receive --no-ack</code> locks a message and prints its
+<code>lock-token</code>; settle it later with <code>complete/abandon/reject/defer/renew &lt;queue&gt; &lt;seq&gt; &lt;token&gt;</code>. Both broker and local embedded CLI invocations preserve that token until
+its deadline. Prefer a broker for multi-process consumers: the local DB still permits
+only one owning process at a time, and an expired token cannot be revived.</p>
 </blockquote>
 <h2 id="commands">Commands</h2>
 <h3 id="serve--run-the-broker"><code>serve</code> — run the broker</h3>
@@ -276,7 +294,7 @@ token, then revoke the old ID. No broker restart is needed. See
 <tbody><tr>
 <td><code>--lock</code></td>
 <td>0 → 30s</td>
-<td>Peek-Lock duration (<code>0</code> inherits the engine default, 30s)</td>
+<td>Peek-Lock duration (<code>0</code> inherits the 30s engine default; an explicit value must be from 1s through 1h)</td>
 </tr>
 <tr>
 <td><code>--max-delivery</code></td>
@@ -580,14 +598,16 @@ reject it otherwise). New local DBs use <code>auto_vacuum=INCREMENTAL</code>, so
 checkpoints and exhausts the current incremental freelist; <code>--full</code> runs a full
 <code>VACUUM</code> (rewrites the file, global lock). The running broker also performs a
 bounded pass every 60 seconds once at least 256 pages are free. Not applicable to
-a remote Turso/libSQL store.</p>
+a remote Turso/libSQL store. Opening the stopped broker DB for vacuum preserves
+every unexpired delivery and its fencing token.</p>
 <pre><code class="language-bash">MQLITE_DB=file:/data/mq.db mqlite vacuum          # incremental
 MQLITE_DB=file:/data/mq.db mqlite vacuum --full   # full rewrite
 </code></pre>
 <h3 id="complete--abandon--reject--defer--renew--settle-a-message"><code>complete</code> / <code>abandon</code> / <code>reject</code> / <code>defer</code> / <code>renew</code> — settle a message</h3>
 <p>Settle a message received earlier with <code>receive --no-ack</code> (which printed its
-<code>lock-token</code>). Positional args are always <code>&lt;queue&gt; &lt;seq&gt; &lt;lock-token&gt;</code>. Client mode only
-in practice (a broker holds the lock between calls — see the note under Global flags).</p>
+<code>lock-token</code>). Positional args are always <code>&lt;queue&gt; &lt;seq&gt; &lt;lock-token&gt;</code>. A broker is
+recommended for concurrent consumers; local embedded invocations can also settle
+a token while its lease remains live (see the note under Global flags).</p>
 <pre><code class="language-bash">mqlite complete orders 42 lt_9f3a…                 # done
 mqlite abandon  orders 42 lt_9f3a… --delay 60s     # retry after backoff, or DLQ at the limit
 mqlite reject   orders 42 lt_9f3a… --reason bad    # dead-letter it (--detail …)
@@ -705,8 +725,8 @@ export MQLITE_ENDPOINT=https://your-mqlite.fly.dev MQLITE_TOKEN=mqk_prod_xxx
 mqlite list
 mqlite metrics jobs
 </code></pre>
-<p>See also: <a href="api.html">api-reference.md</a> (HTTP), <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/mcp.md">mcp.md</a> (agents),
-<a href="https://github.com/mqlitehq/mqlite/blob/main/docs/examples.md">examples.md</a> (Go SDK).</p>
+<p>See also: <a href="api.html">api-reference.md</a> (HTTP), <a href="mcp.html">mcp.md</a> (agents),
+<a href="examples.html">examples.md</a> (Go SDK).</p>
 
   </main>
 </div>

@@ -1,0 +1,129 @@
+你可以访问一个消息队列（mqlite broker）。
+
+基础 URL： <MQLITE_ENDPOINT>              broker 的源地址，包含端口。
+           直连： http://127.0.0.1:{{BROKER_PORT}}   （示例：broker 已配置在 TCP {{BROKER_PORT}} 端口，
+                                             自身不终止 TLS）
+           代理： https://mq.example.com  （反向代理在 HTTPS :443 接收请求，
+                                             再转发到 broker 内部的 :{{BROKER_PORT}}）
+           下文端点路径均相对于此源地址。
+认证：     每次 RPC 调用都需要请求头            Authorization: Bearer <MQLITE_TOKEN>
+协议：     每个操作都是一次携带 JSON 请求体的 HTTP POST，目标为
+           /mqlite.v1.QueueService/<Method>、/mqlite.v1.AdminService/<Method>，
+           或 /mqlite.v1.AuthService/<Method>（v0.3.1 及后续版本）。
+           GET / 携带 Accept: application/json（无需认证）返回服务发现信息，
+           其中包含 broker 版本和全部端点。
+
+规则：
+- 更改数据前先 GET /，携带 Accept: application/json，读取其 version 和端点清单。
+  仅使用部署中的 broker
+  已记录的 API。已发布二进制应使用其精确发布标签的文档；未发布构建
+  应使用该构建自身的源码文档。
+- 密钥权限：send 允许生产/定时发送/取消消息；listen 允许接收/结算/续锁/查看消息、
+  读取队列统计、创建或更新订阅，以及测试过滤条件；manage
+  包含上述两类权限，以及管理/签发密钥。查看订阅清单和每一次
+  DeleteSubscription 请求都要求 manage，无论 force 为 false 还是 true。
+  权限适用于整个 broker。不要重试 401 或 403；应向管理员获取
+  具备所需权限的有效密钥。
+- v0.3.2+ 中，AdminService/Observe {} 可使用配置的
+  monitor 凭据或 manage 密钥读取 broker 测量值。应检查 collection/availability 字段；缺失的
+  测量值不等于零。监控凭据不能读取消息体。
+- JSON 中的消息体是 BASE64 字符串。发送前编码，
+  接收后解码。
+- 队列绝不会自动创建。请先创建：
+    AdminService/CreateQueue  {"name":"jobs","config":{}}
+  队列和订阅删除默认仅允许空资源。force=true 是显式
+  授权，允许丢弃所有保留状态，包括持锁处理中的消息。成功的
+  state=deleted 结果表示清理已在接受请求的提交中完成；state=deleting
+  表示有界清理仍在继续，并且名称仍被保留。API 没有 Generation
+  字段：必须由一个所有者核对清单，并将删除与同名
+  创建串行协调。遇到重定向、传输失败、任意 5xx 或无效的成功响应体后，
+  不要重试删除。应使用 ListQueues 或 ListSubscriptionsPage，配合
+  include_deleting=true 核对；在单一所有者规则下，名称不存在即可确认清理完成。
+- 使用 Peek-Lock 消费：
+    QueueService/Receive  {"queue":"jobs","max_messages":1,"wait_time_ms":5000}
+  每次新授予的 Peek-Lock 领取都会增加 delivery_count。返回的每条
+  消息都包含 seq_number + lock_token。你必须结算收到的每条消息，
+  使用它的 lock_token：
+    QueueService/Complete {"queue":"jobs","seq_number":N,"lock_token":"..."}  完成
+    QueueService/Abandon  {...,"delay_ms":60000}   未达上限则重试；达到上限 -> DLQ
+    QueueService/Reject   {...}                    放弃处理 -> 死信队列
+  在本文对应源码中，Abandon 的 delay_ms 必须非负，新可见截止时间
+  必须在时间戳范围内。Go SDK 延迟为零或至少 1ms；
+  非法输入不改变仍有效的投递。
+  如果不结算，锁会过期（默认 30s）。恢复处理会将
+  消息移回 active，或在最后一次尝试失败后将其送入 DLQ。达到
+  上限不会中断最后一次领取：它仍可续锁或完成。
+  新的结算和 Renew 要求 locked_until_ms > now：恰好到达截止时间
+  就已过期，即使回收器尚未运行也一样。未过期回执只允许
+  完全相同的请求在租约到期后重放之前已提交的结算。
+- Receive-and-Delete 是显式的至多一次 broker 移除语义，不授予租约：
+  lock_token 为空，locked_until_ms 为零（JSON 中省略），包括
+  receive-attempt 重放。不要对它执行结算。
+- 默认 Peek-Lock 投递为至少一次（AT-LEAST-ONCE）：你可能两次看到同一条消息。
+  应通过自己持久化的状态确保业务处理幂等。仅设置 message_id
+  不会对发送去重：重复检测默认关闭。队列
+  设置了正数 dedup_window_ms 时，应在该保留窗口内使用相同的 message_id 和消息体
+  重试；消息体不同则发生冲突。broker 去重不能让
+  外部副作用变成恰好一次。
+- 长时间处理：在租约过期前，携带 lock_token 调用 QueueService/Renew。
+  它延长同一次领取，不增加 delivery_count，不累加
+  时长，也无法恢复已经过期的租约。
+- 发布/订阅：AdminService/Subscribe {"topic":"events","name":"my-sub",
+  "filter":{"expr":"subject == \"order\""},"ttl_ms":900000} —— 随后向
+  "events" 执行 Send 会进行扇出；从 "my-sub" 执行 Receive。filter 可省略；省略 ttl_ms 或设为零
+  会创建永久订阅，或保留现有存活期。
+  正数 TTL 是从首次创建起计算的固定存活期：重试、过滤条件更新
+  和消息流量都不会延长它。到期意味着已预先授权强制清理。
+  正常使用结束后应显式删除；高频请求/回复应使用一个稳定回复
+  订阅，并按 correlation_id 分发，而不是每次请求创建一个订阅。
+  Subscribe 和 TestFilter 要求 listen；列出和删除订阅要求
+  manage。Subscribe 是整个 broker 范围的创建或更新操作，不代表仅创建或调用方专属所有权。
+- 有序处理：发送时提供 "group_id"——具有相同 group_id 的消息
+  严格按顺序投递，每组同一时刻仅一条在途消息。delay_ms > 0 的 Abandon
+  将消息暂放在 scheduled 状态，并继续阻塞其有序分组，直至预定重试时刻
+  （strict_fifo：阻塞整个队列）。Cancel 只移除从未投递过的定时
+  消息，即 delivery_count = 0。
+- 消息 TTL：整个 Send 批次的存活期相同时，使用顶层 ttl_ms；
+  各条目存活期不同时，使用 messages[].ttl_ms。正数队列默认值同时是默认值和
+  上限。固定的 expires_at_ms 等于初始 visible_at_ms + 生效的 TTL，因此
+  定时消息从首次到达预定投递时间开始计算 TTL。Renew、延迟 Abandon 和
+  调度器激活都不会延长它。到期后终止正常投递，再
+  根据队列策略进入死信或被丢弃。
+- 错误采用 JSON {"code","message"}：400 invalid_argument · 401 unauthenticated ·
+  403 permission_denied · 404 not_found ·
+  409 name_conflict / already_exists / lock_lost / key_conflict /
+      queue_not_empty / subscription_not_empty ·
+  413 message_too_large · 429 resource_exhausted · 503 outcome_unknown。
+  遇到 409 lock_lost，应重新执行 Receive，而不是重试结算。503
+  outcome_unknown 可能已经提交；应核对结果，而不是盲目重试。
+  精确结算回执从记录时起保留 30 分钟；重放不会延长
+  窗口，资源删除或到期可能使重放提前结束。如果核对结果需要超出
+  该窗口，应保留应用侧证据。
+
+速查表（请求体已简写）：
+  AdminService/CreateQueue   {"name","config":{}}
+  AdminService/DeleteQueue   {"name","force?"}
+  AdminService/ListQueues    {}
+  AdminService/Subscribe     {"topic","name","filter?","ttl_ms?"}
+  AdminService/TestFilter    {"expr","message?"}
+  AdminService/ListSubscriptionsPage {"topic?","after?","limit?","include_deleting?"}
+  AdminService/DeleteSubscription {"topic","name","force?"}
+  QueueService/Send          {"queue","messages":[{"body":"<base64>",
+                              "message_id?","group_id?"}]}
+  QueueService/Receive       {"queue","max_messages","wait_time_ms"}
+  QueueService/Complete      {"queue","seq_number","lock_token"}
+  QueueService/Abandon       {"queue","seq_number","lock_token","delay_ms?"}
+  QueueService/Reject        {"queue","seq_number","lock_token"}
+  QueueService/Renew         {"queue","seq_number","lock_token"}
+  QueueService/Stats         {"queue"}
+  AuthService/CreateKey      {"id","name","permissions":["send"],"expires_at_ms?"}
+  AuthService/ListKeys       {"after_id?","limit?","sort?"}
+  AuthService/RevokeKey      {"id"}
+  对 CreateKey：调用前先保留一个唯一的 32 字符小写十六进制 id。token
+  仅返回一次。结果不确定时，先列出/撤销该 id，再创建替代密钥；
+  重复 id 会返回 key_conflict，绝不会再次返回秘密值。
+  对 ListKeys：sort 默认为 id_asc。使用 created_desc 可按最新优先排列，
+  每页保持相同 sort，并将 next_after_id 作为 after_id 传回。
+API 参考：https://mqlitehq.github.io/api.html
+对于已发布的 broker，应使用其已安装版本的参考文档，
+不要假定尚未发布的 main 行为已经可用。

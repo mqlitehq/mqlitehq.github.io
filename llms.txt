@@ -7,14 +7,17 @@
 Public documentation: https://mqlitehq.github.io/.
 Relative links below resolve against this website.
 
-NOTE ON VERSIONS: the latest supported release is v0.4.2 (default port 6754,
-schema token 7). v0.3.3 is withdrawn, unsupported and retracted by v0.4.0 and later; its
+NOTE ON VERSIONS: the latest supported release is v0.4.2. The documented main source
+uses default port 6754 and schema token 7. v0.3.3 is withdrawn, unsupported and retracted by v0.4.0 and later; its
 public artifacts remain only for forensic or compatibility inspection and must not
-be deployed. This website tracks main, currently source v0.4.2. Runtime access
+be deployed. This website tracks main, currently source v0.4.3 with unreleased changes.
+The source version constant can still match the last release while behavior differs;
+the versioned documentation below is authoritative for an installed release. Runtime access
 keys and key-management tools require v0.3.1 or later.
 Unified Observe, configured monitor
 credentials and the monitoring starter require v0.3.2 or later. Installation commands
-below pin v0.4.2. Use the
+below use @latest for published modules; @latest does not install main. Check the
+installed version and use its matching API documentation. Use the
 [v0.4.2 documentation](https://github.com/mqlitehq/mqlite/tree/v0.4.2/docs)
 for the supported release's exact API. v0.4.2 is a same-schema patch from v0.4.1:
 listen keys can provision subscriptions and test filters, while inventory and
@@ -37,7 +40,7 @@ preserving the matching old binary/database pair and starting v0.4.2 with a fres
   share successful queue semantics, validation, state transitions and logical errors;
   latency, availability, remote outcome_unknown failures and storage operations
   have different envelopes.
-- Wire protocol: JSON over HTTP, one POST per operation, 29 routes in source v0.4.2 under
+- Wire protocol: JSON over HTTP, one POST per operation, 29 routes in source v0.4.3 with unreleased changes under
   /mqlite.v1.QueueService/*, /mqlite.v1.AdminService/* and /mqlite.v1.AuthService/*. Message bodies are
   base64 in JSON. GET / with no Accept header, */*, or JSON is an open discovery
   card listing every endpoint; an interactive browser that prefers HTML enters
@@ -58,12 +61,20 @@ preserving the matching old binary/database pair and starting v0.4.2 with a fres
   empty lock_token and zero locked_until_ms (omitted in JSON), including receive
   attempt replays. The SDK exposes a zero LockedUntil time.
 - Retries: the Nth ordinary Peek-Lock claim at max_delivery_count remains a usable
-  final attempt and may be renewed or completed. Abandon, lock expiry or startup
-  recovery after that failed attempt moves it to the dead-letter state (not a
+  final attempt and may be renewed or completed. Abandon, lock expiry or explicit
+  live-lease reclamation after that failed attempt moves it to the dead-letter state (not a
   separate queue) instead of an ordinary N+1 claim. ReceiveDeferred increments the
   count but currently has no max admission check. Redrive moves dead letters back.
+  The documented source preserves unexpired leases on ordinary opens; v0.4.2 still
+  reclaims them at startup. Use the matching release runbook when planning maintenance.
   DLQ age/count/byte settings are asynchronous retention targets, so retained state
   may temporarily exceed them between bounded cleanup passes.
+- Abandon input validation in the documented source: delay_ms must be nonnegative
+  and a new absolute visibility deadline must fit epoch milliseconds. Go SDKs reject
+  negative or positive sub-millisecond durations before HTTP; delays are zero or
+  at least 1ms, with the existing millisecond precision. Invalid input leaves a live
+  delivery unchanged. An exact committed request can still replay its unexpired
+  settlement receipt after the clock advances.
 - Ordering: standard (per-group_id FIFO, cross-group parallel), group_fifo
   (group_id required), strict_fifo (whole-queue serial). Order holds across
   crashes and lock expiry. Abandon with delay_ms > 0 parks the message in scheduled
@@ -113,11 +124,14 @@ preserving the matching old binary/database pair and starting v0.4.2 with a fres
   queue policy. A positive queue default is both the default and ceiling; Renew,
   delayed Abandon and scheduler activation never move the fixed deadline. Mixed
   HTTP batches use messages[].ttl_ms; a uniform batch may use the top-level field.
-  Duplicate detection is by message_id within a window.
+  Duplicate detection is OFF by default. A positive queue dedup_window_ms retains
+  a message_id/body identity from the last new enqueue for that key; a hit does
+  not extend the window. Retry the same ID and body within it; a different
+  body conflicts. This does not deduplicate external business side effects.
 - Transactional outbox (embedded-only): business write + enqueue commit in ONE
   SQLite transaction via mq.Tx.
 - Ops: /ui embedded admin console, opt-in authenticated /metrics Prometheus
-  (incl. per-RPC latency histograms), /healthz, CLI (26 commands, including the key subcommand group), MCP server (mqlite-mcp, 22 tools in source v0.4.2). The local production
+  (incl. per-RPC latency histograms), /healthz, CLI (26 commands, including the key subcommand group), MCP server (mqlite-mcp, 22 tools in source v0.4.3 with unreleased changes). The local production
   boundary is one broker per persistent SQLite file; backups and recovery must be
   rehearsed. Use TLS and Bearer authentication for network access.
 - Unified observation (v0.3.2 and later): AdminService/Observe, SDK, CLI observe,
@@ -207,12 +221,12 @@ preserving the matching old binary/database pair and starting v0.4.2 with a fres
 - [MCP source](https://github.com/mqlitehq/mqlite/blob/main/docs/mcp.md).
 - [Releases](https://github.com/mqlitehq/mqlite/releases): binaries for
   linux/macos/windows (amd64+arm64), each archive contains mqlite + mqlite-mcp.
-- Container image: `ghcr.io/mqlitehq/mqlite:0.4.2` (default port 6754).
+- Container image: `ghcr.io/mqlitehq/mqlite:latest` (configure the listening port explicitly).
   See [Deployment](deployment.html) for persistent storage, authentication and TLS.
-- Broker: `go install github.com/mqlitehq/mqlite/cmd/mqlite@v0.4.2`.
-- MCP server: `go install github.com/mqlitehq/mqlite/cmd/mqlite-mcp@v0.4.2`.
-- Full SDK (embedded + remote): `go get github.com/mqlitehq/mqlite@v0.4.2`
-  (Go ≥ 1.21).
-- MQLite Remote Client for Go: `go get github.com/mqlitehq/mqlite-go@v0.1.1`
+- Broker: `go install github.com/mqlitehq/mqlite/cmd/mqlite@latest`.
+- MCP server: `go install github.com/mqlitehq/mqlite/cmd/mqlite-mcp@latest`.
+- Full SDK (embedded + remote): `go get github.com/mqlitehq/mqlite@latest`
+  (documented source floor: Go ≥ 1.21; check the installed release's go.mod).
+- MQLite Remote Client for Go: `go get github.com/mqlitehq/mqlite-go@latest`
   (Go ≥ 1.13 source compatibility; build production binaries with a supported
   Go release).

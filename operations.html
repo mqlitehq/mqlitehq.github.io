@@ -6,15 +6,29 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Operations · mqlite</title>
 <meta name="description" content="Back up, restore, upgrade, and operate a single-broker deployment.">
+<link rel="alternate" hreflang="en" href="operations.html">
+<link rel="alternate" hreflang="zh-CN" href="zh-CN/operations.html">
+<link rel="alternate" hreflang="x-default" href="operations.html">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="assets/site.css">
 <script src="assets/highlight.min.js" defer></script>
 <script src="assets/site.js" defer></script>
 </head>
 <body>
-<nav class="top"><div class="wrap">
+<nav class="top" aria-label="Main navigation"><div class="wrap">
   <a class="brand" href="./"><img src="logo.svg" alt="" width="24" height="24"> mqlite</a>
-  <div class="links">
+  <div class="links overflow-nav" data-overflow>
+    <div class="overflow-primary"></div>
+    <details class="language-picker" data-language-picker name="header-menu">
+      <summary aria-label="Language: English" title="Choose language"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.25"><circle cx="8" cy="8" r="6"/><ellipse cx="8" cy="8" rx="2.5" ry="6"/><path d="M2 8h12"/></svg><span>EN</span></summary>
+      <ul class="language-options" aria-label="Available languages">
+<li><a data-language-switch href="operations.html" hreflang="en" lang="en" aria-current="true">English</a></li>
+<li><a data-language-switch href="zh-CN/operations.html" hreflang="zh-CN" lang="zh-CN">简体中文</a></li>
+      </ul>
+    </details>
+    <details class="overflow-more has-current" name="header-menu">
+      <summary aria-label="More navigation links">More</summary>
+      <div class="overflow-items">
     <a href="concepts.html">Concepts</a>
     <a href="internals.html">Internals</a>
     <a href="api.html">API</a>
@@ -23,18 +37,23 @@
     <a href="deployment.html">Deployment</a>
     <a href="observability.html">Observability</a>
     <a href="observability-cloud.html">Cloud monitoring</a>
-    <a href="operations.html">Operations</a>
+    <a href="operations.html" aria-current="page">Operations</a>
     <a href="agents.html">For AI agents</a>
     <a class="gh" href="https://github.com/mqlitehq/mqlite">GitHub ↗</a>
+      </div>
+    </details>
   </div>
 </div></nav>
 <div class="wrap">
-  <div class="stamp">Source: <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/operations.md">mqlite main · docs/operations.md</a> — source v0.4.2. Latest supported release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.2">v0.4.2</a>.
-  These docs track main; use the linked release for published artifacts.</div>
+  <div class="stamp">Source: <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/operations.md">mqlite main · docs/operations.md</a> — source v0.4.3 with unreleased changes. Latest supported release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.2">v0.4.2</a>. These docs track main; use the linked release for published artifacts.</div>
   <main class="prose">
 <h1 id="production-operations">Production operations</h1>
-<p>This runbook describes v0.4.2, the latest supported release (port 6754, schema
-token 7). v0.3.3 is withdrawn and
+<p>This runbook follows <code>main</code> for release target v0.4.3 (port 6754, schema token 7).
+Use the <a href="https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/operations.md">v0.4.2 runbook</a>
+when operating that binary. In particular, lease-preserving startup and local
+maintenance, coordinated broker shutdown, and the revised managed Receiver
+behavior below are included in the v0.4.3 release target; see <a href="https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md">CHANGELOG.md</a>.
+v0.3.3 is withdrawn and
 unsupported; its public assets and exact image remain available for forensic or
 compatibility inspection and must not be deployed. v0.4.2 retains v0.4.0&#39;s
 retraction of v0.3.3. Upgrading from v0.3.2 or another schema-5 release
@@ -73,7 +92,25 @@ Keep credentials in a restricted environment/secret file.</li>
 snapshot can repeat work whose external side effects already happened. Reuse
 stable <code>MessageID</code>/body, receive <code>AttemptID</code>, and the exact settlement request
 when retrying within their documented retention windows; do not treat an HTTP
-timeout as proof that a write failed.</li>
+timeout as proof that a write failed. Send deduplication is off by default:
+enable a positive queue dedup window that covers the retry period before
+relying on <code>MessageID</code>, and keep metadata, TTL and scheduled time stable too.
+Duplicate sends do not extend that window. Settlement receipts expire after
+30 minutes without extension on replay; resource deletion or fixed subscription
+expiry can end replay earlier. Keep an application-side ledger when reconciliation
+must outlive those bounds. A Peek-Lock AttemptID replays only while its saved
+record is unexpired and
+its entire saved batch still owns live leases. A broker restart preserves those
+unexpired leases and tokens; after lease expiry or settlement, the broker
+invalidates a stale response and safely re-evaluates eligible work in a fresh
+claim instead of returning obsolete ownership. Reuse that AttemptID only when
+the original Receive response was not observed. Once a response is available,
+retain its tokens and use a new AttemptID for later Receive calls; invalidating
+a partially stale cached batch deliberately leaves its other live leases with
+the original caller rather than creating concurrent delivery. For a planned
+broker replacement, keep the outage shorter than the remaining leases, or
+quiesce new receives and let handlers settle first. A lease that expires during
+the outage follows normal redelivery/final-attempt DLQ rules.</li>
 </ul>
 <p>The next three boundaries apply to v0.4.0 and later. v0.3.2 has
 the complete active-only <code>ListSubscriptions</code> operation, but it does not provide
@@ -121,6 +158,162 @@ and WAL checkpoint headroom on a deep backlog.</li>
 snapshot age (RPO), recovery time (RTO), backlog age, and capacity limits. Measure
 restore time with representative data. A successful backup command alone is not a
 restore test.</p>
+<h2 id="graceful-broker-shutdown">Graceful broker shutdown</h2>
+<p>The coordinated shutdown and lease-preserving restart contract below requires
+v0.4.3; an installed v0.4.2 broker does not provide these guarantees.
+It also does not drain application consumers. Canceling <code>Receiver.Run</code> cancels
+its in-flight handler contexts. <code>Run</code> still waits for handlers and settlement to
+return, but offers no grace period for handlers to finish before cancellation.
+Interrupted deliveries can consume delivery attempts or reach the DLQ at the
+configured limit. Quiesce and drain consumers at the application layer before
+canceling them when a planned consumer stop must finish its work.</p>
+<p><code>mqlite serve</code> treats the first SIGINT or SIGTERM as a graceful-shutdown request.
+It stops accepting new HTTP connections and closes an internal no-new-claim gate for
+Receive. A call parked between claim rounds wakes with <code>200</code> and an empty message list;
+managed Receivers can therefore reconnect after the broker restarts. Caller-initiated
+cancellation remains <code>499</code>. Stop and claim admission share one atomic boundary: a round
+admitted before shutdown retains the caller&#39;s context and returns its real message or
+error, while no database operation starts for a later round. Only a call that already
+completed a confirmed empty round receives the <code>200</code> wake-up. A Receive fenced before
+its first round gets <code>503 unavailable</code> with <code>Retry-After</code> (CORS-exposed when enabled),
+preserving its AttemptID in case it is replaying a committed claim whose earlier
+response was lost. Other admitted
+requests retain their contexts and receive up to
+25 seconds to drain; the broker does not abort an in-flight Send or settlement just
+to wake a long poll. A handler that does not finish (for example, a client stalled
+while uploading a request body) consumes that drain budget. The broker then closes
+the engine&#39;s operation admission, joins admitted database work and background
+maintenance, closes the database, and releases the local file lock. Engine and
+diagnostic-log close failures make the command exit non-zero.</p>
+<p>Broker startup preserves an unexpired Peek-Lock lease on an active resource, its
+fencing token and its delivery count. Resource lifecycle and message TTL remain
+authoritative. A remote handler that outlives a short broker restart can
+therefore renew or complete the same delivery after reconnecting; the restart
+does not by itself duplicate the message or consume another delivery attempt.
+If the downtime reaches <code>locked_until</code>, startup recovery (or the reaper) applies
+the ordinary expiry rule: the message returns to active below the delivery limit
+or enters the DLQ on its final attempt. Size lock durations and deployment grace
+periods so planned restarts normally finish inside the remaining lease.
+Measure the full interval from stopping the old broker until the replacement
+listener is ready, including database open and schema checks. The default lease
+is 30 seconds; use a longer configured lease when measured remote-store restart
+time and renewal/settlement latency need more margin.
+The managed Go clients also have bounded renewal and settlement retry budgets:
+terminal Complete/Abandon cleanup gets up to five seconds in total, including the
+first request and all replays. Returning before lease
+expiry is therefore necessary but not sufficient to preserve a particular
+handler&#39;s settlement; an exhausted retry budget does not resume automatically
+when the broker later returns. Retaining a valid token does not guarantee that an
+external side effect ran only once.</p>
+<p>A stopped broker&#39;s database may be opened by a local CLI inspection or maintenance
+command without revoking an unexpired delivery: every Open preserves live leases by
+default. The local file still has a single owner, so stop the broker first and never
+open the same DB concurrently. Programmatic servers must use <code>WithBrokerMode</code> before
+<code>Serve</code> to select its shutdown and lifecycle contract. A single-process embedded
+owner may use <code>WithReclaimUnexpiredLeases</code> only when it knows every previous handler
+is gone; that explicit takeover invalidates live tokens and may send final attempts
+to the DLQ.</p>
+<p>After the first signal has been observed, normal operating-system signal behavior
+is restored before graceful shutdown starts. A second SIGINT or SIGTERM therefore
+forces process termination immediately. Use that escalation only when abandoning
+the remaining HTTP handlers and cleanup is preferable to waiting: the process
+cannot run additional settlement or close code after the second signal. SQLite
+transactions still recover atomically. A committed, unexpired Peek-Lock lease is
+preserved on the next broker open; once its deadline passes it is eligible for
+redelivery or final-attempt DLQ. Application side effects may already have happened
+and must remain idempotent. Ctrl-D is terminal input EOF, not a shutdown signal;
+the broker does not read stdin.</p>
+<p>The Receive gate is the no-new-claim barrier for a call parked between claim rounds.
+An already-admitted claim transaction keeps the caller&#39;s request context and may return
+work committed before shutdown began. Quiesce
+consumers before a planned broker replacement when even that in-flight boundary
+matters.</p>
+<p>Set the platform&#39;s outer termination grace longer than:</p>
+<figure class="concept-diagram explanatory-figure" data-explanatory-figure="shutdown-budget" aria-labelledby="explanatory-shutdown-budget-caption">
+<figcaption id="explanatory-shutdown-budget-caption">The outer termination grace must exceed this total</figcaption>
+<div class="explanatory-viewport" role="region" tabindex="0" aria-label="The outer termination grace must exceed this total" style="overflow-x:auto;padding:1rem;border:1px solid var(--line, #777);border-radius:8px"><p class="explanatory-formula" style="margin:0;line-height:2"><span style="display:inline-block">25s HTTP drain</span> <span>+</span> <span style="display:inline-block"><code>Engine.Close</code> duration</span> <span>+</span> <span style="display:inline-block">Log and process-exit margin</span></p></div>
+
+<details class="diagram-source"><summary>View the original English text figure</summary>
+<pre><code class="language-text">25s HTTP drain + Engine.Close duration + log and process-exit margin
+</code></pre>
+</details>
+</figure>
+<p><code>Engine.Close</code> deliberately waits for admitted work and has no unsafe timeout that
+releases ownership while a write may still be running. It immediately refuses new
+database operations and wakes parked receivers, then gives admitted operations up
+to five seconds to finish before canceling background maintenance. This internal
+grace avoids interrupting a healthy commit; after it expires, an unacknowledged
+commit remains outcome-unknown and must be reconciled. The grace is separate from
+transaction cleanup and does not bound the total Close duration. This grace applies
+to engine-admitted SQL operations; it does not give application message handlers a
+graceful-drain phase. The outer platform deadline
+is therefore the final hard bound. The repository&#39;s <code>docker-compose.yml</code> sets
+<code>stop_grace_period: 40s</code>; plain Docker otherwise defaults to only 10 seconds and
+can send SIGKILL while a deliberately stalled handler is still inside the 25-second
+HTTP drain. Kubernetes commonly defaults to a 30-second termination grace, leaving
+only about 5 seconds after the worst-case HTTP drain for engine close and process
+exit; configure at least 40 seconds, and more when measured remote-store close time
+requires it. Keep Turso/libSQL replacement single-active and stop-then-start; this
+shutdown behavior does not make overlapping brokers safe.</p>
+<h2 id="consumer-stops-and-host-interruptions">Consumer stops and host interruptions</h2>
+<p>These boundaries describe release target v0.4.3 and both Go clients&#39; managed
+<code>Receiver.Run</code>. The SDK does not install process signal handlers. The host
+application decides how SIGINT/SIGTERM, stdin EOF, and platform grace periods
+affect its contexts; <code>Consumer.Shutdown</code> and a stop-admission-then-drain API are
+not implemented. Ctrl-D normally produces stdin EOF, not a process signal or
+automatic context cancellation; <code>mqlite serve</code> does not read stdin.</p>
+<table>
+<thead>
+<tr>
+<th>Event</th>
+<th>Current behavior and required action</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Broker stops and restarts within the remaining lease</td>
+<td>A live Receiver retries and can reuse the persisted token. Renewal and settlement must also finish inside their retry budgets. Keep a single active broker and leave the Receiver&#39;s controlling context live.</td>
+</tr>
+<tr>
+<td>Broker outage reaches lease expiry</td>
+<td>The original token cannot renew or create a new settlement effect. The delivery returns to active below <code>MaxDeliveryCount</code>, or enters the DLQ at the limit. A retained exact-request receipt can still confirm an earlier committed settlement.</td>
+</tr>
+<tr>
+<td>Application cancels <code>Run</code></td>
+<td>Receive retries stop and handler/renewal contexts are canceled immediately. <code>Run</code> still waits for workers and cleanup. A returning handler&#39;s <code>nil</code> result requests Complete; a non-nil result requests Abandon on a fresh context with up to five seconds, unless terminal renewal failure already made settlement unsafe. Cancellation offers no handler grace period.</td>
+</tr>
+<tr>
+<td>Handler, error callback, or custom transport ignores cancellation</td>
+<td>Shutdown can remain blocked while joining that work. Context cancellation is cooperative; it is not a goroutine kill or a hard return deadline.</td>
+</tr>
+<tr>
+<td>Application calls a Close method</td>
+<td><code>Receiver.Close</code> is a no-op; <code>Client.Close</code> releases only SDK-owned idle HTTP connections. Neither cancels an active Run. <code>Embedded.Close</code> joins admitted database work, not application handlers. Cancel and join the Receiver before closing its client or engine.</td>
+</tr>
+<tr>
+<td>Consumer is killed, SIGSTOPped, or container-paused while the broker stays available</td>
+<td>A killed process cannot settle; a paused process cannot renew. Expired leases follow the ordinary redelivery/DLQ rule. A resumed handler may already have made an external change even though its old token is fenced.</td>
+</tr>
+<tr>
+<td>Broker is killed</td>
+<td>There is no HTTP drain or cleanup guarantee. Local transactions recover atomically; default startup preserves still-valid leases. If the response is lost around a commit, the caller must reconcile the result (for example through the exact-request receipt); process death alone does not prove rollback. <code>:memory:</code> loses all state when its process exits.</td>
+</tr>
+<tr>
+<td>Screen turns off or locks; machine sleeps, freezes, or loses power</td>
+<td>Turning off or locking the screen alone does not signal a process or cancel its contexts; the OS may separately suspend the host. During host sleep or failure, do not assume continued serving, renewal, or cleanup; broker-clock deadlines may be past on resumption. SIGSTOP, container pause/restart, and SIGKILL are process fault models, not proofs of host-sleep or power-loss behavior.</td>
+</tr>
+</tbody></table>
+<p>For a planned consumer stop, arrange application-level admission control and let
+work settle before canceling it, or use an explicit Receive loop whose lifecycle
+the application owns. An interrupted final delivery can reach the DLQ without a
+business-handler failure. Do not repeatedly restart or redrive a non-idempotent
+handler without reconciling its external side effects.</p>
+<p>A successful Send acknowledgement means the transaction committed under the
+configured storage contract. It does not acknowledge completion of a consumer&#39;s
+external work. Local <code>NORMAL</code> protects against process crashes; power-loss
+durability requires <code>FULL</code> and a storage stack that honors flushes. Turso/libSQL
+durability is the remote service&#39;s contract, not a setting proved by a local
+container test. Recovery tests must state which of these failure models they
+actually exercise.</p>
 <h2 id="startup-and-routine-checks">Startup and routine checks</h2>
 <p>Pin the binary checksum or image digest and record its source commit, Go version,
 MQLite version and schema token. Use the same configuration when rehearsing and
@@ -206,7 +399,7 @@ connections concurrently writing/checkpointing. A local MQLite database has one
 connection that may write or checkpoint plus one observation reader opened with
 SQLite <code>mode=ro</code> and <code>query_only</code>; the reader cannot write or checkpoint. That
 division and this backup restriction avoid the affected topology. See
-<a href="https://github.com/mqlitehq/mqlite/blob/main/docs/dependencies.md">dependency policy</a>.</p>
+<a href="dependencies.html">dependency policy</a>.</p>
 <h3 id="offline-directory-copy">Offline directory copy</h3>
 <p>Stop producers and consumers, then stop the broker and confirm it has exited.
 Copy the complete data directory while no process can change it; include the main
@@ -234,13 +427,16 @@ files from another database lifetime.</li>
 binary against it on an isolated endpoint, with authentication and <code>FULL</code>, while
 business clients remain stopped. Do not attach the original database as well.</li>
 <li>Verify configuration, subscriptions, message identities and body hashes against
-recorded expectations. On startup every orphaned lock is reclaimed: below the
-queue&#39;s delivery limit it becomes active; at the limit it goes to DLQ with
-<code>MaxDeliveryCountExceeded</code>. Delivery count and payload survive, and the old lock
-token is invalid. A queue already marked <code>deleting</code> never participates in lock
-recovery; startup first continues one bounded cleanup pass, then the background
-loop resumes it. Old receive-attempt snapshots may replay old handles for active
-queues; that does not give those handles ownership of a recovered message.</li>
+recorded expectations. Broker startup preserves a locked row whose lease is
+still unexpired; it retains the original token and delivery count until the
+holder settles it or the deadline passes. An already-expired lock is reclaimed:
+below the queue&#39;s delivery limit it becomes active; at the limit it goes to DLQ
+with <code>MaxDeliveryCountExceeded</code>, and its old token is invalid. A queue already
+marked <code>deleting</code> never participates in lock recovery; startup first continues
+one bounded cleanup pass, then the background loop resumes it. A saved
+receive-attempt response may replay only while every token in its batch still
+owns a preserved live lease. If expiry or recovery invalidates any token, the
+stale response is removed and cannot recreate ownership.</li>
 <li>Check deferred/scheduled/DLQ work and topic filters, then run the authenticated
 canary. A restore replays the snapshot&#39;s state: later completions, sends, dedup
 records and external business effects require reconciliation against the
@@ -251,8 +447,10 @@ time and recovered snapshot age; retain the original for investigation.</li>
 </ol>
 <p>The repeatable <a href="https://github.com/mqlitehq/mqlite/blob/main/test/production/restore/README.md">restore drill</a> verifies all
 schema tables and columns, complete payloads, auxiliary records, outbox data and
-the expected recovery transformations. Run it for a candidate and rehearse the
-same procedure on representative operational data before relying on a backup.</p>
+the explicitly requested embedded recovery transformations. Default preservation
+of live leases is covered separately by the engine and real Serve restart tests; the
+restore drill does not replace those checks. Run it for a candidate and rehearse
+the same procedure on representative operational data before relying on a backup.</p>
 <h2 id="upgrade-and-rollback">Upgrade and rollback</h2>
 <p>Check schema tokens before replacing a binary. Version numbers alone do not
 establish database compatibility, and MQLite does not run schema migrations.</p>
@@ -280,6 +478,13 @@ establish database compatibility, and MQLite does not run schema migrations.</p>
 <td>First preserve candidate data and reconcile new messages and external effects. Blindly restoring the old snapshot would discard those new writes.</td>
 </tr>
 </tbody></table>
+<p>Lease recovery behavior is implemented by the binary, not recorded in the schema
+token. A build from before the safe-open default may reclaim every live lock when
+it opens the database, even when the file itself is schema-compatible. Before such
+a downgrade, stop new claims, drain and settle in-flight work (or wait for every
+lease to expire), and verify every queue reports <code>locked=0</code>. Do not use an older
+local CLI for inspection or vacuum during a maintenance window that still has live
+tokens.</p>
 <p>For a cutover from <strong>v0.3.0, v0.3.1, v0.3.2 or withdrawn v0.3.3 to v0.4.0</strong>,
 the schema changes
 from <strong>5 → 7</strong> while port <strong>6754</strong> stays unchanged. Durable queue lifecycle and

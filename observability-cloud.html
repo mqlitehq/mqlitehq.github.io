@@ -6,15 +6,29 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Cloud monitoring · mqlite</title>
 <meta name="description" content="Connect authenticated broker metrics to existing collectors on Fly.io, Alibaba Cloud, Azure, or Kubernetes.">
+<link rel="alternate" hreflang="en" href="observability-cloud.html">
+<link rel="alternate" hreflang="zh-CN" href="zh-CN/observability-cloud.html">
+<link rel="alternate" hreflang="x-default" href="observability-cloud.html">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="assets/site.css">
 <script src="assets/highlight.min.js" defer></script>
 <script src="assets/site.js" defer></script>
 </head>
 <body>
-<nav class="top"><div class="wrap">
+<nav class="top" aria-label="Main navigation"><div class="wrap">
   <a class="brand" href="./"><img src="logo.svg" alt="" width="24" height="24"> mqlite</a>
-  <div class="links">
+  <div class="links overflow-nav" data-overflow>
+    <div class="overflow-primary"></div>
+    <details class="language-picker" data-language-picker name="header-menu">
+      <summary aria-label="Language: English" title="Choose language"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.25"><circle cx="8" cy="8" r="6"/><ellipse cx="8" cy="8" rx="2.5" ry="6"/><path d="M2 8h12"/></svg><span>EN</span></summary>
+      <ul class="language-options" aria-label="Available languages">
+<li><a data-language-switch href="observability-cloud.html" hreflang="en" lang="en" aria-current="true">English</a></li>
+<li><a data-language-switch href="zh-CN/observability-cloud.html" hreflang="zh-CN" lang="zh-CN">简体中文</a></li>
+      </ul>
+    </details>
+    <details class="overflow-more has-current" name="header-menu">
+      <summary aria-label="More navigation links">More</summary>
+      <div class="overflow-items">
     <a href="concepts.html">Concepts</a>
     <a href="internals.html">Internals</a>
     <a href="api.html">API</a>
@@ -22,15 +36,16 @@
     <a href="access-keys.html">Access keys</a>
     <a href="deployment.html">Deployment</a>
     <a href="observability.html">Observability</a>
-    <a href="observability-cloud.html">Cloud monitoring</a>
+    <a href="observability-cloud.html" aria-current="page">Cloud monitoring</a>
     <a href="operations.html">Operations</a>
     <a href="agents.html">For AI agents</a>
     <a class="gh" href="https://github.com/mqlitehq/mqlite">GitHub ↗</a>
+      </div>
+    </details>
   </div>
 </div></nav>
 <div class="wrap">
-  <div class="stamp">Source: <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/observability-cloud.md">mqlite main · docs/observability-cloud.md</a> — source v0.4.2. Latest supported release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.2">v0.4.2</a>.
-  These docs track main; use the linked release for published artifacts.</div>
+  <div class="stamp">Source: <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/observability-cloud.md">mqlite main · docs/observability-cloud.md</a> — source v0.4.3 with unreleased changes. Latest supported release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.2">v0.4.2</a>. These docs track main; use the linked release for published artifacts.</div>
   <main class="prose">
 <h1 id="cloud-and-kubernetes-monitoring">Cloud and Kubernetes monitoring</h1>
 <p>These examples require <strong>MQLite v0.3.2 or later</strong>, including configured monitor
@@ -43,12 +58,19 @@ credential, give only that credential to the collector, and keep administrator
 credentials out of monitoring configuration. See <a href="observability.html">observability.md</a>
 for the metric contract and the runnable local stack.</p>
 <h2 id="common-integration">Common integration</h2>
+<figure class="concept-diagram explanatory-figure" data-explanatory-figure="monitoring" aria-labelledby="explanatory-monitoring-caption">
+<figcaption id="explanatory-monitoring-caption">Metrics collection, storage and dashboards</figcaption>
+<div class="explanatory-viewport" role="region" tabindex="0" aria-label="Metrics collection, storage and dashboards" style="overflow-x:auto;padding:1rem;border:1px solid var(--line, #777);border-radius:8px"><ol class="explanatory-flow" style="margin:0;padding-left:1.5em"><li style="padding:0.6em 0"><strong>Collector</strong><p>Scrape <code>MQLite :6754/metrics</code> over a private route with a monitor Bearer token.</p><div aria-hidden="true" style="margin-top:0.5em">↓</div></li><li style="padding:0.6em 0"><strong>Prometheus-compatible storage</strong><div aria-hidden="true" style="margin-top:0.5em">↓</div></li><li style="padding:0.6em 0"><strong>Existing Grafana + rules</strong></li></ol></div>
+
+<details class="diagram-source"><summary>View the original English text figure</summary>
 <pre><code class="language-text">MQLite :6754/metrics &lt;-- private route + monitor Bearer token -- collector
                                                           |
                                               Prometheus-compatible storage
                                                           |
                                                existing Grafana + rules
 </code></pre>
+</details>
+</figure>
 <ol>
 <li>Locate the collector in the broker&#39;s private network, or provide a TLS route
 reachable only from approved collectors. Configure the correct CA; do not
