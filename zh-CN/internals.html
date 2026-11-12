@@ -134,9 +134,8 @@
 <li><strong>进程内写入连接池大小为一</strong>（<code>SetMaxOpenConns(1)</code>）。<code>database/sql</code> 将每次变更排入该连接，因而<em>所有写入在进入 SQLite 前就已串行化</em>。没有写锁争用，无需 <code>SQLITE_BUSY</code> 重试循环，也无需分析写入交错。两个 goroutine 不可能各自领取同一消息的一部分，因为语句不能重叠执行。</li>
 <li><strong>跨进程时，建议性文件锁直接拒绝第二个所有者。</strong> 嵌入式本地文件还会对 <code>&lt;db&gt;.lock</code> 辅助文件加操作系统锁，键取自<em>规范化</em>路径，因此 <code>./mq.db</code> 和指向它的符号链接会冲突。第二个进程打开同一文件时立即返回 <code>ErrDBLocked</code>，而不是破坏领取语义。需要多进程访问时应运行 broker，一个 broker 就是唯一写入者。</li>
 <li><strong>文件使用 WAL 模式</strong>，因此在文件层面，读取者不会阻塞写入者，也不会看到撕裂状态。监控探针、实时的单队列 <code>Stats</code> 和全局观测刷新使用另一个 <code>mode=ro</code> 加 <code>query_only</code> 的连接；全局队列指标共享约 10 秒的快照，并合并并发刷新。普通引擎读取和全部变更保留既有的写入连接顺序。内存引擎无法共享该读取连接，仍使用唯一连接。默认耐久性设置为 <code>synchronous=NORMAL</code>；当每次提交一次 fsync 值得付出本地吞吐量约 4–11 倍的代价时，可选择 <code>FULL</code>（<code>MQLITE_SYNC</code>）。远程 Turso 忽略此设置，其耐久性由服务端负责。</li>
-<li><strong>远程 Turso/libSQL</strong> 将连接池放宽到 4 个连接，因为 Turso 主库会在服务端串行化写入；这也是唯一会重试瞬时错误的路径。本地失败语句未产生执行效果，没有需要重试的内容。对于 HTTP Hrana（<code>libsql://</code>），一个逻辑驱动连接只维持一次 <code>database/sql</code> 连接租借，或一个完整事务，结束后即丢弃；Go 的共享 HTTP transport 仍会复用底层 TCP/TLS 连接。WebSocket transport 保留有界连接池，本地 SQLite 路径保持不变。</li>
+<li><strong>远程 Turso/libSQL</strong> 保留四连接池用于读取，并在变更尝试获取连接之前进行单写入准入。续锁工作按 FIFO 排队，以有界优先级先于结算执行；结算相对其他写入也只有有界优先级，以保证维护工作取得进展。许可持续到提交或回滚结束、SQL 连接租借归还后，再于重试退避前释放。这也是唯一会重试瞬时错误的路径。本地失败语句未产生执行效果，没有需要重试的内容。对于 HTTP Hrana（<code>libsql://</code>），一个逻辑驱动连接只维持一次 <code>database/sql</code> 连接租借，或一个完整事务，结束后即丢弃；Go 的共享 HTTP transport 仍会复用底层 TCP/TLS 连接。WebSocket transport 保留有界连接池，本地 SQLite 路径保持不变。</li>
 </ul>
-<p>关键在于：mqlite 不额外<em>实现</em>消费者之间的互斥，而是<strong>安排执行方式，使这种额外互斥不再必要</strong>。通过减少并发交错实现并发控制。</p>
 <h2 id="4--claiming-peek-lock-is-one-atomic-update">4 · 领取：Peek-Lock 是一条原子 UPDATE</h2>
 <p>消费者请求工作这一热路径只需一条语句，以下为 <code>engine/claim.go</code> 的简化形式：</p>
 <pre><code class="language-sql">UPDATE messages
@@ -267,7 +266,7 @@ WHERE id = :seq AND queue = :q AND lock_token = :token
 <ul>
 <li><strong>一致性测试集</strong>（<a href="conformance.html">conformance.md</a>）：令牌隔离、跨锁过期的顺序、恢复边界、幂等重放、命名空间互斥等不变量各自引用固定其行为的隔离测试；CI 在三种操作系统上启用 race detector 执行。</li>
 <li><strong>查询计划固定测试</strong>：对 <code>EXPLAIN QUERY PLAN</code> 输出作断言，使性能特征成为防回归契约，而非期望，见第 5 节。</li>
-<li><strong>Schema 黄金测试</strong>：固定完整规范 DDL。保护令牌不匹配的数据库会被拒绝（<code>ErrSchemaVersionMismatch</code>），绝不迁移已有表布局；不兼容改动必须更换令牌。独立的 <code>access_keys</code> 增加最初保留令牌 5，并持续属于规范 schema，其 DDL 另有黄金测试。持久化资源生命周期与固定订阅到期使当前规范 schema 升至令牌 7；真实 schema-5 文件及中间 schema-6 文件在升级和回退两个方向都被拒绝。</li>
+<li><strong>Schema 黄金测试</strong>：固定完整规范 DDL。保护令牌不匹配的数据库会被拒绝（<code>ErrSchemaVersionMismatch</code>），绝不迁移已有表布局；不兼容改动必须更换令牌。一项范围严格受限的兼容修复，会在同一事务内将两个已识别的旧消息父项触发器替换为等价的索引化谓词，使其也能在基于 Rust 的 Turso 上编译。发现未知触发器定义时，Open 会在执行 DDL 前拒绝打开；该修复不改变消息数据或 schema 令牌。独立的 <code>access_keys</code> 增加最初保留令牌 5，并持续属于规范 schema，其 DDL 另有黄金测试。持久化资源生命周期与固定订阅到期使当前规范 schema 升至令牌 7；真实 schema-5 文件及中间 schema-6 文件在升级和回退两个方向都被拒绝。</li>
 <li><strong>完整性扫描</strong>：随机发送、接收、崩溃工作负载断言每条消息到达（无缺失）、正文完整（内容哈希），且不超过投递次数上限。</li>
 <li><strong>崩溃注入层</strong>：真实 worker 在事务中途被强杀（<code>SIGKILL</code>）后重启，验证发件箱跨崩溃仍保持原子性，以及测试程序已收到确认的每次生产端提交均能保留。崩溃 worker 使用嵌入式恢复，将孤儿锁移回 active，或在投递次数耗尽时移入 DLQ。它重新执行测试二进制，因此位于 <code>crash_injection</code> 构建标签之后，由 Linux 独立 CI 任务运行：启用 race detector 的 <code>make crash</code>，与默认包矩阵分开执行。这测试的是<em>进程</em>终止，不是断电。</li>
 </ul>

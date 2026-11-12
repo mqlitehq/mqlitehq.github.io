@@ -16,7 +16,7 @@ mqlite 以**一个纯 Go 二进制**（或一个容器镜像）管理**一个 SQ
 
 | 环境变量 | 含义 |
 |---|---|
-| `MQLITE_DB` | `file:/data/mq.db`（本地）或 `libsql://<db>.turso.io`（远程） |
+| `MQLITE_DB` | `file:/data/mq.db`（本地）、`libsql://<db>.turso.io`（远程 libSQL），或尚未发布的 `turso://<db>.turso.io`（[Rust 预览](turso.md#rust-based-turso-technical-preview)） |
 | `MQLITE_DB_AUTH_TOKEN` | 远程 libSQL/Turso DSN 的身份验证 token |
 | `MQLITE_TOKENS` | 逗号分隔的管理员 Bearer token（**生产环境必须设置**） |
 | `MQLITE_MONITOR_TOKENS` | v0.3.2+：可选的逗号分隔凭据，仅用于 `Observe` 和 `/metrics`；要求启用身份验证，并配置独立的管理员凭据 |

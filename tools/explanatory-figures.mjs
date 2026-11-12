@@ -18,19 +18,19 @@ export const EXPLANATORY_FIGURES = Object.freeze([
   },
   {
     id: 'capacity', file: 'benchmark.md', language: '',
-    documentSha256: 'd217ac950e46a6578a76196ce4b6bd6552aad29eec44c1de34367d352509aa4a',
+    documentSha256: '146e9ec9cefab45a2af2afa7745b608799eda46bc222f9d5a53b5a937c7b884f',
     sourceSha256: '8403c3c2c82335ff30740c6e4ea5aadbf885ebe53b4d82c56a7ea1ac81329bff',
     title: { en: 'Historical deployment sizing sample (Fly.io)', 'zh-CN': '历史部署容量样本（Fly.io）' },
   },
   {
     id: 'validation', file: 'turso.md', language: '',
-    documentSha256: '009bd6f0b56831e5d3dec54d29dfa234814458488fdbe6981d25499e2a35aa73',
-    sourceSha256: '64247b689cb1abfc244788d648ebe1eac51aaf1e1b2eed302a7e693e8c6e2fbf',
+    documentSha256: '79094c9e8940cf8af497ac44a4c8816d27d4e73c925bdf5599f13aa4cfea0a95',
+    sourceSha256: 'ee708945893e137aa34db7ce08e44fa9e5dffe5309e1de287ff3d24c7d718740',
     title: { en: 'Turso validation lanes and their entry points', 'zh-CN': 'Turso 验证分层与测试入口' },
   },
   {
     id: 'shutdown-budget', file: 'operations.md', language: 'text',
-    documentSha256: '3f3c7d639e3da78a9c9c9361df6e1e89d21c6cd9041e4b14a426d86ea4eff8d1',
+    documentSha256: '8031384ec5b68a27ec0aae47a40fc13ead023f8fae61e0d85f4da424d36a0a5d',
     sourceSha256: 'b6d90cd9a19a22f34050707f22fb90b8ce0afbc6604e35a8391f6c55e20d2b90',
     title: { en: 'The outer termination grace must exceed this total', 'zh-CN': '外层终止宽限期必须大于以下总和' },
   },
@@ -96,11 +96,11 @@ function capacity(chinese) {
 
 function validation(chinese) {
   return table(chinese ? ['测试层级', '运行条件', '测试入口', '验证范围'] : ['Lane', 'Run conditions', 'Entry point', 'Coverage'], chinese ? [
-    ['隔离测试（hermetic）', '始终运行，包含 CI', '<code style="white-space:nowrap">engine/storage_test.go</code>', '连接错误的重试分类器（conn-error retry classifier）'],
-    ['在线测试（live）', '须配置测试凭据（creds-gated）；夜间任务（nightly）', '<code style="white-space:nowrap">engine/turso_test.go</code>', '对真实 Turso 验证完整生命周期（full lifecycle）'],
+    ['隔离测试（hermetic）', '始终运行，包含 CI', '<code style="white-space:nowrap">engine/storage_test.go</code>', '重试分类与连接生命周期（retry classifiers and connection lifecycle）'],
+    ['在线测试（live）', '须配置测试凭据（credentials-gated）', '<code style="white-space:nowrap">engine/turso_test.go</code>', '具有代表性的生命周期契约（representative lifecycle contracts）'],
   ] : [
-    ['Hermetic', 'Always, including CI', '<code style="white-space:nowrap">engine/storage_test.go</code>', 'Connection-error retry classifier'],
-    ['Live', 'Credentials-gated, nightly', '<code style="white-space:nowrap">engine/turso_test.go</code>', 'Full lifecycle against real Turso'],
+    ['Hermetic', 'Always, including CI', '<code style="white-space:nowrap">engine/storage_test.go</code>', 'Retry classifiers and connection lifecycle'],
+    ['Live', 'Credentials-gated', '<code style="white-space:nowrap">engine/turso_test.go</code>', 'Representative lifecycle contracts'],
   ], 760);
 }
 

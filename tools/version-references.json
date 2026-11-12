@@ -2224,5 +2224,35 @@
     "occurrence": 1,
     "kind": "upstream",
     "reason": "Remote-only companion source compatibility or an exact companion-release example, independent of the main module floor. The whole-site release checklist also reviews pinned SDK installation examples."
+  },
+  {
+    "source": "mqlite/docs/turso.md",
+    "text": "driver, pinned at `v0.0.0-20251219100830-236aa1ff8acc`. MQLite retains its Go 1.21",
+    "occurrence": 1,
+    "kind": "source-go",
+    "reason": "Reviewed the unchanged current Go source floor in the functional-check transport scope. The adjacent pseudo-version identifies the pinned client driver, not a provider or Rust service release.",
+    "reviewedValue": "1.21"
+  },
+  {
+    "source": "mqlite/docs/turso.md",
+    "text": "to the same HTTP/Hrana transport. For v0.4.2, use the documented `libsql://` URI.",
+    "occurrence": 1,
+    "kind": "historical",
+    "reason": "Fixed installed-v0.4.2 URI compatibility boundary: that release uses libsql://; the turso:// adapter is explicitly unreleased. This does not claim that v0.4.2 is a provider version or that every future release has the same adapter."
+  },
+  {
+    "source": "site/i18n/zh-CN/docs/turso.md",
+    "text": "固定版本为 `v0.0.0-20251219100830-236aa1ff8acc`。MQLite 的 Go 源码下限仍为 Go 1.21。",
+    "occurrence": 1,
+    "kind": "source-go",
+    "reason": "Reviewed the unchanged current Go source floor in the functional-check transport scope. The adjacent pseudo-version identifies the pinned client driver, not a provider or Rust service release.",
+    "reviewedValue": "1.21"
+  },
+  {
+    "source": "site/i18n/zh-CN/docs/turso.md",
+    "text": "对于 v0.4.2，请使用文档规定的 `libsql://` URI。",
+    "occurrence": 1,
+    "kind": "historical",
+    "reason": "Fixed installed-v0.4.2 URI compatibility boundary: that release uses libsql://; the turso:// adapter is explicitly unreleased. This does not claim that v0.4.2 is a provider version or that every future release has the same adapter."
   }
 ]

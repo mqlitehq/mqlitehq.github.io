@@ -730,7 +730,7 @@ workload observations, not a sustained-capacity or SLA claim.</p>
 <tr>
 <td>writer/provider pool</td>
 <td>local writer 1 / remote provider 4</td>
-<td><strong>don&#39;t change</strong> — the local writer pool stays at one for atomic claims; local files also have one read-only observation connection. The remote pool is scoped to one broker and Turso serializes commits. <code>libsql://</code> logical connections are single-lease while the shared HTTP transport retains TCP/TLS reuse; see <a href="turso.html">turso.md</a>.</td>
+<td><strong>don&#39;t change</strong> — the local writer pool stays at one for atomic claims; local files also have one read-only observation connection. One remote owner admits one write attempt at a time while the four-connection pool retains read capacity. <code>libsql://</code> logical connections are single-lease while the shared HTTP transport retains TCP/TLS reuse; see <a href="turso.html">turso.md</a>.</td>
 </tr>
 </tbody></table>
 <p><code>busy_timeout=5000</code> and <code>temp_store=MEMORY</code> are set on local modernc SQLite
