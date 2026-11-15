@@ -1,6 +1,6 @@
 {
   "formatVersion": 1,
-  "reviewedRevision": "f5b18fce644e8de0a6e1d8f63e3766c46b458cad",
+  "reviewedRevision": "f30f5aecf8f526325070e36a5649611c681d270f",
   "reviewNote": "Reviewed the selected cancellation/drain, bounded HTTP cleanup, uncertain-write classification, SQL acknowledgement validation, whole-message response accounting, credential-diagnostic fixes and remote metadata text preservation, together with matching English/Simplified Chinese release-target documentation. The source targets v0.4.3 with schema 7 and Go 1.21. The metadata projection delta has independent semantic review and real-backend qualification; workload and release acceptance are recorded separately. Additionally reviewed Abandon validation on current main: negative/sub-millisecond client rejection, non-mutating timestamp overflow rejection, zero-delay behavior and exact live receipt replay after clock movement. Matching English/Chinese API, summary and agent guidance were reviewed; complete code/load evidence is separate from unpublished release acceptance.",
   "files": {
     ".github/dependabot.yml": "a6b8da3bb69c6341112b7416cea79d33006d48a0dcf99bd8a929af52ffd06ddb",
@@ -26,7 +26,7 @@
     "docs/benchmark.md": "d217ac950e46a6578a76196ce4b6bd6552aad29eec44c1de34367d352509aa4a",
     "docs/cli.md": "c1aa8e9e4a63380fdc03fa38898daa0c86ca933517b0d37df9a30b351bbf8afc",
     "docs/concepts.md": "7c836de85d036a90e1bb8d4a63e942ad8bf2d19ad9b69d32416658223bbcb1b9",
-    "docs/conformance.md": "150178deedf9fbef244311c973cdf29231c5303e98ea40a46bdb7176e7b3486e",
+    "docs/conformance.md": "dac108121f649754e4b13caa2a37f0244c7b87ea15e60e73d2716d95573f80e7",
     "docs/dependencies.md": "c3c7ae53768a7faa52215af8a9cef26a6ba999fb96896fe2f600fec27a760151",
     "docs/deployment.md": "017e48dd9cd0a90a8e8f5a74702c45b860ccda6383e8a7925e65a74568033972",
     "docs/examples.md": "9fa2921a90ec8c2b04e56337e74a1fa0198b35246fd78d92cef8747f25277655",

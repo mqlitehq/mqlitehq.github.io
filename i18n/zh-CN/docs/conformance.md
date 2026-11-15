@@ -12,7 +12,7 @@
 - **1.2** `locked` 消息必须对其他 `Receive` 调用不可见，直到已结算、锁过期，或显式嵌入式启动恢复使孤儿锁失效。普通启动必须保留有效资源上的未过期租约，因为其他持有者可能在此次打开之后仍然存活；资源生命周期和消息 TTL 仍适用。在一个运行中的 broker 内，绝不重复授予同一有效租约。
   *(engine/functional_test.go `TestCompetingConsumersNoDouble`)*
 - **1.3** 每次新授予的 `Receive` 或 `ReceiveDeferred` 领取恰好增加一次 `delivery_count`。续锁、结算、锁回收、定时激活，以及有效 receive attempt 的重放，都不得增加该计数。
-  *(engine/engine_test.go, engine/ga_fixes_test.go, engine/functional_test.go)*
+  *(engine/engine_test.go, engine/functional_test.go, engine/functional_test.go)*
 - **1.4** 锁过期时，reaper 将消息移回 `active` 以便重投；若 `delivery_count >= max_delivery_count`，则移为 `dead_lettered`。*(engine/engine_test.go)*
 - **1.5** 深积压下领取复杂度为 O(log n)，依赖 `active` 行上的局部索引；过期锁由 reaper 回收，而非领取路径回收。*(engine/claim_plan_test.go)*
 - **1.6 领取时间。** 对 `Receive`（带或不带 `AttemptID`，包括接收即删除）和 `ReceiveDeferred`，每个领取项、每次远程重试都必须在写入准入后，使用新的 broker 时间判断 TTL 资格和租约截止时间。该检查时 TTL 已到期的消息不得被领取。等待写入者或处理批次中较早的项，不得在后续项开始领取前消耗它的租约。
@@ -37,9 +37,9 @@
 - **2.3 Reject** 将消息连同原因移为 `dead_lettered`。*(engine/functional_test.go)*
 - **2.4 Defer** 将消息暂缓，之后通过 `ReceiveDeferred` 按序号取回。普通 `Receive` 绝不返回暂缓消息。在**有序**队列中，暂缓消息**保持队首阻塞**：取回并结算前，同组后续消息不可领取；`strict_fifo` 下整个队列均如此，其他组可继续。没有 TTL 时不会自动恢复，因为 reaper 从不回收 deferred 行；遗失序号可通过 `Peek state=deferred` 找回。成功的 `ReceiveDeferred` 增加 `delivery_count`，但不依据 `max_delivery_count` 限制这种显式按序号领取，因此返回计数可能高于普通投递预算。后续结算仍遵循通常规则。
   *(engine/functional_test.go: TestDeferHoldsHeadOfLine)*
-- **2.5 Renew** 必须保留相同状态、令牌和 `delivery_count`。对于没有固定到期时间的队列或订阅，截止时间设为 `max(old locked_until, broker now + lock_duration)`；固定订阅存续期会限制候选截止时间。不得缩短租约，也不得恢复当前截止时间已过的租约。*(engine/ga_fixes_test.go)*
+- **2.5 Renew** 必须保留相同状态、令牌和 `delivery_count`。对于没有固定到期时间的队列或订阅，截止时间设为 `max(old locked_until, broker now + lock_duration)`；固定订阅存续期会限制候选截止时间。不得缩短租约，也不得恢复当前截止时间已过的租约。*(engine/functional_test.go)*
 - **2.6** 使用错误或过期令牌结算，必须返回 `ErrLockLost`（HTTP 409）；**例外**是同一精确请求仍有有效回执时，幂等重放返回成功，见第 3.2 节。只匹配令牌不够：新的结算和续锁效果要求记录处于锁定状态，且 `locked_until_ms > now`，即使 reaper 尚未执行也如此。相等即过期。时间在本地写入准入后采样，每条结算语句及每次远程重试都重新采样；等待不能保住已过期租约或回执。有效的精确请求回执仍可在原租约到期后重放已提交效果。
-  *(engine/ga_fixes_test.go; engine/complete_batch_test.go:
+  *(engine/functional_test.go; engine/complete_batch_test.go:
   TestSettlementLeaseDeadline, TestSettlementReceiptIdentityMatrix,
   TestSettlementReceiptTimeAfterWriterAdmission, TestCompleteBatchRefreshesTimeBetweenChunks;
   engine/storage_test.go: TestSettlementTimeRefreshesOnRemoteRetry;
@@ -57,12 +57,12 @@
   TestOpenPreservesUnexpiredLeaseByDefault,
   TestOpenReclaimsExpiredLeasesByDefault)*
 - **3.2** 精确请求回执有效时，丢失响应的结算必须重放为成功，而非 `ErrLockLost`，且**仅限同一请求**。回执自记录起 30 分钟到期，重放不得刷新截止时间；资源删除或固定订阅到期可能提前终止重放。`settlement_receipt` 标识 `queue + seq_number + lock_token + operation + effect-bearing arguments`；任一字段不同都不是重放，必须返回 `ErrLockLost`，不能在悄然保留首次效果的同时报告成功。
-  *(engine/ga_fixes_test.go; engine/complete_batch_test.go: TestReceiptsAreBoundToTheirMessage,
+  *(engine/functional_test.go; engine/complete_batch_test.go: TestReceiptsAreBoundToTheirMessage,
   TestReceiptsAreBoundToTheirArguments, TestSettlementReceiptsAreVerbSpecific,
   TestSettlementReceiptIdentityMatrix;
   engine/model_test.go: TestEngineMatchesTheModel, TestModelRejectReceiptArguments)*
 - **3.3** 使用同一 `AttemptID` 重试 Peek-Lock `Receive` 时，只有记录仍有效且缓存的每个令牌仍拥有对应有效未过期锁，才必须重放同一批次和令牌。任一令牌过时时，broker 必须使整个缓存批次失效，并在同一事务中安全地重新领取，不得返回过时或仅部分拥有的批次。失效处理不得撤销该响应中仍拥有有效租约的其他令牌，因为已观察到原响应的调用方可能仍在处理它们。因此 AttemptID 仅用于响应尚未被观察到的 Receive 精确重试；收到响应后，或部分结算后，不得再用于新的 Receive。不带令牌的 Receive-and-Delete 响应可在 attempt 有效期内重放。两种模式下，记录存续期均为记录时“五分钟与队列锁时长的较大值”，并受固定订阅到期限制。重放和续锁不得延长记录截止时间。有效的非空保存响应绑定到原接收模式；空结果不建立记录，已过期记录不再绑定 ID。未知模式必须被拒绝。记录和租约是否到期，都必须在写入准入后用新时间检查。
-  *(engine/ga_fixes_test.go; engine/functional_test.go:
+  *(engine/functional_test.go; engine/functional_test.go:
   TestReceiveAttemptExpiryAfterWriterWait,
   TestReceiveAttemptDoesNotReplayStaleLeaseAfterRestart,
   TestReceiveAttemptDoesNotReplayDeadLetteredLeaseAfterRestart,
@@ -74,14 +74,14 @@
   TestExpiredReceiveAttemptDoesNotBindMode,
   TestReceiveAttemptInvalidatesWholePartiallySettledBatch)*
 - **3.4** 无消息缺失与无内容损坏：隔离的完整性工作负载发送连续 `1..N` 序列，正文为随机内容并将哈希写入属性，然后在有足够投递预算的条件下并发消费，期间有意重投。每个身份都必须完成，每次接收的正文都必须匹配其哈希。重复接收是预期行为，不是处理函数恰好一次执行的保证。
-  *(engine/integrity_test.go `TestMessageIntegrity`)*
+  *(engine/storage_test.go `TestMessageIntegrity`)*
 
 ## 4 · 去重
 
 - **4.1** 在队列的 `dedup_window` 内，重复 `message_id`（空值则使用正文 SHA-256）且正文相同，必须合并为一次入队。窗口配置为零时关闭去重，这也是默认值。窗口从该键最后一次新入队开始，重复发送不得刷新窗口。完成消息不得清除仍保留的去重身份。只有正文字节参与冲突检查；重复请求的元数据、TTL 和计划时间不得更新原消息。
   *(engine/functional_test.go, engine/turso_test.go)*
-- **4.2** *单条* `Send` 的 `message_id` 对应不同正文时，必须返回 `ErrDedupConflict`（HTTP 409）。*(server/send_dedup_test.go)*
-- **4.3** *多条消息* `Send` 中的冲突项返回序号 `0`，表示跳过，其余批次项仍提交。*(wire `SendResponse`; server/send_dedup_test.go)*
+- **4.2** *单条* `Send` 的 `message_id` 对应不同正文时，必须返回 `ErrDedupConflict`（HTTP 409）。*(server/server_test.go)*
+- **4.3** *多条消息* `Send` 中的冲突项返回序号 `0`，表示跳过，其余批次项仍提交。*(wire `SendResponse`; server/server_test.go)*
 
 ## 5 · 排序模式
 
@@ -107,22 +107,22 @@
   TestMessageTTLExpiryOverflowRejectedAtomically,
   TestMessageTTLDeadlineSurvivesRenewAndDelayedRetry; sdk_test.go:
   TestBatchTTLRemoteEmbeddedParity, TestNegativeMessageTTLSDKParity,
-  TestRemoteBatchTTLWireCompatibility; server/send_dedup_test.go:
+  TestRemoteBatchTTLWireCompatibility; server/server_test.go:
   TestServerSendPerMessageTTL; engine/turso_test.go:
   TestTursoMessageTTLParity; test/api_tests.py: t_message_ttl_contract)*
 
 ## 8 · DLQ 保留策略
 
 - **8.1** 设置上限后，`reapDLQ` 必须按**最旧优先**删除超过最长年龄、单队列数量或单队列正文字节数的死信，并且**只能**处理 `state='dead_lettered'`，绝不处理未投递、在途或定时工作。这些是异步保留目标，而非准入上限；DLQ 可以在两轮有界工作循环之间暂时超过目标。
-  *(engine/retention_dlq_test.go)*
-- **8.2** 未设置上限时，即引擎默认状态，DLQ 无界，不自动删除。*(engine/retention_dlq_test.go `TestDLQRetentionDisabledByDefault`)*
-- **8.3** 每个队列的有效上限，由队列覆盖值与引擎默认值共同解析（`effectiveBound`）：`0` 继承默认值，`>0` 覆盖默认值，`<0` 明确表示无界。*(engine/retention_dlq_test.go `TestEffectiveBound`,
+  *(engine/functional_test.go)*
+- **8.2** 未设置上限时，即引擎默认状态，DLQ 无界，不自动删除。*(engine/functional_test.go `TestDLQRetentionDisabledByDefault`)*
+- **8.3** 每个队列的有效上限，由队列覆盖值与引擎默认值共同解析（`effectiveBound`）：`0` 继承默认值，`>0` 覆盖默认值，`<0` 明确表示无界。*(engine/functional_test.go `TestEffectiveBound`,
   `TestDLQRetentionPerQueueOverride`, `TestDLQRetentionPerQueueInheritAndOptOut`)*
 
 ## 9 · 认证与错误：broker
 
 - **9.1** 设置 `MQLITE_TOKENS` 时，除公开的 `/` 发现接口、`/healthz`，以及启用时 `/ui` 下的静态管理控制台之外，所有端点必须要求有效的 `Authorization: Bearer` 令牌；控制台自身的 API 调用仍携带令牌。令牌缺失、无效、过期或撤销，返回 401 `unauthenticated`。
-  *(server/errors_test.go, server/index_test.go, server/console_test.go)*
+  *(server/server_test.go, server/server_test.go, server/console_test.go)*
 - **9.2** 错误使用 JSON 包装 `{code,message}`，HTTP 状态遵循文档。`not_found` 可增加向后兼容的 `resource` 区分字段，值为 `queue` 或 `subscription`：
   400 `invalid_argument`/`group_required` · 401 `unauthenticated` · 403
   `permission_denied` · 404 `not_found` · 409
@@ -130,9 +130,9 @@
   `queue_not_empty`/`subscription_not_empty` · 413 `message_too_large` ·
   429 `resource_exhausted` · 499 `canceled` · 500 `internal` ·
   503 `unavailable`/`outcome_unknown`。
-  *(server/errors_test.go; see [api-reference.md](api-reference.md))*
+  *(server/server_test.go; see [api-reference.md](api-reference.md))*
 - **9.3** 每个注册 RPC 必须在路由注册时绑定权限。Send/Schedule/Cancel 要求 send；其他全部 QueueService 方法要求 listen；订阅 upsert 和过滤器试运行要求 listen；其他全部 AdminService 和全部 AuthService 方法要求 manage。但 Observe 和可选启用的 `/metrics` 也接受配置的只读 monitor 凭据。仅空订阅删除和强制删除都要求 manage。Metrics 默认必须关闭，关闭时返回 404，只有启用时才以 `/metrics` 出现在发现信息中。启用 metrics 必须要求管理员认证。Manage 包含两种数据权限。配置式管理员与托管管理员必须有相同操作权限，包括签发 manage 密钥。权限不足必须在处理函数读取或改变受保护数据前失败。
-  *(server/errors_test.go: TestAccessKeyCompletePermissionMatrix,
+  *(server/server_test.go: TestAccessKeyCompletePermissionMatrix,
   TestListenSubscriptionProvisioningBoundary;
   server/metrics_test.go: TestMetricsDefaultOffAndAnonymousObserveDenied,
   TestMetricsEnabledRequiresAdministratorAuthentication, TestMetricsPermissionMatrix,
@@ -142,20 +142,20 @@
   TestObserveStorageFailureAvailability, TestObserveAuthOutcomesAndWholeRequestCoverage)*
 - **9.4** 托管密钥必须跨重启保留，且只存储令牌的 SHA-256 摘要。新令牌必须为 `mqk_` 加安全随机源产生的 64 个小写十六进制字符。现有配置式令牌继续按原值接受。只有成功创建的响应返回密钥原文；列表、错误和日志不得返回令牌或摘要。重复公共 ID 不得签发第二份凭据。关闭认证时必须拒绝密钥管理。
   *(engine/storage_test.go: TestAccessKeyLifecycle, TestAccessKeyValidation;
-  server/errors_test.go: TestAccessKeyManagementLifecycleAndSecrecy,
+  server/server_test.go: TestAccessKeyManagementLifecycleAndSecrecy,
   TestAccessKeyErrorsDoNotEchoSecrets; token_test.go)*
 - **9.5** 成功撤销后，必须拒绝后续认证；已经授权的请求可以完成。静态配置优先于匹配的数据库记录。SDK 必须在接收、结算和续锁路径把权限拒绝视为永久错误，不得因批量请求被拒绝而改走其他未经授权的操作路径。
-  *(server/errors_test.go: TestAccessKeyRevocationAndExpiryBoundaries;
+  *(server/server_test.go: TestAccessKeyRevocationAndExpiryBoundaries;
   sdk_test.go: TestManagedKeySDKAuthorization; receiver_internal_test.go;
-  cmd/mqlite/safety_test.go)*
+  cmd/mqlite/main_test.go)*
 - **9.6** 访问密钥列表默认必须按 ID 升序。显式 `created_desc` 必须对完整结果按创建时间降序、再按 ID 降序排列，使用稳定游标分页。撤销不得改变密钥位置；在游标前新增密钥，不得使后续页重复或跳过已有密钥。未知排序值和创建时间排序下的未知游标必须以 `invalid_argument` 失败。SDK 和工具必须拒绝顺序错误的响应。
   *(engine/storage_test.go: TestAccessKeyCreationOrderPagination,
-  TestAccessKeySortValidationAndIndex; server/errors_test.go:
+  TestAccessKeySortValidationAndIndex; server/server_test.go:
   TestAccessKeyCreationOrderHTTP; wire/wire_test.go:
   TestAccessKeyCreationOrderResponseValidation; test/api_tests.py)*
 - **9.7** 每个 HTTP 响应必须携带 `X-Mqlite-Server-Time-Ms`，在首次写出响应时，从用于租约与 TTL 判断的同一可注入 epoch 毫秒 broker 时钟采样。这一新增响应头对成功和错误响应均有效；客户端不得把代理生成的失败或重定向视为 broker 时间证据。远程租约调度器必须保守考虑传输与时间戳精度的不确定性，为下一次续锁预留已观测往返耗时的余量，不得仅因本地墙上时钟落在该区间内就延长租约。已确认的精确租约若短于托管 Receiver 的安全续锁间隔，必须采取失败关闭策略，而非进入无界续锁循环。
   启用 CORS 的响应必须在 `Access-Control-Expose-Headers` 中列出该响应头。
-  *(server/errors_test.go: TestJSONResponsesCarryServerTime;
+  *(server/server_test.go: TestJSONResponsesCarryServerTime;
   receiver_internal_test.go: TestClientMapsBrokerDeadlineOntoLocalMonotonicClock,
   TestClientLongPollNeverExtendsLeaseFromLocalWallClock,
   TestClientLongPollObservationDoesNotContaminateShortRenewal,
@@ -189,11 +189,11 @@
 - **10.6 后端一致性。** 给定相同的已提交状态、broker 时间和请求，本地 SQLite 与远程 Turso/libSQL 必须产生相同的成功结果、校验结果、状态转换和逻辑哨兵错误。延迟、暂时可用性、远程传输错误（包括 `ErrOutcomeUnknown`）、远程事务回调重放，以及明确的部署、维护、观测运维行为可以不同，但不得悄然改变确定性队列语义。
   *(engine/turso_test.go: TestTursoIntegration, TestTursoExtended,
   TestTursoMessageTTLParity, TestTursoConcurrent, TestTursoBatchSettle;
-  engine/storage_test.go; server/errors_test.go; sdk_test.go)*
+  engine/storage_test.go; server/server_test.go; sdk_test.go)*
 
 ## 11 · 订阅过滤器
 
-- **11.1** 订阅过滤器是针对消息的单个 `expr` 布尔谓词，空过滤器匹配所有消息。它在 `Subscribe` 时编译并做类型检查。格式错误、引用未知字段或非布尔表达式，必须返回 `ErrInvalidFilter`（HTTP 400 `invalid_argument`），且**不**存储，也不创建支撑队列。*(engine/filter_test.go, server/errors_test.go)*
+- **11.1** 订阅过滤器是针对消息的单个 `expr` 布尔谓词，空过滤器匹配所有消息。它在 `Subscribe` 时编译并做类型检查。格式错误、引用未知字段或非布尔表达式，必须返回 `ErrInvalidFilter`（HTTP 400 `invalid_argument`），且**不**存储，也不创建支撑队列。*(engine/filter_test.go, server/server_test.go)*
 - **11.2** 过滤器在**发布时**针对消息环境求值：包括基础字段、`enqueued_at`/`visible_at`、派生的 `subject_parts`/`body_size`/`property_keys`，以及仅在引用时投影的正文 `body_text`/`body_json`。`body_json` 只在 JSON 内容类型时解码，否则为 `{}`。当且仅当过滤器返回 true，消息才路由到该订阅。
   `enqueued_at` 是发布时间，`visible_at` 是投递时间：立即发送时二者相等，延迟发送时后者是计划时间，因此延迟为 `visible_at - enqueued_at`。*(engine/filter_test.go `TestFilterFanoutConditions`,
   `TestFilterScheduledMessageDelay`)*
@@ -213,7 +213,7 @@
 - **12.5 容量。** 引擎必须限制有效和正在删除的订阅总数，默认 10,000。达到上限后，新映射创建返回 `ErrSubscriptionLimit`（HTTP 429 `resource_exhausted`）；重新订阅有效的精确名称对仍可更新过滤器。正在删除的条目必须保留名额至最终物理清理完成。公开 `CreateQueue(kind=subscription)` 不得创建没有订阅映射的支撑队列。
 - **12.6 固定订阅存续期。** 正的创建 TTL 必须从首次成功事务起保存一个绝对截止时间。新订阅省略或使用零 TTL 时永久存在，已有订阅则保留原存续期。同一正 TTL 幂等，不同正 TTL 必须在改变过滤器前返回 `ErrNameConflict`。重试、过滤器更新、消息活动和重启都不得延长截止时间。`now >= expires_at` 时，扇出和每个直接数据平面效果都必须拒绝该订阅，包括使用缓存元数据的路径。锁与 long-poll 必须不晚于截止时间结束，Renew 不得延长它，幂等记录也不得授权此后的工作。
   *(engine/functional_test.go, engine/engine_test.go,
-  engine/complete_batch_test.go; sdk_test.go; server/subscriptions_test.go)*
+  engine/complete_batch_test.go; sdk_test.go; server/server_test.go)*
 - **12.7 到期清理。** 到期是提前持久授权丢弃所有保留消息状态。带索引的扫描器必须将到期订阅移入已有、可跨重启恢复的删除生命周期，正确性仍独立于扫描时序。空订阅仅可在映射与支撑行于同一事务中删除、且受影响行数准确时使用集合式清理，包括关闭外键时。有内容的订阅继续受全局行数、字节数和公平性限制，每个仍保留的条目在物理删除前继续占用容量名额。*(engine/lifecycle_test.go,
   engine/storage_test.go)*
 
@@ -222,15 +222,15 @@
 取消调用不是*撤销*操作的方式，本地存储中也不是调节延迟的手段。下列规则构成完整契约；它们写在这里，而不仅是更新日志中，因为调用方能够观察到每一项。
 
 - **13.1** context 已取消的 mqlite 操作不得执行任何工作。这在两个边界都适用：等待写入者之前，以及取得连接之后；也适用于进入本地 `Tx` 回调之前。
-  *(engine/cancel_test.go: TestPreCancelledNeverExecutes,
+  *(engine/engine_test.go: TestPreCancelledNeverExecutes,
   TestCancelInTheHandoffWindowStartsNothing, TestNothingBeginsInTheLastWindowBeforeAStatement;
   sdk_test.go: TestEmbeddedTxCancellation)*
 - **13.2** 等待唯一写入者的调用方保留自身截止时间；排队期间取消，必须及时返回且不得产生任何变更。
-  *(engine/cancel_test.go: TestCancelWhileWaitingWritesNothing)*
-- **13.3** **本地**存储（文件或 `:memory:`）中，已经开始的语句必须允许执行完毕，不被中断，且**执行时长没有上限**。`EngineTx.SQL()` 可以运行任意用户 SQL，完整 `VACUUM` 会重写文件，大型 `Purge` 是一次大型 `DELETE`。因此，调用方放弃等待后，写入仍可能提交。这是有意选择：中断本地语句会泄漏驱动连接，导致文件数据库永久锁住（`SQLITE_BUSY`），或直接销毁 `:memory:` 数据库。*(engine/cancel_test.go: TestCancelStormLeavesTheDatabaseUsable,
+  *(engine/engine_test.go: TestCancelWhileWaitingWritesNothing)*
+- **13.3** **本地**存储（文件或 `:memory:`）中，已经开始的语句必须允许执行完毕，不被中断，且**执行时长没有上限**。`EngineTx.SQL()` 可以运行任意用户 SQL，完整 `VACUUM` 会重写文件，大型 `Purge` 是一次大型 `DELETE`。因此，调用方放弃等待后，写入仍可能提交。这是有意选择：中断本地语句会泄漏驱动连接，导致文件数据库永久锁住（`SQLITE_BUSY`），或直接销毁 `:memory:` 数据库。*(engine/engine_test.go: TestCancelStormLeavesTheDatabaseUsable,
   TestCancelledSettleWritesLeaveTheDatabaseUsable)*
 - **13.4** 本地事务内，**mqlite 自有语句**（包括 `EngineTx.SendOne`）在每条语句前检查调用方 context：已运行的语句完成，但检查时发现取消的语句不得开始。`EngineTx.SQL()` 在这些保护之外暴露原始 `*sql.Tx`，供调用方自有表使用；直接修改 mqlite 自有表不属于支持的契约。原始语句必须使用 `tx.Context()`，避免中断本地 SQLite；该 context 有意不可取消，因此调用方取消后原始 SQL 仍可能执行。调用方必须在自己的语句之间检查原始 context，并及时返回。mqlite 不能中断回调，也不能在回调返回前释放单写入者。回调结束后、提交前观察到取消，必须回滚整个事务，包括原始 SQL 写入，即使回调返回 nil。
-  *(engine/cancel_test.go: TestCancelledTransactionStopsIssuingStatements,
+  *(engine/engine_test.go: TestCancelledTransactionStopsIssuingStatements,
   TestTxCancelledBetweenStatementsRollsBack; sdk_test.go: TestEmbeddedTxCancellation)*
 - **13.5** **远程** Turso/libSQL 存储的语句取消是真实有效的，行为不变；这些语句确实可能阻塞于网络，而丢弃远程连接不持有本地锁。
 - **13.6** 由 13.3 可知，丢失响应绝不意味着“操作没有发生”。取消不改变至少一次契约，应核对结果，而非作出假设。
@@ -240,13 +240,13 @@
 这些性质无法由用户绕过，必须在真实并行条件下验证，而非让引擎自我评判；存在缺陷的引擎也可能报告一切正常。
 
 - **14.1 排他投递。** 消费者持有消息的**有效**锁时，该消息不得投递给其他人。排他性*就是*租约：超过 `locked_until` 后，持有者不再拥有任何权利，此时重投是至少一次契约的正常工作方式，而非违约。
-  *(engine/concurrency_test.go: TestConcurrentConsumersNeverShareAMessage)*
+  *(engine/engine_test.go: TestConcurrentConsumersNeverShareAMessage)*
 - **14.2 隔离必须真正生效。** 锁过期且消息重新分配后，旧持有者的结算必须被拒绝（`ErrLockLost`），新持有者的结算必须成功。“恰好一个胜出者”还不够，胜出者必须是有效锁持有者。
-  *(engine/concurrency_test.go: TestConcurrentSettlementPicksExactlyOneWinner)*
+  *(engine/engine_test.go: TestConcurrentSettlementPicksExactlyOneWinner)*
 - **14.3 不得再次投递已完成消息。** 完成的消息不得再次投递。
-  *(engine/concurrency_test.go)*
+  *(engine/engine_test.go)*
 - **14.4 并发工作负载不丢消息。** 在发送成功、消费者存活、投递预算充足，且没有配置丢弃或到期的条件下，每个已发送身份都必须完成。这不覆盖最后尝试进入 DLQ、显式删除、保留策略、消息 TTL 或固定订阅到期。
-  *(engine/concurrency_test.go)*
+  *(engine/engine_test.go)*
 - **14.5 关闭必须隔离存储。** `Close` 首先关闭准入：关闭开始后才发起的数据库工作必须立即以 `ErrClosed` 失败；已经准入的语句、行扫描、事务回调或正在提交的操作，必须在文件锁释放前完成，期间第二次 `Open` 同一文件必须被拒绝（`ErrDBLocked`）。空 long-poll `Receive` 必须以 `ErrClosed` 唤醒，而非对已关闭引擎继续等完轮询窗口。不得在 `Tx` 回调内调用 `Close`：它会等待回调，形成死锁。
   *(sdk_test.go: TestEmbeddedCloseWaitsForPublicTx · engine/storage_test.go:
   TestCloseWaitsForInFlightWritesBeforeReleasingTheLock, TestCloseWakesLongPollWaiters)*

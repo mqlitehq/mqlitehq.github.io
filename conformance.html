@@ -76,7 +76,7 @@ message TTL still apply. Within one running broker, no live lease is granted twi
 <li><p><strong>1.3</strong> Each newly granted <code>Receive</code> or <code>ReceiveDeferred</code> claim increments
 <code>delivery_count</code> exactly once. Renewal, settlement, lock reaping, scheduled
 activation and replay of a live receive attempt MUST NOT increment it.
-<em>(engine/engine_test.go, engine/ga_fixes_test.go, engine/functional_test.go)</em></p>
+<em>(engine/engine_test.go, engine/functional_test.go, engine/functional_test.go)</em></p>
 </li>
 <li><p><strong>1.4</strong> When a lock expires, the reaper returns the message to <code>active</code> (redelivery)
 — or to <code>dead_lettered</code> once <code>delivery_count &gt;= max_delivery_count</code>. <em>(engine/engine_test.go)</em></p>
@@ -134,7 +134,7 @@ the ordinary delivery budget. Subsequent settlement follows the usual rules.
 queue or subscription without a fixed expiry it sets the deadline to
 <code>max(old locked_until, broker now + lock_duration)</code>; a fixed subscription
 lifetime caps the candidate deadline. It MUST NOT shorten a lease or revive one
-whose current deadline has passed. <em>(engine/ga_fixes_test.go)</em></li>
+whose current deadline has passed. <em>(engine/functional_test.go)</em></li>
 <li><strong>2.6</strong> Settling with a wrong/expired token MUST fail with <code>ErrLockLost</code> (HTTP 409)
 — <strong>except</strong> an idempotent replay with a live receipt for the exact request (§3.2) returns
 success. Matching the token alone is insufficient: new settlement and renewal effects
@@ -143,7 +143,7 @@ The equality boundary is expired. Time is sampled after local writer admission a
 afresh for each settlement statement and remote retry; waiting cannot preserve an
 expired lease or receipt. A live exact-request receipt can still replay a previously
 committed effect after the original lease expires.
-<em>(engine/ga_fixes_test.go; engine/complete_batch_test.go:
+<em>(engine/functional_test.go; engine/complete_batch_test.go:
 TestSettlementLeaseDeadline, TestSettlementReceiptIdentityMatrix,
 TestSettlementReceiptTimeAfterWriterAdmission, TestCompleteBatchRefreshesTimeBetweenChunks;
 engine/storage_test.go: TestSettlementTimeRefreshesOnRemoteRetry;
@@ -185,7 +185,7 @@ A <code>settlement_receipt</code> identifies
 <code>queue + seq_number + lock_token + operation + effect-bearing arguments</code>; a call that
 differs in ANY of them is not a replay and MUST return <code>ErrLockLost</code>, never a success
 that silently keeps the first call&#39;s effect.
-<em>(engine/ga_fixes_test.go; engine/complete_batch_test.go: TestReceiptsAreBoundToTheirMessage,
+<em>(engine/functional_test.go; engine/complete_batch_test.go: TestReceiptsAreBoundToTheirMessage,
 TestReceiptsAreBoundToTheirArguments, TestSettlementReceiptsAreVerbSpecific,
 TestSettlementReceiptIdentityMatrix;
 engine/model_test.go: TestEngineMatchesTheModel, TestModelRejectReceiptArguments)</em></li>
@@ -206,7 +206,7 @@ NOT extend the record&#39;s deadline. A live non-empty saved response is
 bound to its original receive mode; an empty result creates no record, and an
 expired record no longer binds the ID. Unknown modes MUST be rejected. Record and
 lease expiry MUST be checked against fresh time after writer admission.
-<em>(engine/ga_fixes_test.go; engine/functional_test.go:
+<em>(engine/functional_test.go; engine/functional_test.go:
 TestReceiveAttemptExpiryAfterWriterWait,
 TestReceiveAttemptDoesNotReplayStaleLeaseAfterRestart,
 TestReceiveAttemptDoesNotReplayDeadLetteredLeaseAfterRestart,
@@ -222,7 +222,7 @@ sends a contiguous <code>1..N</code> sequence with random bodies (hashed into a 
 then consumes concurrently with intentional redelivery and a sufficient delivery
 budget. Every identity MUST be completed and each received body MUST match its
 hash. Repeated receives are expected; this is not an exactly-once handler guarantee.
-<em>(engine/integrity_test.go <code>TestMessageIntegrity</code>)</em></li>
+<em>(engine/storage_test.go <code>TestMessageIntegrity</code>)</em></li>
 </ul>
 <h2 id="4--deduplication">4 · Deduplication</h2>
 <ul>
@@ -234,9 +234,9 @@ the retained dedup identity. Only body bytes participate in the conflict check;
 duplicate metadata, TTL and scheduled time MUST NOT update the original message.
 <em>(engine/functional_test.go, engine/turso_test.go)</em></li>
 <li><strong>4.2</strong> A <em>single</em> <code>Send</code> whose <code>message_id</code> conflicts with a different body MUST
-return <code>ErrDedupConflict</code> (HTTP 409). <em>(server/send_dedup_test.go)</em></li>
+return <code>ErrDedupConflict</code> (HTTP 409). <em>(server/server_test.go)</em></li>
 <li><strong>4.3</strong> In a <em>multi-message</em> <code>Send</code>, a conflicting slot comes back as seq <code>0</code>
-(skipped) while the rest of the batch commits. <em>(wire <code>SendResponse</code>; server/send_dedup_test.go)</em></li>
+(skipped) while the rest of the batch commits. <em>(wire <code>SendResponse</code>; server/server_test.go)</em></li>
 </ul>
 <h2 id="5--ordering-modes">5 · Ordering modes</h2>
 <ul>
@@ -303,7 +303,7 @@ TestTTLCapAtQueueDefault, TestNegativeMessageTTLRejectedBeforeWrite,
 TestMessageTTLExpiryOverflowRejectedAtomically,
 TestMessageTTLDeadlineSurvivesRenewAndDelayedRetry; sdk_test.go:
 TestBatchTTLRemoteEmbeddedParity, TestNegativeMessageTTLSDKParity,
-TestRemoteBatchTTLWireCompatibility; server/send_dedup_test.go:
+TestRemoteBatchTTLWireCompatibility; server/server_test.go:
 TestServerSendPerMessageTTL; engine/turso_test.go:
 TestTursoMessageTTLParity; test/api_tests.py: t_message_ttl_contract)</em></li>
 </ul>
@@ -314,12 +314,12 @@ max age, per-queue count, or per-queue body bytes — and MUST touch <strong>onl
 <code>state=&#39;dead_lettered&#39;</code> (never undelivered/in-flight/scheduled work). These are
 asynchronous retention targets rather than admission limits; a DLQ MAY exceed
 them temporarily between bounded worker passes.
-<em>(engine/retention_dlq_test.go)</em></li>
+<em>(engine/functional_test.go)</em></li>
 <li><strong>8.2</strong> With no bound (the engine default), the DLQ is unbounded — no auto-deletion.
-<em>(engine/retention_dlq_test.go <code>TestDLQRetentionDisabledByDefault</code>)</em></li>
+<em>(engine/functional_test.go <code>TestDLQRetentionDisabledByDefault</code>)</em></li>
 <li><strong>8.3</strong> Each queue&#39;s effective bound is its own override resolved against the engine
 default (<code>effectiveBound</code>): <code>0</code> inherits the default, <code>&gt;0</code> overrides it, <code>&lt;0</code> is
-explicitly unbounded. <em>(engine/retention_dlq_test.go <code>TestEffectiveBound</code>,
+explicitly unbounded. <em>(engine/functional_test.go <code>TestEffectiveBound</code>,
 <code>TestDLQRetentionPerQueueOverride</code>, <code>TestDLQRetentionPerQueueInheritAndOptOut</code>)</em></li>
 </ul>
 <h2 id="9--auth--errors-broker">9 · Auth &amp; errors (broker)</h2>
@@ -328,7 +328,7 @@ explicitly unbounded. <em>(engine/retention_dlq_test.go <code>TestEffectiveBound
 <code>Authorization: Bearer</code> token <strong>except</strong> the open <code>/</code> (discovery), <code>/healthz</code>, and
 the static admin console under <code>/ui</code> (when enabled — its own API calls still carry a
 token); a missing/invalid/expired/revoked token → 401 <code>unauthenticated</code>.
-<em>(server/errors_test.go, server/index_test.go, server/console_test.go)</em></li>
+<em>(server/server_test.go, server/server_test.go, server/console_test.go)</em></li>
 <li><strong>9.2</strong> Errors use a JSON envelope <code>{code,message}</code> with the documented HTTP status;
 <code>not_found</code> may add the backward-compatible <code>resource</code> discriminator <code>queue</code> or
 <code>subscription</code>:
@@ -338,7 +338,7 @@ token); a missing/invalid/expired/revoked token → 401 <code>unauthenticated</c
 <code>queue_not_empty</code>/<code>subscription_not_empty</code> · 413 <code>message_too_large</code> ·
 429 <code>resource_exhausted</code> · 499 <code>canceled</code> · 500 <code>internal</code> ·
 503 <code>unavailable</code>/<code>outcome_unknown</code>.
-<em>(server/errors_test.go; see <a href="api.html">api-reference.md</a>)</em></li>
+<em>(server/server_test.go; see <a href="api.html">api-reference.md</a>)</em></li>
 <li><strong>9.3</strong> Every registered RPC MUST bind a permission in the route registration.
 Send/Schedule/Cancel require send; all other QueueService methods require listen;
 subscription upserts and filter dry-runs require listen; all other AdminService
@@ -351,7 +351,7 @@ auth. Manage includes both data permissions. Configured and managed
 administrators MUST have identical operation rights, including issuing manage
 keys. Insufficient permission MUST
 fail before the handler can read or change protected data.
-<em>(server/errors_test.go: TestAccessKeyCompletePermissionMatrix,
+<em>(server/server_test.go: TestAccessKeyCompletePermissionMatrix,
 TestListenSubscriptionProvisioningBoundary;
 server/metrics_test.go: TestMetricsDefaultOffAndAnonymousObserveDenied,
 TestMetricsEnabledRequiresAdministratorAuthentication, TestMetricsPermissionMatrix,
@@ -369,15 +369,15 @@ Only the successful creation response returns a secret; list, errors and logs
 MUST NOT return tokens or digests. A duplicate public ID MUST NOT mint a second
 credential. Auth-off mode MUST refuse key management.
 <em>(engine/storage_test.go: TestAccessKeyLifecycle, TestAccessKeyValidation;
-server/errors_test.go: TestAccessKeyManagementLifecycleAndSecrecy,
+server/server_test.go: TestAccessKeyManagementLifecycleAndSecrecy,
 TestAccessKeyErrorsDoNotEchoSecrets; token_test.go)</em></li>
 <li><strong>9.5</strong> Successful revocation MUST reject subsequent authentication; already
 authorized requests may finish. Static configuration takes precedence over a
 matching database record. The SDK MUST treat permission denial as permanent in
 receive, settlement and renewal paths, without unauthorized batch fallback.
-<em>(server/errors_test.go: TestAccessKeyRevocationAndExpiryBoundaries;
+<em>(server/server_test.go: TestAccessKeyRevocationAndExpiryBoundaries;
 sdk_test.go: TestManagedKeySDKAuthorization; receiver_internal_test.go;
-cmd/mqlite/safety_test.go)</em></li>
+cmd/mqlite/main_test.go)</em></li>
 <li><strong>9.6</strong> Access-key lists MUST retain ID-ascending order by default. Explicit
 <code>created_desc</code> MUST order the complete result by creation time descending, then
 ID descending, with stable cursor pagination. Revocation MUST NOT move a key;
@@ -385,7 +385,7 @@ insertion ahead of a cursor MUST NOT repeat or skip existing keys on later
 pages. Unknown sort values and unknown creation-order cursors MUST fail with
 <code>invalid_argument</code>. SDKs and tools MUST reject incorrectly ordered responses.
 <em>(engine/storage_test.go: TestAccessKeyCreationOrderPagination,
-TestAccessKeySortValidationAndIndex; server/errors_test.go:
+TestAccessKeySortValidationAndIndex; server/server_test.go:
 TestAccessKeyCreationOrderHTTP; wire/wire_test.go:
 TestAccessKeyCreationOrderResponseValidation; test/api_tests.py)</em></li>
 <li><strong>9.7</strong> Every HTTP response MUST carry <code>X-Mqlite-Server-Time-Ms</code>, sampled from
@@ -399,7 +399,7 @@ merely because its local wall clock falls inside that interval. A confirmed
 exact lease shorter than the managed Receiver&#39;s safe renewal interval MUST fail
 closed rather than enter an unbounded renewal loop.
 CORS-enabled responses MUST list the header in <code>Access-Control-Expose-Headers</code>.
-<em>(server/errors_test.go: TestJSONResponsesCarryServerTime;
+<em>(server/server_test.go: TestJSONResponsesCarryServerTime;
 receiver_internal_test.go: TestClientMapsBrokerDeadlineOntoLocalMonotonicClock,
 TestClientLongPollNeverExtendsLeaseFromLocalWallClock,
 TestClientLongPollObservationDoesNotContaminateShortRenewal,
@@ -483,7 +483,7 @@ operational deployment, maintenance and observation behavior MAY differ; they
 MUST NOT silently change deterministic queue semantics.
 <em>(engine/turso_test.go: TestTursoIntegration, TestTursoExtended,
 TestTursoMessageTTLParity, TestTursoConcurrent, TestTursoBatchSettle;
-engine/storage_test.go; server/errors_test.go; sdk_test.go)</em></li>
+engine/storage_test.go; server/server_test.go; sdk_test.go)</em></li>
 </ul>
 <h2 id="11--subscription-filters">11 · Subscription filters</h2>
 <ul>
@@ -491,7 +491,7 @@ engine/storage_test.go; server/errors_test.go; sdk_test.go)</em></li>
 empty filter matches every message. It is compiled + type-checked at <code>Subscribe</code>,
 and a malformed / unknown-field / non-boolean expression MUST be rejected with
 <code>ErrInvalidFilter</code> (HTTP 400 <code>invalid_argument</code>) and <strong>not</strong> stored — no backing
-queue is created. <em>(engine/filter_test.go, server/errors_test.go)</em></li>
+queue is created. <em>(engine/filter_test.go, server/server_test.go)</em></li>
 <li><strong>11.2</strong> The filter is evaluated at <strong>publish</strong> against the message env (core fields,
 <code>enqueued_at</code>/<code>visible_at</code>, the derived <code>subject_parts</code>/<code>body_size</code>/<code>property_keys</code>,
 and the body fields <code>body_text</code>/<code>body_json</code> — projected only when referenced, with
@@ -564,7 +564,7 @@ subscription, cached metadata included. Locks and long polls MUST end no later
 than the deadline; Renew MUST NOT extend it, and idempotency records MUST NOT
 authorize work after it.
 <em>(engine/functional_test.go, engine/engine_test.go,
-engine/complete_batch_test.go; sdk_test.go; server/subscriptions_test.go)</em></li>
+engine/complete_batch_test.go; sdk_test.go; server/server_test.go)</em></li>
 <li><strong>12.7 Expiry cleanup.</strong> Expiry is durable advance authorization to discard all
 retained message states. The indexed scanner MUST transition due subscriptions
 to the existing restart-safe deletion lifecycle, while correctness remains
@@ -583,19 +583,19 @@ changelog, because a caller can observe every one of them.</p>
 <li><strong>13.1</strong> A mqlite operation whose context is already cancelled MUST NOT execute anything. This holds
 at both boundaries — before the wait for the writer, and again after the connection is in
 hand — and before entering a local <code>Tx</code> callback.
-<em>(engine/cancel_test.go: TestPreCancelledNeverExecutes,
+<em>(engine/engine_test.go: TestPreCancelledNeverExecutes,
 TestCancelInTheHandoffWindowStartsNothing, TestNothingBeginsInTheLastWindowBeforeAStatement;
 sdk_test.go: TestEmbeddedTxCancellation)</em></li>
 <li><strong>13.2</strong> A caller waiting for the single writer keeps its own deadline: cancelling while
 queued MUST return promptly and MUST mutate nothing.
-<em>(engine/cancel_test.go: TestCancelWhileWaitingWritesNothing)</em></li>
+<em>(engine/engine_test.go: TestCancelWhileWaitingWritesNothing)</em></li>
 <li><strong>13.3</strong> On a <strong>local</strong> store (file or <code>:memory:</code>), a statement that has already begun
 executing MUST be allowed to finish. It is not interrupted, and <strong>there is no upper bound on
 how long it takes</strong> — <code>EngineTx.SQL()</code> runs arbitrary user SQL, a full <code>VACUUM</code> rewrites the
 file, a large <code>Purge</code> is a big <code>DELETE</code>. A write can therefore commit <em>after</em> its caller has
 given up. This is deliberate: interrupting a local statement leaks the driver connection,
 which leaves a file DB locked (<code>SQLITE_BUSY</code>, permanently) or destroys a <code>:memory:</code> DB
-outright. <em>(engine/cancel_test.go: TestCancelStormLeavesTheDatabaseUsable,
+outright. <em>(engine/engine_test.go: TestCancelStormLeavesTheDatabaseUsable,
 TestCancelledSettleWritesLeaveTheDatabaseUsable)</em></li>
 <li><strong>13.4</strong> Inside a local transaction, <strong>mqlite-owned statements</strong> (including <code>EngineTx.SendOne</code>)
 check the caller&#39;s context before each statement: one already running finishes, and a statement
@@ -607,7 +607,7 @@ cancels. Callers MUST check the original context between their own statements an
 Mqlite cannot interrupt the callback or release the single writer before it returns. Cancellation
 observed after the callback and before commit MUST roll back the whole transaction, including raw
 SQL writes, even if the callback returned nil.
-<em>(engine/cancel_test.go: TestCancelledTransactionStopsIssuingStatements,
+<em>(engine/engine_test.go: TestCancelledTransactionStopsIssuingStatements,
 TestTxCancelledBetweenStatementsRollsBack; sdk_test.go: TestEmbeddedTxCancellation)</em></li>
 <li><strong>13.5</strong> On a <strong>remote</strong> (Turso/libSQL) store, statement cancellation is real and unchanged:
 those statements can genuinely block on the network, and a discarded connection there holds
@@ -622,18 +622,18 @@ engine to grade itself — an engine with a bug reports that everything is fine.
 <li><strong>14.1 Exclusive delivery.</strong> While a consumer holds a <strong>live</strong> lock on a message, that message
 MUST NOT be delivered to anyone else. Exclusivity <em>is</em> the lease: past <code>locked_until</code> the holder
 owns nothing, and a redelivery then is the at-least-once contract working, not a violation.
-<em>(engine/concurrency_test.go: TestConcurrentConsumersNeverShareAMessage)</em></li>
+<em>(engine/engine_test.go: TestConcurrentConsumersNeverShareAMessage)</em></li>
 <li><strong>14.2 The fence must fence.</strong> When a lock expires and the message is reassigned, a settle from
 the OLD holder MUST be refused (<code>ErrLockLost</code>) and the new holder&#39;s MUST succeed. &quot;Exactly one
 winner&quot; is not sufficient — the winner must be the holder of the live lock.
-<em>(engine/concurrency_test.go: TestConcurrentSettlementPicksExactlyOneWinner)</em></li>
+<em>(engine/engine_test.go: TestConcurrentSettlementPicksExactlyOneWinner)</em></li>
 <li><strong>14.3 No zombie delivery.</strong> A completed message MUST NOT be delivered again.
-<em>(engine/concurrency_test.go)</em></li>
+<em>(engine/engine_test.go)</em></li>
 <li><strong>14.4 No loss in the concurrency workload.</strong> With successful sends, live
 consumers, a sufficient delivery budget and no configured discard or expiry,
 every sent identity MUST be completed. This does not override final-attempt
 DLQ, explicit deletion, retention, message TTL or fixed subscription expiry.
-<em>(engine/concurrency_test.go)</em></li>
+<em>(engine/engine_test.go)</em></li>
 <li><strong>14.5 Shutdown fences the store.</strong> <code>Close</code> closes admission before anything else: DB work
 that begins after shutdown starts MUST fail fast with <code>ErrClosed</code>; work already admitted —
 a statement, row scan, transaction callback, or commit in flight — MUST complete before the

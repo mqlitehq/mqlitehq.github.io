@@ -51,8 +51,8 @@
       "translationSha256": "48541c0509cbebb4f51a8283009dec7a788385d18d6b940b3dda0b39f12c174e"
     },
     "conformance.md": {
-      "sourceSha256": "150178deedf9fbef244311c973cdf29231c5303e98ea40a46bdb7176e7b3486e",
-      "translationSha256": "42654948db0b1784bd5f706f5ac04d4118505ad2731a9bd88f3940d94b9fa9a6"
+      "sourceSha256": "dac108121f649754e4b13caa2a37f0244c7b87ea15e60e73d2716d95573f80e7",
+      "translationSha256": "f05eb6d1cd5267f7cbd6ba9eb58c05fa5f0dda2a3cb84980b45aba3247300168"
     },
     "dependencies.md": {
       "sourceSha256": "c3c7ae53768a7faa52215af8a9cef26a6ba999fb96896fe2f600fec27a760151",
@@ -79,9 +79,9 @@
     "tools/facts.mjs": "863407c1b0e8a43ab8127c171ce4442362f9d8816ef9e034f5f60c47a8dd75fa",
     "tools/releases.mjs": "98be80bf18eba04f0d2d0ee7aea4cb4a6cd8cc91cf153573dddd644306ca9f26",
     "tools/agent-contract.mjs": "b3e53a426302d256996a2a2a3bd2c0bc617e20429e32cd33cb94ecbc0bd78e6b",
-    "tools/agent-contract.json": "696351057d4806daf2d69749c37fc7bb1a0be44bddcf0a178a2ed4d4e5ee9f35",
+    "tools/agent-contract.json": "63f6e5fed10bb4b1fa81c763bb8b3ec7e9fc416fb2770d89c97c7f5ed688ea8c",
     "tools/companion-contract.mjs": "ce5fb4be379f08e9d4e79ecd06009b8d7191b0d8b78cb95211fbcea1067c43ed",
-    "tools/companion-contract.json": "9b81c85ae17d698111232abcd49c926cde26af69a827d6fe8645c79291e67fec",
+    "tools/companion-contract.json": "14f8007ebd4554a5ca8b86172f1a70b3617fdbde3270bc3c98b0116bbf859496",
     "tools/site-index.mjs": "57513b83b52fb48465f32c6e1f0f34a9c983389dca951896626df2a7318c4684",
     "tools/site-index.json": "ac781d89a860b4522f0f95065ab5c8327bbeef1c6c63f4c46e246d2281dc3c9e",
     "tools/site-audit.mjs": "300080752f8fec18badd390b896e74a3ec06ef41764cd7dc7ab0e175f099c111",

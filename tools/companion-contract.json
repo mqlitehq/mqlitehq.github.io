@@ -1,6 +1,6 @@
 {
   "formatVersion": 1,
-  "reviewedRevision": "d39298049f0a39e781a7adff51fc9130f9a20068",
+  "reviewedRevision": "b4f4cb0324f24ae7dc7209d4dcf989bf32d23625",
   "reviewNote": "Reviewed the remote-only SDK delivery-batch validation, Send acknowledgements, conservative legacy renewals, output-before-settlement CLI and broker-version permission guidance. The source targets v0.1.2 with a Go 1.13 floor and standard-library-only runtime. Tagged broker compatibility and final source-pair qualification are recorded separately. Additionally reviewed Abandon validation on current main: negative/sub-millisecond client rejection, non-mutating timestamp overflow rejection, zero-delay behavior and exact live receipt replay after clock movement. Matching English/Chinese API, summary and agent guidance were reviewed; complete code/load evidence is separate from unpublished release acceptance.",
   "files": {
     ".github/workflows/ci.yml": "def545c145cebe60212de62bc4217fa0a544b8889fd502eb12b56bd689a63c9c",
