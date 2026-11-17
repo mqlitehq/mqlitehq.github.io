@@ -116,6 +116,9 @@ test('language switch preserves the current document, query and section in both 
 test('the language picker supports keyboard selection, dismissal and exclusive navigation panels', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
+  // Exercise the script fallback across the separate navigation/utility groups.
+  // Other no-script cases retain and verify the native details name group.
+  await page.locator('nav.top details').evaluateAll((menus) => menus.forEach((menu) => menu.removeAttribute('name')));
   const picker = page.locator('[data-language-picker]');
   const summary = picker.locator('summary');
   const options = picker.locator('[data-language-switch]');

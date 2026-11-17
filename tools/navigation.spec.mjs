@@ -43,7 +43,7 @@ test('header and hero keep one row and move a stable prefix into More at every w
     for (const row of [header, hero]) {
       const order = await row.locator('.overflow-primary > a, .overflow-items > a').evaluateAll((links) => links.map((link) => link.textContent));
       expect(new Set(order).size).toBe(order.length);
-      if (row === header) expect(order).toEqual(['Concepts', 'Internals', 'API', 'CLI', 'Access keys', 'Deployment', 'Observability', 'Cloud monitoring', 'Operations', 'For AI agents', 'GitHub ↗']);
+      if (row === header) expect(order).toEqual(['Concepts', 'For AI agents', 'Internals', 'API', 'CLI', 'Access keys', 'Deployment', 'Observability', 'Cloud monitoring', 'Operations', 'GitHub ↗']);
       else expect(order).toEqual(['Watch one message', 'Read the concepts', 'Production operations', 'Access keys', "I'm an AI agent"]);
     }
   }
@@ -101,12 +101,76 @@ test('all links return when space allows and focus leaves a disappearing More sa
   await page.goto('/');
   const row = page.getByRole('navigation', { name: 'Main navigation' });
   await row.locator('.overflow-more > summary').focus();
-  await page.addStyleTag({ content: 'nav.top .wrap { max-width: none; }' });
-  await page.setViewportSize({ width: 2000, height: 900 });
+  await page.setViewportSize({ width: 1440, height: 900 });
   await expect(row.locator('.overflow-primary > a')).toHaveCount(11);
   await expect(row.locator('.overflow-more')).toBeHidden();
   await expect(row.getByRole('link', { name: 'GitHub', exact: false })).toBeFocused();
   await expectSingleRow(row.locator('.wrap'));
+});
+
+test('header uses the available width with the agent entry near the brand and language last', async ({ page }) => {
+  for (const locale of ['', 'zh-CN/']) {
+    for (const file of ['index.html', 'agents.html', 'api.html']) {
+      await page.goto(`/${locale}${file}`);
+      const header = page.locator('nav.top');
+      const row = header.locator('.links');
+      const utilities = header.locator('.nav-utilities');
+      await expect(utilities.locator('[data-language-picker]')).toHaveCount(1);
+      await expect(row.locator('[data-language-picker]')).toHaveCount(0);
+      for (const width of [768, 1024, 1440, 1920]) {
+        await page.setViewportSize({ width, height: 900 });
+        const agent = row.locator('.overflow-primary > a[href="agents.html"]');
+        await expect(agent).toBeVisible();
+        const geometry = await header.evaluate((nav) => {
+          const brand = nav.querySelector('.brand').getBoundingClientRect();
+          const first = nav.querySelector('.overflow-primary > a').getBoundingClientRect();
+          const links = nav.querySelector('.links').getBoundingClientRect();
+          const utility = nav.querySelector('.nav-utilities');
+          const box = utility.getBoundingClientRect();
+          return { startGap: first.left - brand.right, utilityGap: box.left - links.right,
+            rightInset: innerWidth - box.right, divider: parseFloat(getComputedStyle(utility).borderLeftWidth),
+            lastControl: utility.parentElement.lastElementChild === utility };
+        });
+        expect(geometry.startGap).toBeGreaterThanOrEqual(12);
+        expect(geometry.startGap).toBeLessThanOrEqual(24);
+        expect(geometry.utilityGap).toBeGreaterThan(0);
+        expect(geometry.rightInset).toBeGreaterThanOrEqual(16);
+        expect(geometry.rightInset).toBeLessThanOrEqual(24);
+        expect(geometry.divider).toBe(1);
+        expect(geometry.lastControl).toBe(true);
+        await expectSingleRow(header.locator('.wrap'));
+        await expectNoPageOverflow(page);
+        if (width >= 1440) {
+          await expect(row.locator('.overflow-primary > a')).toHaveCount(11);
+          await expect(row.locator('.overflow-more')).toBeHidden();
+        }
+      }
+    }
+  }
+});
+
+test('capture the reviewed header at desktop, compact, mobile and zoomed widths', async ({ page }, testInfo) => {
+  for (const locale of ['', 'zh-CN/']) {
+    for (const scenario of [
+      { label: 'desktop', width: 1440, height: 760, zoom: '1' },
+      { label: 'compact', width: 1024, height: 760, zoom: '1' },
+      { label: 'mobile', width: 390, height: 844, zoom: '1' },
+      { label: 'zoom200', width: 1280, height: 900, zoom: '2' },
+    ]) {
+      await page.setViewportSize({ width: scenario.width, height: scenario.height });
+      await page.goto(`/${locale}agents.html`);
+      await page.evaluate((zoom) => { document.documentElement.style.zoom = zoom; }, scenario.zoom);
+      const header = page.locator('nav.top');
+      await expectSingleRow(header.locator('.wrap'));
+      await expect(header.locator('.nav-utilities [data-language-picker] > summary')).toBeVisible();
+      if (scenario.label !== 'mobile') await expect(header.locator('.overflow-primary > a[href="agents.html"]')).toBeVisible();
+      await expectNoPageOverflow(page);
+      const name = `navigation-${locale ? 'zh' : 'en'}-${scenario.label}`;
+      const screenshot = testInfo.outputPath(name + '.png');
+      await page.screenshot({ path: screenshot, fullPage: false });
+      await testInfo.attach(name, { path: screenshot, contentType: 'image/png' });
+    }
+  }
 });
 
 test('a focused More retains focus while resizing with its disclosure closed or open', async ({ page }) => {
@@ -128,9 +192,8 @@ test('a focused More retains focus while resizing with its disclosure closed or 
 test('a focused tail link is revealed inside a scrollable More after shrinking the viewport', async ({ page }) => {
   await page.setViewportSize({ width: 1600, height: 900 });
   await page.goto('/');
-  await page.addStyleTag({ content: 'nav.top .wrap { max-width: none; }' });
   const row = page.getByRole('navigation', { name: 'Main navigation' });
-  const tail = row.getByRole('link', { name: 'For AI agents', exact: true });
+  const tail = row.getByRole('link', { name: 'GitHub ↗', exact: true });
   await tail.focus();
   await page.setViewportSize({ width: 320, height: 320 });
   await expect(tail).toBeFocused();

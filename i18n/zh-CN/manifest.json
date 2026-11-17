@@ -67,14 +67,14 @@
       "translationSha256": "baf79c5f181443b096d1c9cdc55b7a47eb4b450c014cd643cf1e26830ea7e965"
     }
   },
-  "interfaceSha256": "ccef299043fa7b838984579da3aba22d066de0fd281b7f52b091147f7ac82ac5",
+  "interfaceSha256": "68b962b51f32580a9772c675fcfdc34bebd85a80239f127a96a217915cc3d4c3",
   "summary": {
     "sourceSha256": "127f703e74969eb69a745300445d7ee198ff582480bfa332950cc6835f0f7926",
     "translationSha256": "885692237d1cdfda05b0ce574493a49b68cba8787c7cb224b61c519e6e2b8f70"
   },
   "chromeSourceSha256": "339d4d3c2b93b8b5a1f3c13d720094155f42b3400eff530e28f7f4fc2602e372",
   "runtimeSources": {
-    "tools/build.mjs": "256f89a435fc0c7de985569897fe2cc49ee534e0a6f37e44a398b25140b99727",
+    "tools/build.mjs": "2da64a069f313da676c025ef2f01c8b4a936d19fb4277cd2eb0685b85628c061",
     "tools/i18n.mjs": "adbb2f0918ddf0166bc61c7feb51a984ed4a97f8ae84219b1c60780d9308631e",
     "tools/facts.mjs": "863407c1b0e8a43ab8127c171ce4442362f9d8816ef9e034f5f60c47a8dd75fa",
     "tools/releases.mjs": "98be80bf18eba04f0d2d0ee7aea4cb4a6cd8cc91cf153573dddd644306ca9f26",
@@ -83,14 +83,14 @@
     "tools/companion-contract.mjs": "ce5fb4be379f08e9d4e79ecd06009b8d7191b0d8b78cb95211fbcea1067c43ed",
     "tools/companion-contract.json": "50cc5d9f9de02fe73f121c227fe08cd81d844ad171d5b44b5fcae9c1480c4a3a",
     "tools/site-index.mjs": "57513b83b52fb48465f32c6e1f0f34a9c983389dca951896626df2a7318c4684",
-    "tools/site-index.json": "f78d0070bcbfea3ae49cab98b0bfa1075b52533de00a2146d2eba2792d8200db",
+    "tools/site-index.json": "fc682aaccaefde0358aaf4cc64528082aa542d7a30fd6c5acb332f302596daa5",
     "tools/site-audit.mjs": "300080752f8fec18badd390b896e74a3ec06ef41764cd7dc7ab0e175f099c111",
     "tools/version-references.mjs": "c66215685cb54c3c2a9d1aed1cbe5aa01da2985d73fd2542f44e88e7dfa91177",
     "tools/version-references.json": "0624d0c8444677cfc9030cc1991ab107f660616e96138e858f7398d52f09df91",
     "tools/concept-diagrams.mjs": "698e90f2e74e292c7d4b0cde8f52b78c66c7275db1f7ecdc9c51d68e1c905e1d",
     "tools/diagrams/manifest.json": "f6024440996c7835c40196c719ee5e3f3f8386d68d9d2e0db31d828a157689b7",
     "tools/explanatory-figures.mjs": "c1c99131a371fb566a21c4d8b04d1ae364be51f7a279054e50890aa3fe6c00e0",
-    "assets/site.js": "6619e0ee3a3c89e310ece4ab123cb1bf5d1ce94c8b8b170ad13e75d73a439bf4",
+    "assets/site.js": "2fef21384257fccb9fcf0d1fff47c811d262fab2115b3f42a2741dfb4c04fb40",
     "assets/demo.js": "3e03abd8259c96f42c03b9122a140bf37cf4e9fa75310f41a0c1ca7cfef5c88e",
     "assets/demo.css": "b3b94399eda8eae2062aac8dd57de5d77d651e9bff5a47cad2ba61b1ebe58156"
   },

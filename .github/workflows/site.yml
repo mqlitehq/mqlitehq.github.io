@@ -63,6 +63,13 @@ jobs:
       - name: Test navigation, bilingual pages and the demo
         working-directory: tools
         run: npx playwright test --config playwright.config.mjs
+      - name: Upload browser evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: navigation-browser-results
+          path: tools/test-results/
+          if-no-files-found: ignore
       - name: Verify every generated output and source-derived claim
         working-directory: tools
         run: node build.mjs ../mqlite-src --check
