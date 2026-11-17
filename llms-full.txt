@@ -1,10 +1,9 @@
 mqlite main — full documentation bundle.
-Source version: v0.4.3. Latest supported release: [v0.4.2](https://github.com/mqlitehq/mqlite/releases/tag/v0.4.2).
-Source includes unreleased changes.
+Source version: v0.4.3. Latest supported release: [v0.4.3](https://github.com/mqlitehq/mqlite/releases/tag/v0.4.3).
 These docs track main; consult release notes for published artifacts and upgrade requirements.
 Source of truth: https://github.com/mqlitehq/mqlite/tree/main/docs
 
-<!-- ===== mqlite main · source v0.4.3; latest supported release v0.4.2 · docs/concepts.md ===== -->
+<!-- ===== mqlite main · source v0.4.3; latest supported release v0.4.3 · docs/concepts.md ===== -->
 
 # Core concepts & subscription filters
 
@@ -587,7 +586,7 @@ network I/O APIs are exposed; `now()` can read the wall clock:
   for the filter rules MQLite guarantees.
 
 
-<!-- ===== mqlite main · source v0.4.3; latest supported release v0.4.2 · docs/internals.md ===== -->
+<!-- ===== mqlite main · source v0.4.3; latest supported release v0.4.3 · docs/internals.md ===== -->
 
 # How mqlite works — building a reliable queue on one SQLite file
 
@@ -1143,7 +1142,7 @@ with the conformance suite as the judge.
 [benchmark.md](https://github.com/mqlitehq/mqlite/blob/main/docs/benchmark.md).*
 
 
-<!-- ===== mqlite main · source v0.4.3; latest supported release v0.4.2 · docs/api-reference.md ===== -->
+<!-- ===== mqlite main · source v0.4.3; latest supported release v0.4.3 · docs/api-reference.md ===== -->
 
 # mqlite HTTP API reference
 
@@ -2232,7 +2231,7 @@ returned no JSON error code. Redirect errors report only the status and never co
 the untrusted `Location` value into the error.
 
 
-<!-- ===== mqlite main · source v0.4.3; latest supported release v0.4.2 · docs/cli.md ===== -->
+<!-- ===== mqlite main · source v0.4.3; latest supported release v0.4.3 · docs/cli.md ===== -->
 
 # CLI reference (`mqlite`)
 
@@ -2718,7 +2717,7 @@ See also: [api-reference.md](https://github.com/mqlitehq/mqlite/blob/main/docs/a
 [examples.md](https://github.com/mqlitehq/mqlite/blob/main/docs/examples.md) (Go SDK).
 
 
-<!-- ===== mqlite main · source v0.4.3; latest supported release v0.4.2 · docs/access-keys.md ===== -->
+<!-- ===== mqlite main · source v0.4.3; latest supported release v0.4.3 · docs/access-keys.md ===== -->
 
 # Access keys
 
@@ -2896,7 +2895,7 @@ revocation state or discard newer credentials. Review keys using a configured
 administrator before reopening traffic. See [backup and upgrade procedures](https://github.com/mqlitehq/mqlite/blob/main/docs/operations.md).
 
 
-<!-- ===== mqlite main · source v0.4.3; latest supported release v0.4.2 · docs/deployment.md ===== -->
+<!-- ===== mqlite main · source v0.4.3; latest supported release v0.4.3 · docs/deployment.md ===== -->
 
 # Deploying mqlite
 
@@ -3182,7 +3181,7 @@ curl -H "Authorization: Bearer $T" -H 'Content-Type: application/json' \
 - [ ] Enable `MQLITE_METRICS=on` for authenticated Prometheus scraping on the API port; use private routing or public-ingress path filtering to keep `/metrics` private — see [observability.md](https://github.com/mqlitehq/mqlite/blob/main/docs/observability.md).
 
 
-<!-- ===== mqlite main · source v0.4.3; latest supported release v0.4.2 · docs/observability.md ===== -->
+<!-- ===== mqlite main · source v0.4.3; latest supported release v0.4.3 · docs/observability.md ===== -->
 
 # Observability
 
@@ -3730,7 +3729,7 @@ An occupied-resource or capacity rejection is an application outcome, not a
 storage failure.
 
 
-<!-- ===== mqlite main · source v0.4.3; latest supported release v0.4.2 · docs/observability-cloud.md ===== -->
+<!-- ===== mqlite main · source v0.4.3; latest supported release v0.4.3 · docs/observability-cloud.md ===== -->
 
 # Cloud and Kubernetes monitoring
 
@@ -3879,7 +3878,7 @@ validation steps. Local integration evidence must not be presented as a managed-
 deployment test.
 
 
-<!-- ===== mqlite main · source v0.4.3; latest supported release v0.4.2 · docs/operations.md ===== -->
+<!-- ===== mqlite main · source v0.4.3; latest supported release v0.4.3 · docs/operations.md ===== -->
 
 # Production operations
 
@@ -4401,7 +4400,7 @@ in this release, so do not improvise a direct SQL table copy between schemas.
 rules behind these procedures.
 
 
-<!-- ===== mqlite main · source v0.4.3; latest supported release v0.4.2 · docs/turso.md ===== -->
+<!-- ===== mqlite main · source v0.4.3; latest supported release v0.4.3 · docs/turso.md ===== -->
 
 # Turso / libSQL: concurrency & embedded replicas (MQLITE-4)
 
@@ -4698,7 +4697,7 @@ add no requests, do not change the pinned driver or cleanup budgets, and do not
 extend backend support beyond the verified scope.
 
 
-<!-- ===== mqlite main · source v0.4.3; latest supported release v0.4.2 · docs/retention.md ===== -->
+<!-- ===== mqlite main · source v0.4.3; latest supported release v0.4.3 · docs/retention.md ===== -->
 
 # Retention, deletion, and storage reclamation
 
@@ -4862,7 +4861,7 @@ archive remains at-least-once, so the archive consumer must be idempotent; Redri
 does not make the external archival handoff one transaction.
 
 
-<!-- ===== mqlite main · source v0.4.3; latest supported release v0.4.2 · docs/benchmark.md ===== -->
+<!-- ===== mqlite main · source v0.4.3; latest supported release v0.4.3 · docs/benchmark.md ===== -->
 
 # mqlite benchmarks, sizing & tuning
 
@@ -5355,7 +5354,7 @@ the table as historical evidence and rerun the commands above before using the
 numbers for a current deployment decision.
 
 
-<!-- ===== mqlite main · source v0.4.3; latest supported release v0.4.2 · docs/conformance.md ===== -->
+<!-- ===== mqlite main · source v0.4.3; latest supported release v0.4.3 · docs/conformance.md ===== -->
 
 # Conformance — correct mqlite behavior (TCK)
 
@@ -6015,7 +6014,7 @@ in the OS/Go matrix; tagged crash tests run with `-race` in their own Linux job.
 run separately without `-race`; the large no-loss sweep also runs weekly without `-race`.*
 
 
-<!-- ===== mqlite main · source v0.4.3; latest supported release v0.4.2 · docs/dependencies.md ===== -->
+<!-- ===== mqlite main · source v0.4.3; latest supported release v0.4.3 · docs/dependencies.md ===== -->
 
 # Dependency policy & the go 1.21 floor
 
@@ -6167,7 +6166,7 @@ requirement is dropped, or a security CVE forces it): bump `go.mod`, update
 let the held bumps (`modernc.org/sqlite`, `golang.org/x/sys`) flow in together.
 
 
-<!-- ===== mqlite main · source v0.4.3; latest supported release v0.4.2 · docs/mcp.md ===== -->
+<!-- ===== mqlite main · source v0.4.3; latest supported release v0.4.3 · docs/mcp.md ===== -->
 
 # MCP server (`mqlite-mcp`)
 
@@ -6377,7 +6376,7 @@ Environment tokens are not listed or revocable through these tools. Key tools ar
 unavailable when broker authentication is explicitly disabled.
 
 
-<!-- ===== mqlite main · source v0.4.3; latest supported release v0.4.2 · docs/examples.md ===== -->
+<!-- ===== mqlite main · source v0.4.3; latest supported release v0.4.3 · docs/examples.md ===== -->
 
 # Examples
 

@@ -1,4 +1,7 @@
 import { test, expect } from '@playwright/test';
+import { readFileSync } from 'node:fs';
+
+const releaseFacts = JSON.parse(readFileSync(new URL('../site-metadata.json', import.meta.url), 'utf8'));
 
 const documents = [
   'concepts', 'internals', 'api', 'cli', 'access-keys', 'deployment',
@@ -233,7 +236,10 @@ test('every document keeps its English heading IDs and literal code examples in 
     expect(chinese.code, `${name}: code example correspondence`).toEqual(english.code);
     expect(chinese.text, `${name}: translated prose`).toMatch(/[\u3400-\u9fff]/u);
     await expect(page.locator('html')).toHaveAttribute('lang', 'zh-CN');
-    await expect(page.locator('.stamp')).toContainText('v0.4.2');
+    await expect(page.locator('.stamp')).toContainText(releaseFacts.latestRelease);
+    await expect(page.locator('.stamp a[href*="/releases/tag/"]')).toHaveAttribute(
+      'href', `https://github.com/mqlitehq/mqlite/releases/tag/${releaseFacts.latestRelease}`,
+    );
   }
 });
 

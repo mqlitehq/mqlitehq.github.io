@@ -1,6 +1,5 @@
 mqlite main — 完整简体中文文档。
-源码版本：v0.4.3。最新受支持版本：[v0.4.2](https://github.com/mqlitehq/mqlite/releases/tag/v0.4.2)。
-源码包含未发布变更。
+源码版本：v0.4.3。最新受支持版本：[v0.4.3](https://github.com/mqlitehq/mqlite/releases/tag/v0.4.3)。
 本文档跟随 main；使用已发布产物时，请核对相应版本说明。
 英文规范来源：https://github.com/mqlitehq/mqlite/tree/main/docs
 

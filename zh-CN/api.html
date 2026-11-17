@@ -45,7 +45,7 @@
   </div>
 </div></nav>
 <div class="wrap">
-  <div class="stamp">来源：<a href="https://github.com/mqlitehq/mqlite/blob/main/docs/api-reference.md">mqlite main · docs/api-reference.md</a> — 源码 v0.4.3（含未发布变更）。最新受支持版本：<a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.2">v0.4.2</a>。本文档跟随 main；使用已发布产物时，请查阅对应版本的文档。</div>
+  <div class="stamp">来源：<a href="https://github.com/mqlitehq/mqlite/blob/main/docs/api-reference.md">mqlite main · docs/api-reference.md</a> — 源码 v0.4.3。最新受支持版本：<a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.3">v0.4.3</a>。本文档跟随 main；使用已发布产物时，请查阅对应版本的文档。</div>
   <main class="prose">
 <h1 id="mqlite-http-api-reference">mqlite HTTP API 参考</h1>
 <p>Broker 使用 <strong>Connect 风格的 HTTP JSON 协议</strong>。每个操作都是向 <code>/mqlite.v1.&lt;Service&gt;/&lt;Method&gt;</code> 发送一次携带 JSON 正文的 <code>POST</code> 请求，因此可直接使用 curl 调用。本文依据 <a href="https://github.com/mqlitehq/mqlite/blob/main/wire/wire.go"><code>wire/wire.go</code></a> 中的线协议契约（broker 与 Go SDK 共用的唯一事实来源，避免两者偏离）以及服务端错误映射生成。</p>

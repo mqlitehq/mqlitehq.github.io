@@ -3,8 +3,8 @@
   "schemaVersion": "7",
   "brokerPort": "6754",
   "sourceVersion": "0.4.3",
-  "latestRelease": "v0.4.2",
-  "hasUnreleasedChanges": true,
+  "latestRelease": "v0.4.3",
+  "hasUnreleasedChanges": false,
   "source": "https://github.com/mqlitehq/mqlite/tree/main/docs",
   "routes": [
     "/mqlite.v1.AdminService/CreateQueue",

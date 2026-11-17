@@ -617,8 +617,8 @@
     "site/tools/explanatory-figures.mjs"
   ],
   "releaseReview": {
-    "reviewedValue": "v0.4.2",
-    "reason": "Review every indexed page and both languages for the next stable baseline, including exact production images, matching-release links, SDK installation examples and legacy capability boundaries. Do not merely change this value."
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed every indexed version-source mapping and classified literal reference against the published0.4.3 broker and0.1.2 companion tags and assets. Canonical production examples already target these versions; historical0.4.2 and earlier capability/migration statements remain unchanged. Source floors, schema and port are unchanged. Release notes explicitly disclose the approved bounded qualification and incomplete24/48-hour plan."
   },
   "defaultReview": {
     "values": {
