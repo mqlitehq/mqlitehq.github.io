@@ -523,11 +523,11 @@ curl http://localhost:{{BROKER_PORT}}/          # discovery card (no auth)
 <section class="land" id="operations">
   <h2># run it in production</h2>
   <p class="lede">Start with one broker over a persistent local SQLite file. Choose a durability setting and rehearse recovery before putting messages into production.</p>
-  <p>Prometheus collection is off by default. Enable <code>--metrics</code> or <code>MQLITE_METRICS=on</code> to serve authenticated <code>/metrics</code> on the API port, and give the collector a separate <code>MQLITE_MONITOR_TOKENS</code> credential. Keep collection on a private network; if the API has public ingress, deny <code>/metrics</code> there. v0.4.0 removes the deprecated <code>mqlite_queue_total</code> and <code>mqlite_queue_oldest_message_age_ms</code> aliases; use <code>mqlite_queue_retained_messages</code> and <code>mqlite_queue_oldest_message_age_seconds</code>. The starter includes Prometheus, Grafana, a dashboard and verification scenarios.</p>
+  <p>Prometheus collection is off by default. Enable <code>--metrics</code> or <code>MQLITE_METRICS=on</code> to serve authenticated <code>/metrics</code> on the API port, and give the collector a separate <code>MQLITE_MONITOR_TOKENS</code> credential. Keep collection on a private network; if the API has public ingress, deny <code>/metrics</code> there. Use <code>mqlite_queue_retained_messages</code> and <code>mqlite_queue_oldest_message_age_seconds</code>. The starter includes Prometheus, Grafana, a dashboard and verification scenarios.</p>
   <div class="sem">
     <a href="operations.html"><b>Operations runbook</b>production boundary, backups, restore, upgrades and rollback</a>
     <a href="deployment.html"><b>Deployment</b>installation, one broker, persistent storage, authentication and TLS</a>
-    <a href="observability.html"><b>Observability</b>one metric contract for SDK, CLI, MCP, console and Prometheus (since v0.3.2)</a>
+    <a href="observability.html"><b>Observability</b>one metric contract for SDK, CLI, MCP, console and Prometheus</a>
     <a href="observability-cloud.html"><b>Cloud monitoring</b>authenticated collection for existing Grafana, Fly.io, Alibaba Cloud, Azure and Kubernetes</a>
     <a href="conformance.html"><b>Conformance</b>delivery guarantees, recovery contracts and the tests behind them</a>
   </div>

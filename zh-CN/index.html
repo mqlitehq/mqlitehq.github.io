@@ -504,11 +504,11 @@ curl http://localhost:6754/          # discovery card (no auth)
 <section class="land" id="operations">
   <h2># 生产环境运行</h2>
   <p class="lede">从一个 broker 和持久化的本地 SQLite 文件开始。投产前选择耐久性设置，并演练恢复。</p>
-  <p>Prometheus 采集默认关闭。启用 <code>--metrics</code> 或 <code>MQLITE_METRICS=on</code> 以提供经过鉴权的 <code>/metrics</code> ；它位于 API 端口，并为采集器配置独立的 <code>MQLITE_MONITOR_TOKENS</code> 凭据。采集应置于私有网络；若 API 有公网入口，请在该入口禁止访问 <code>/metrics</code> 。v0.4.0 删除了已弃用的 <code>mqlite_queue_total</code> 和 <code>mqlite_queue_oldest_message_age_ms</code> 别名；请使用 <code>mqlite_queue_retained_messages</code> 和 <code>mqlite_queue_oldest_message_age_seconds</code>。入门套件包含 Prometheus、Grafana、仪表盘和验证场景。</p>
+  <p>Prometheus 采集默认关闭。启用 <code>--metrics</code> 或 <code>MQLITE_METRICS=on</code> 以提供经过鉴权的 <code>/metrics</code> ；它位于 API 端口，并为采集器配置独立的 <code>MQLITE_MONITOR_TOKENS</code> 凭据。采集应置于私有网络；若 API 有公网入口，请在该入口禁止访问 <code>/metrics</code> 。请使用 <code>mqlite_queue_retained_messages</code> 和 <code>mqlite_queue_oldest_message_age_seconds</code>。入门套件包含 Prometheus、Grafana、仪表盘和验证场景。</p>
   <div class="sem">
     <a href="operations.html"><b>运维手册</b>生产边界、备份、恢复、升级与回退</a>
     <a href="deployment.html"><b>部署</b>安装、单 broker、持久存储、鉴权与 TLS</a>
-    <a href="observability.html"><b>可观测性</b>SDK、CLI、MCP、控制台与 Prometheus 共用一套指标契约（自 v0.3.2 起）</a>
+    <a href="observability.html"><b>可观测性</b>SDK、CLI、MCP、控制台与 Prometheus 共用一套指标契约</a>
     <a href="observability-cloud.html"><b>云端监控</b>为已有 Grafana、Fly.io、阿里云、Azure 和 Kubernetes 提供经过鉴权的采集</a>
     <a href="conformance.html"><b>一致性规范</b>投递保证、恢复契约及其验证测试</a>
   </div>

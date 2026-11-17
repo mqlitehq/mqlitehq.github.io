@@ -2180,20 +2180,6 @@
   },
   {
     "source": "site/i18n/zh-CN/interface.json",
-    "text": "\"one metric contract for SDK, CLI, MCP, console and Prometheus (since v0.3.2)\": \"SDK、CLI、MCP、控制台与 Prometheus 共用一套指标契约（自 v0.3.2 起）\",",
-    "occurrence": 1,
-    "kind": "historical",
-    "reason": "Fixed capability-introduction, withdrawal, migration or older-release behavior; retain its exact version and review the surrounding compatibility statement."
-  },
-  {
-    "source": "site/i18n/zh-CN/interface.json",
-    "text": "\"there. v0.4.0 removes the deprecated\": \"。v0.4.0 删除了已弃用的\",",
-    "occurrence": 1,
-    "kind": "historical",
-    "reason": "Fixed capability-introduction, withdrawal, migration or older-release behavior; retain its exact version and review the surrounding compatibility statement."
-  },
-  {
-    "source": "site/i18n/zh-CN/interface.json",
     "text": "\"tool requires both the broker and MCP server at v0.3.2 or later. Key-management tools require v0.3.1 or later:\": \"工具要求 broker 与 MCP 服务端均为 v0.3.2 或更高版本。密钥管理工具要求 v0.3.1 或更高版本：\",",
     "occurrence": 1,
     "kind": "historical",
@@ -2317,20 +2303,6 @@
     "occurrence": 1,
     "kind": "upstream",
     "reason": "Remote-only companion source compatibility or an exact companion-release example, independent of the main module floor. The whole-site release checklist also reviews pinned SDK installation examples."
-  },
-  {
-    "source": "site/templates/index.html",
-    "text": "<p>Prometheus collection is off by default. Enable <code>--metrics</code> or <code>MQLITE_METRICS=on</code> to serve authenticated <code>/metrics</code> on the API port, and give the collector a separate <code>MQLITE_MONITOR_TOKENS</code> credential. Keep collection on a private network; if the API has public ingress, deny <code>/metrics</code> there. v0.4.0 removes the deprecated <code>mqlite_queue_total</code> and <code>mqlite_queue_oldest_message_age_ms</code> aliases; use <code>mqlite_queue_retained_messages</code> and <code>mqlite_queue_oldest_message_age_seconds</code>. The starter includes Prometheus, Grafana, a dashboard and verification scenarios.</p>",
-    "occurrence": 1,
-    "kind": "historical",
-    "reason": "Fixed capability-introduction, withdrawal, migration or older-release behavior; retain its exact version and review the surrounding compatibility statement."
-  },
-  {
-    "source": "site/templates/index.html",
-    "text": "<a href=\"observability.html\"><b>Observability</b>one metric contract for SDK, CLI, MCP, console and Prometheus (since v0.3.2)</a>",
-    "occurrence": 1,
-    "kind": "historical",
-    "reason": "Fixed capability-introduction, withdrawal, migration or older-release behavior; retain its exact version and review the surrounding compatibility statement."
   },
   {
     "source": "site/templates/llms.txt",
