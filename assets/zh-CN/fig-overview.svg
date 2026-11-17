@@ -1,0 +1,112 @@
+<svg lang="zh-CN" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 794" role="img" aria-labelledby="overview-title overview-description" font-family="system-ui, -apple-system, Segoe UI, sans-serif">
+  <title id="overview-title">两种投递目标：队列（queue）或主题扇出（topic fan-out）</title>
+  <desc id="overview-description">生产者（producer）可将消息直接发送到 orders 队列（queue）。active、locked 和 dead_lettered 都是同一队列内部的消息状态；死信状态（DLQ）并非另一条队列。Receive 将锁定的消息交给消费者（consumer），Complete 则结算并删除该消息副本。另一条路径是向不存储消息的 events 主题（topic）发布。匹配的 audit 和 billing 订阅（subscription）各自在自己的支撑队列（backing queue）中获得独立副本，并拥有各自的死信状态。不匹配的订阅不获得副本。</desc>
+  <defs>
+    <marker id="overview-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 10 5 0 10Z" fill="#b9b8ad"/></marker>
+    <marker id="overview-settle-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 10 5 0 10Z" fill="#facc15"/></marker>
+  </defs>
+  <rect width="1000" height="794" rx="12" fill="#141413"/>
+  <text x="28" y="38" fill="#f2f1ea" font-size="23" font-weight="700">两条工作投递路径</text>
+  <rect x="16" y="70" width="314" height="660" rx="12" fill="#191918" stroke="#454540"/>
+  <rect x="346" y="70" width="638" height="660" rx="12" fill="#191918" stroke="#454540"/>
+  <text x="36" y="102" fill="#facc15" font-size="18" font-weight="650" style="font-size:17px">A · 直接发送到队列（queue）</text>
+  <text x="366" y="102" fill="#facc15" font-size="18" font-weight="650">B · 发布到主题（topic）</text>
+
+  <g data-node="direct-producer">
+    <rect x="75" y="126" width="196" height="48" rx="8" fill="#242422" stroke="#6d6d63"/>
+    <text x="173" y="157" text-anchor="middle" fill="#f2f1ea" font-size="18" font-weight="600" style="font-size:17px">生产者（producer）</text>
+  </g>
+  <g data-edge="send-to-orders">
+    <path d="M173 174V248" fill="none" stroke="#b9b8ad" stroke-width="2" marker-end="url(#overview-arrow)"/>
+    <text x="187" y="215" fill="#b9b8ad" font-size="16" style="font-size:14px">发送 Send &quot;orders&quot;</text>
+  </g>
+  <g data-node="orders-queue">
+    <rect x="52" y="250" width="242" height="242" rx="10" fill="#141413" stroke="#34d399" stroke-width="2"/>
+    <text x="173" y="282" text-anchor="middle" fill="#f2f1ea" font-size="19" font-weight="650" style="font-size:17px">队列（queue）：orders</text>
+    <text x="173" y="306" text-anchor="middle" fill="#b9b8ad" font-size="14">消息状态</text>
+    <rect x="76" y="324" width="194" height="40" rx="6" fill="#173028" stroke="#34d399"/>
+    <text x="173" y="350" text-anchor="middle" fill="#f2f1ea" font-size="17" style="font-size:16px">就绪（active）</text>
+    <rect x="76" y="378" width="194" height="40" rx="6" fill="#322f19" stroke="#facc15"/>
+    <text x="173" y="404" text-anchor="middle" fill="#f2f1ea" font-size="17" style="font-size:16px">锁定（locked）</text>
+    <rect x="76" y="432" width="194" height="40" rx="6" fill="#352322" stroke="#e88787"/>
+    <text x="173" y="458" text-anchor="middle" fill="#f2f1ea" font-size="16" style="font-size:14px">死信 dead_lettered（DLQ）</text>
+  </g>
+  <g data-edge="orders-receive">
+    <path d="M225 492V574" fill="none" stroke="#b9b8ad" stroke-width="2" marker-end="url(#overview-arrow)"/>
+    <text x="237" y="538" fill="#b9b8ad" font-size="15" style="font-size:14px">接收 Receive</text>
+  </g>
+  <g data-edge="orders-complete">
+    <path d="M112 574V492" fill="none" stroke="#facc15" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#overview-settle-arrow)"/>
+    <text x="101" y="538" text-anchor="end" fill="#facc15" font-size="15" style="font-size:14px"><tspan x="101" y="530">完成</tspan><tspan x="101" dy="18">Complete</tspan></text>
+  </g>
+  <g data-node="direct-consumer">
+    <rect x="75" y="576" width="196" height="48" rx="8" fill="#242422" stroke="#6d6d63"/>
+    <text x="173" y="607" text-anchor="middle" fill="#f2f1ea" font-size="18" font-weight="600" style="font-size:15px">消费者（consumer）</text>
+  </g>
+  <text x="173" y="666" text-anchor="middle" fill="#b9b8ad" font-size="15">DLQ 是该队列内的状态。</text>
+  <text x="173" y="696" text-anchor="middle" fill="#b9b8ad" font-size="14">Complete 删除已处理的副本。</text>
+
+  <g data-node="topic-producer">
+    <rect x="555" y="126" width="220" height="48" rx="8" fill="#242422" stroke="#6d6d63"/>
+    <text x="665" y="157" text-anchor="middle" fill="#f2f1ea" font-size="18" font-weight="600" style="font-size:17px">生产者（producer）</text>
+  </g>
+  <g data-edge="publish-to-events">
+    <path d="M665 174V234" fill="none" stroke="#b9b8ad" stroke-width="2" marker-end="url(#overview-arrow)"/>
+    <text x="680" y="210" fill="#b9b8ad" font-size="16" style="font-size:15px">发布 Publish &quot;events&quot;</text>
+  </g>
+  <g data-node="events-topic">
+    <rect x="382" y="236" width="578" height="78" rx="10" fill="#302c17" stroke="#facc15" stroke-width="2" stroke-dasharray="7 4"/>
+    <text x="671" y="268" text-anchor="middle" fill="#f2f1ea" font-size="20" font-weight="650">主题（topic）：events</text>
+    <text x="671" y="296" text-anchor="middle" fill="#facc15" font-size="16">仅负责路由，不存储消息</text>
+  </g>
+  <g data-edge="audit-filter-match">
+    <path d="M490 314V386" fill="none" stroke="#b9b8ad" stroke-width="2" marker-end="url(#overview-arrow)"/>
+    <text x="503" y="350" fill="#34d399" font-size="15">过滤条件匹配</text>
+    <text x="503" y="372" fill="#b9b8ad" font-size="14">一份副本</text>
+  </g>
+  <g data-edge="billing-filter-match">
+    <path d="M728 314V386" fill="none" stroke="#b9b8ad" stroke-width="2" marker-end="url(#overview-arrow)"/>
+    <text x="741" y="350" fill="#34d399" font-size="15">过滤条件匹配</text>
+    <text x="741" y="372" fill="#b9b8ad" font-size="14">一份副本</text>
+  </g>
+  <g data-edge="nonmatching-subscription">
+    <path d="M916 314V386" fill="none" stroke="#b9b8ad" stroke-width="2" marker-end="url(#overview-arrow)"/>
+    <text x="902" y="350" text-anchor="end" fill="#e88787" font-size="15">不匹配</text>
+    <circle cx="916" cy="422" r="28" fill="#352322" stroke="#e88787" stroke-width="1.5"/>
+    <path d="M906 412 926 432M926 412 906 432" stroke="#e88787" stroke-width="3"/>
+    <text x="916" y="478" text-anchor="middle" fill="#e88787" font-size="15">无副本</text>
+  </g>
+  <g data-node="audit-backing-queue">
+    <rect x="382" y="388" width="216" height="148" rx="10" fill="#141413" stroke="#34d399" stroke-width="2"/>
+    <text x="490" y="419" text-anchor="middle" fill="#f2f1ea" font-size="17" font-weight="650" style="font-size:14px">订阅 subscription · audit</text>
+    <text x="490" y="446" text-anchor="middle" fill="#b9b8ad" font-size="16" style="font-size:14px">支撑队列（backing queue）</text>
+    <text x="490" y="478" text-anchor="middle" fill="#b9b8ad" font-size="15" style="font-size:14px">就绪 active · 锁定 locked</text>
+    <text x="490" y="510" text-anchor="middle" fill="#e88787" font-size="15" style="font-size:14px">死信 dead_lettered（DLQ）</text>
+  </g>
+  <g data-node="billing-backing-queue">
+    <rect x="620" y="388" width="216" height="148" rx="10" fill="#141413" stroke="#34d399" stroke-width="2"/>
+    <text x="728" y="419" text-anchor="middle" fill="#f2f1ea" font-size="17" font-weight="650" style="font-size:14px">订阅 subscription · billing</text>
+    <text x="728" y="446" text-anchor="middle" fill="#b9b8ad" font-size="16" style="font-size:14px">支撑队列（backing queue）</text>
+    <text x="728" y="478" text-anchor="middle" fill="#b9b8ad" font-size="15" style="font-size:14px">就绪 active · 锁定 locked</text>
+    <text x="728" y="510" text-anchor="middle" fill="#e88787" font-size="15" style="font-size:14px">死信 dead_lettered（DLQ）</text>
+  </g>
+  <g data-edge="audit-receive">
+    <path d="M490 536V602" fill="none" stroke="#b9b8ad" stroke-width="2" marker-end="url(#overview-arrow)"/>
+    <text x="503" y="574" fill="#b9b8ad" font-size="15" style="font-size:14px">接收 Receive</text>
+  </g>
+  <g data-edge="billing-receive">
+    <path d="M728 536V602" fill="none" stroke="#b9b8ad" stroke-width="2" marker-end="url(#overview-arrow)"/>
+    <text x="741" y="574" fill="#b9b8ad" font-size="15" style="font-size:14px">接收 Receive</text>
+  </g>
+  <g data-node="audit-consumer">
+    <rect x="406" y="604" width="168" height="46" rx="8" fill="#242422" stroke="#6d6d63"/>
+    <text x="490" y="634" text-anchor="middle" fill="#f2f1ea" font-size="18" font-weight="600" style="font-size:15px">消费者（consumer）</text>
+  </g>
+  <g data-node="billing-consumer">
+    <rect x="644" y="604" width="168" height="46" rx="8" fill="#242422" stroke="#6d6d63"/>
+    <text x="728" y="634" text-anchor="middle" fill="#f2f1ea" font-size="18" font-weight="600" style="font-size:15px">消费者（consumer）</text>
+  </g>
+  <text x="665" y="681" text-anchor="middle" fill="#b9b8ad" font-size="15">每个匹配的订阅各自持有独立的队列副本。</text>
+  <text x="665" y="706" text-anchor="middle" fill="#b9b8ad" font-size="14">不匹配的订阅不会获得本次发布的副本。</text>
+  <text x="500" y="772" text-anchor="middle" fill="#f2f1ea" font-size="18" font-weight="600">只有队列存储消息；主题仅负责路由。</text>
+</svg>

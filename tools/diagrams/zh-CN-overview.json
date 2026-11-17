@@ -1,0 +1,83 @@
+{
+  "Two delivery targets: a queue, or topic fan-out": "两种投递目标：队列（queue）或主题扇出（topic fan-out）",
+  "A producer can send directly to the orders queue. Active, locked and dead_lettered are states inside that same queue; the dead-letter state is not another queue. Receive delivers a locked message to a consumer, while Complete settles it and removes its copy. Alternatively a producer publishes to the events topic, which stores no messages. Matching audit and billing subscriptions each receive an independent copy in their own backing queue, with their own dead-letter state. A nonmatching subscription receives no copy.": "生产者（producer）可将消息直接发送到 orders 队列（queue）。active、locked 和 dead_lettered 都是同一队列内部的消息状态；死信状态（DLQ）并非另一条队列。Receive 将锁定的消息交给消费者（consumer），Complete 则结算并删除该消息副本。另一条路径是向不存储消息的 events 主题（topic）发布。匹配的 audit 和 billing 订阅（subscription）各自在自己的支撑队列（backing queue）中获得独立副本，并拥有各自的死信状态。不匹配的订阅不获得副本。",
+  "Two ways to deliver work": "两条工作投递路径",
+  "A · Direct to a queue": {
+    "text": "A · 直接发送到队列（queue）",
+    "fontSize": 17
+  },
+  "B · Publish to a topic": "B · 发布到主题（topic）",
+  "producer": {
+    "text": "生产者（producer）",
+    "fontSize": 17
+  },
+  "Send \"orders\"": {
+    "text": "发送 Send \"orders\"",
+    "fontSize": 14
+  },
+  "queue: orders": {
+    "text": "队列（queue）：orders",
+    "fontSize": 17
+  },
+  "message states": "消息状态",
+  "active": {
+    "text": "就绪（active）",
+    "fontSize": 16
+  },
+  "locked": {
+    "text": "锁定（locked）",
+    "fontSize": 16
+  },
+  "dead_lettered (DLQ)": {
+    "text": "死信 dead_lettered（DLQ）",
+    "fontSize": 14
+  },
+  "Receive": {
+    "text": "接收 Receive",
+    "fontSize": 14
+  },
+  "Complete": {
+    "lines": [
+      "完成",
+      "Complete"
+    ],
+    "fontSize": 14,
+    "lineHeight": 18,
+    "offsetY": -8
+  },
+  "consumer": {
+    "text": "消费者（consumer）",
+    "fontSize": 15
+  },
+  "DLQ is a state in this queue.": "DLQ 是该队列内的状态。",
+  "Complete removes the handled copy.": "Complete 删除已处理的副本。",
+  "Publish \"events\"": {
+    "text": "发布 Publish \"events\"",
+    "fontSize": 15
+  },
+  "topic: events": "主题（topic）：events",
+  "routing rules · stores no messages": "仅负责路由，不存储消息",
+  "filter match": "过滤条件匹配",
+  "one copy": "一份副本",
+  "no match": "不匹配",
+  "no copy": "无副本",
+  "subscription: audit": {
+    "text": "订阅 subscription · audit",
+    "fontSize": 14
+  },
+  "backing queue": {
+    "text": "支撑队列（backing queue）",
+    "fontSize": 14
+  },
+  "active · locked": {
+    "text": "就绪 active · 锁定 locked",
+    "fontSize": 14
+  },
+  "subscription: billing": {
+    "text": "订阅 subscription · billing",
+    "fontSize": 14
+  },
+  "Each matching subscription owns an independent queue copy.": "每个匹配的订阅各自持有独立的队列副本。",
+  "A nonmatching subscription gets no copy of this publication.": "不匹配的订阅不会获得本次发布的副本。",
+  "Only queues store messages; a topic only routes them.": "只有队列存储消息；主题仅负责路由。"
+}

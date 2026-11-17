@@ -1,11 +1,18 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync } from 'node:fs';
+import { request } from 'node:http';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
-import { PAGES, BUNDLE_FILES, GENERATED_FILES, HANDWRITTEN_RELEASE_FILES, sourceMetadata, renderSite, checkOutputs, checkClaims, checkLinks, rewriteLinks, rewriteMdLinks } from './build.mjs';
+import { PAGES, BUNDLE_FILES, GENERATED_FILES, HANDWRITTEN_RELEASE_FILES, sourceMetadata as sourceFacts, renderSite as renderBilingualSite, checkOutputs, checkClaims, checkLinks, rewriteLinks, rewriteMdLinks } from './build.mjs';
+import { createSiteServer } from './serve.mjs';
+
+const fixtureReleases = ['v0.1.0', 'v0.1.1', 'v0.2.0', 'v0.3.0', 'v0.3.1', 'v0.3.2', 'v0.3.3', 'v0.4.0'];
+const fixtureOptions = { bilingual: false, releaseTags: fixtureReleases, sourceIsReleaseTag: true };
+const sourceMetadata = (mq) => sourceFacts(mq, fixtureOptions);
+const renderSite = (mq) => renderBilingualSite(mq, fixtureOptions);
 
 const here = dirname(fileURLToPath(import.meta.url));
 const site = resolve(here, '..');
@@ -14,10 +21,81 @@ const put = (root, path, text) => {
   writeFileSync(resolve(root, path), text);
 };
 
+async function preview(t) {
+  const root = mkdtempSync(resolve(tmpdir(), 'mqlite-preview-test-'));
+  const server = createSiteServer(root);
+  t.after(async () => {
+    await new Promise((done) => server.close(done));
+    rmSync(root, { recursive: true, force: true });
+  });
+  await new Promise((done) => server.listen(0, '127.0.0.1', done));
+  return {
+    root,
+    get: (path, method = 'GET') => new Promise((done, fail) => {
+      const req = request({ hostname: '127.0.0.1', port: server.address().port, path, method }, (response) => {
+        const chunks = [];
+        response.on('data', (chunk) => chunks.push(chunk));
+        response.on('end', () => done({ status: response.statusCode, headers: response.headers, body: Buffer.concat(chunks).toString() }));
+      });
+      req.on('error', fail);
+      req.end();
+    }),
+  };
+}
+
+test('local preview serves real GET and HEAD responses with static MIME types', async (t) => {
+  const { root, get } = await preview(t);
+  put(root, 'index.html', '<h1>Preview</h1>');
+  put(root, 'zh-CN/index.html', '<h1>中文首页</h1>');
+  put(root, 'assets/example.js', 'const value = 1;');
+  const home = await get('/?preview=1');
+  assert.equal(home.status, 200);
+  assert.equal(home.body, '<h1>Preview</h1>');
+  assert.equal(home.headers['content-type'], 'text/html; charset=utf-8');
+  assert.equal((await get('/zh-CN/')).body, '<h1>中文首页</h1>');
+  const script = await get('/assets/example.js', 'HEAD');
+  assert.equal(script.status, 200);
+  assert.equal(script.body, '');
+  assert.equal(Number(script.headers['content-length']), 'const value = 1;'.length);
+  assert.equal(script.headers['content-type'], 'text/javascript; charset=utf-8');
+});
+
+test('local preview rejects hidden paths, traversal, listing and unsupported methods', async (t) => {
+  const { root, get } = await preview(t);
+  put(root, '.git/config', 'PRIVATE_REPOSITORY_SENTINEL');
+  symlinkSync(resolve(root, '.git/config'), resolve(root, 'hidden-link.txt'));
+  mkdirSync(resolve(root, 'assets'));
+  for (const path of ['/.git/config', '/%2egit/config', '/hidden-link.txt', '/../private', '/%2e%2e/private', '/assets%5c..%5cprivate', '/bad%00path']) {
+    const response = await get(path);
+    assert.equal(response.status, 403, path);
+    assert.ok(!response.body.includes('PRIVATE_REPOSITORY_SENTINEL'), path);
+  }
+  assert.equal((await get('/assets/')).status, 404);
+  assert.equal((await get('/missing.html')).status, 404);
+  assert.equal((await get('/bad%ZZ')).status, 400);
+  const post = await get('/', 'POST');
+  assert.equal(post.status, 405);
+  assert.equal(post.headers.allow, 'GET, HEAD');
+});
+
+test('local preview never follows an escaping symbolic link', async (t) => {
+  const { root, get } = await preview(t);
+  const outside = mkdtempSync(resolve(tmpdir(), 'mqlite-preview-outside-'));
+  t.after(() => rmSync(outside, { recursive: true, force: true }));
+  put(outside, 'private.txt', 'OUTSIDE_ROOT_SENTINEL');
+  symlinkSync(resolve(outside, 'private.txt'), resolve(root, 'escape.txt'));
+  const response = await get('/escape.txt');
+  assert.equal(response.status, 403);
+  assert.ok(!response.body.includes('OUTSIDE_ROOT_SENTINEL'));
+});
+
 function fixture(t) {
   const root = mkdtempSync(resolve(tmpdir(), 'mqlite-site-test-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   put(root, 'internal/version/version.go', 'package version\nconst Version = "0.3.0"\n');
+  put(root, 'go.mod', 'module github.com/mqlitehq/mqlite\n\ngo 1.21\n');
+  put(root, 'engine/schema.go', 'package engine\nconst schemaVersion = "7"\n');
+  put(root, 'internal/defaults/defaults.go', 'package defaults\nconst BrokerPort = "6754"\n');
   put(root, 'CHANGELOG.md', '# Changelog\n\n## Unreleased\n\n### Behavior changes\n\n## v0.2.0 — 2026-07-11\n\n## v0.1.1 — 2026-06-23\n');
   put(root, 'wire/wire.go', Array.from({ length: 5 }, (_, i) => `PathMethod${i} = "/mqlite.v1.QueueService/Method${i}"`).join('\n'));
   put(root, 'cmd/mqlite-mcp/main.go', Array.from({ length: 5 }, (_, i) => `  name: "tool${i}",`).join('\n'));
@@ -30,7 +108,8 @@ function fixture(t) {
 
 function handWrittenFacts(metadata) {
   const source = `v${metadata.sourceVersion}`;
-  const status = metadata.latestRelease === source ? `source ${source}` : `unreleased source ${source} candidate`;
+  const status = metadata.hasUnreleasedChanges || metadata.latestRelease !== source
+    ? `source ${source} with unreleased changes` : `source ${source}`;
   return `latest supported release ${metadata.latestRelease}; ${status}.`;
 }
 
@@ -49,6 +128,8 @@ test('the complete generated output and source inventories are explicit', () => 
     ['concepts.md', 'concepts.html'], ['internals.md', 'internals.html'], ['api-reference.md', 'api.html'],
     ['cli.md', 'cli.html'], ['access-keys.md', 'access-keys.html'], ['deployment.md', 'deployment.html'], ['observability.md', 'observability.html'],
     ['observability-cloud.md', 'observability-cloud.html'], ['operations.md', 'operations.html'],
+    ['turso.md', 'turso.html'], ['retention.md', 'retention.html'], ['benchmark.md', 'benchmark.html'],
+    ['conformance.md', 'conformance.html'], ['dependencies.md', 'dependencies.html'], ['mcp.md', 'mcp.html'], ['examples.md', 'examples.html'],
   ]);
   assert.deepEqual(BUNDLE_FILES, [
     'concepts.md', 'internals.md', 'api-reference.md', 'cli.md', 'access-keys.md',
@@ -60,7 +141,22 @@ test('the complete generated output and source inventories are explicit', () => 
   const summary = readFileSync(resolve(site, 'llms.txt'), 'utf8');
   assert.ok(summary.includes(`the ${BUNDLE_FILES.length - 2} canonical source documents linked above`));
   assert.ok(summary.includes('The hand-written agent guide remains a separate page.'));
-  assert.deepEqual(GENERATED_FILES, ['concepts.html', 'internals.html', 'api.html', 'cli.html', 'access-keys.html', 'deployment.html', 'observability.html', 'observability-cloud.html', 'operations.html', 'llms-full.txt', 'site-metadata.json', 'assets/highlight.min.js']);
+  assert.deepEqual(GENERATED_FILES, ['concepts.html', 'internals.html', 'api.html', 'cli.html', 'access-keys.html', 'deployment.html', 'observability.html', 'observability-cloud.html', 'operations.html', 'turso.html', 'retention.html', 'benchmark.html', 'conformance.html', 'dependencies.html', 'mcp.html', 'examples.html', 'llms-full.txt', 'site-metadata.json', 'assets/highlight.min.js']);
+});
+
+test('every generated reference keeps native navigation and marks its current page', (t) => {
+  const { outputs } = renderSite(fixture(t));
+  for (const [, output] of PAGES) {
+    const html = outputs.get(output);
+    assert.match(html, /<nav class="top" aria-label="Main navigation">/);
+    assert.match(html, /<div class="overflow-primary"><\/div>/);
+    assert.match(html, /<details class="overflow-more has-current" name="header-menu">/);
+    assert.match(html, /<summary aria-label="More navigation links">More<\/summary>/);
+    assert.ok(new RegExp(`<a[^>]*href="${output}"[^>]*aria-current="page">`).test(html), output);
+    assert.equal((html.match(/aria-current="page"/g) || []).length, 1, output);
+    assert.ok(html.indexOf('class="gh"') > html.indexOf('<details'), output);
+    assert.ok(html.includes(`data-language-switch href="zh-CN/${output}"`));
+  }
 });
 
 test('source and latest supported release stay distinct across patch preparation and publication', (t) => {
@@ -72,7 +168,7 @@ test('source and latest supported release stay distinct across patch preparation
     assert.equal(metadata.sourceVersion, source);
     assert.equal(metadata.latestRelease, `v${released}`);
     for (const [, out] of PAGES) {
-      assert.ok(outputs.get(out).includes(source === released ? `source v${source}` : `unreleased v${source} candidate`));
+      assert.ok(outputs.get(out).includes(source === released ? `source v${source}` : `source v${source} with unreleased changes`));
       assert.ok(outputs.get(out).includes('Latest supported release:'));
       assert.ok(outputs.get(out).includes(`releases/tag/v${released}`));
       assert.ok(outputs.get(out).includes('mqlite main'));
@@ -82,6 +178,32 @@ test('source and latest supported release stay distinct across patch preparation
     }
     assert.ok(outputs.get('llms-full.txt').includes(`Source version: v${source}. Latest supported release: [v${released}](https://github.com/mqlitehq/mqlite/releases/tag/v${released}).`));
   }
+});
+
+test('main stays unreleased when its version constant still matches the latest release', (t) => {
+  const root = fixture(t);
+  put(root, 'CHANGELOG.md', '## Unreleased\n\n### Fixed\n\n- Preserve live leases.\n\n## v0.3.0 — 2026-09-06\n');
+  const { metadata, outputs } = renderSite(root);
+  assert.equal(metadata.sourceVersion, '0.3.0');
+  assert.equal(metadata.latestRelease, 'v0.3.0');
+  assert.equal(metadata.hasUnreleasedChanges, true);
+  for (const [, output] of PAGES) {
+    assert.ok(outputs.get(output).includes('source v0.3.0 with unreleased changes'));
+  }
+  assert.ok(outputs.get('llms-full.txt').includes('Source includes unreleased changes.'));
+  const generatedRoot = materialize(t, outputs, metadata);
+  checkClaims(metadata, generatedRoot);
+  put(generatedRoot, 'llms.txt', 'latest supported release v0.3.0; source v0.3.0.');
+  assert.throws(() => checkClaims(metadata, generatedRoot), /must be described as unreleased/);
+
+  for (const section of ['\n### Fixed\n\n<!-- Pending changes go here. -->\n', '\n']) {
+    put(root, 'CHANGELOG.md', `## Unreleased\n${section}\n## v0.3.0 — 2026-09-06\n\n- Already released.\n`);
+    const released = renderSite(root);
+    assert.equal(released.metadata.hasUnreleasedChanges, false);
+    assert.ok(!released.outputs.get('concepts.html').includes('with unreleased changes'));
+  }
+  put(root, 'CHANGELOG.md', '## v0.3.0 — 2026-09-06\n');
+  assert.equal(sourceMetadata(root).hasUnreleasedChanges, false);
 });
 
 test('retracted and withdrawn changelog entries are never advertised as releases', (t) => {
@@ -99,7 +221,7 @@ test('retracted and withdrawn changelog entries are never advertised as releases
   ].join('\n'));
   const { metadata, outputs } = renderSite(root);
   assert.equal(metadata.latestRelease, 'v0.3.2');
-  assert.ok(outputs.get('concepts.html').includes('unreleased v0.4.0 candidate'));
+  assert.ok(outputs.get('concepts.html').includes('source v0.4.0 with unreleased changes'));
   assert.ok(outputs.get('concepts.html').includes('releases/tag/v0.3.2'));
   assert.ok(!outputs.get('concepts.html').includes('releases/tag/v0.3.3'));
   assert.ok(!outputs.get('concepts.html').includes('releases/tag/v0.4.0'));
@@ -127,7 +249,7 @@ test('missing/ambiguous metadata and source contracts fail closed', (t) => {
   assert.throws(() => sourceMetadata(root), /invalid routes/);
 });
 
-test('canonical diagram changes remain visible in every generated page and the bundle', (t) => {
+test('unreviewed diagram-like code remains literal in every generated page and the bundle', (t) => {
   const root = fixture(t);
   let { outputs } = renderSite(root);
   for (const [, out] of PAGES) {
@@ -197,7 +319,7 @@ test('every hand-written entry point rejects source, release and publication-sta
     for (const [from, to, error] of [
       ['source v0.3.0', 'source v9.9.9', /incorrect source version v9\.9\.9/],
       ['latest supported release v0.2.0', 'latest supported release v0.1.0', /incorrect latest release|missing latest supported release v0\.2\.0/],
-      ['unreleased source v0.3.0 candidate', 'source v0.3.0', /must be described as unreleased/],
+      ['source v0.3.0 with unreleased changes', 'source v0.3.0', /must be described as unreleased/],
     ]) {
       put(root, file, original.replace(from, to));
       assert.throws(() => checkClaims(metadata, root), error, `${file}: ${from}`);
@@ -229,6 +351,8 @@ test('all generated pages and bundle links resolve to the correct source or prev
   }
   assert.equal(rewriteLinks('<a href="../README.md#start">'), '<a href="https://github.com/mqlitehq/mqlite/blob/main/README.md#start">');
   assert.equal(rewriteMdLinks('[read](../engine/tx.go)'), '[read](https://github.com/mqlitehq/mqlite/blob/main/engine/tx.go)');
+  const literal = '`[read](concepts.md)`\n\n```md\n[manual](concepts.md)\n```\n\n> ```md\n> [nested](concepts.md)\n> ```\n';
+  assert.equal(rewriteMdLinks(literal, true), literal);
 });
 
 test('the full Pages workflow contract pins validation, artifact scope and main-only deployment', () => {
@@ -274,7 +398,10 @@ test('the real Pages package contains the complete static inventory with identic
     'assets/demo.css', 'assets/demo.js', 'assets/highlight.min.js', 'assets/site.css', 'assets/site.js', 'cli.html',
     'concepts.html', 'deployment.html', 'favicon.svg', 'index.html', 'internals.html',
     'llms-full.txt', 'llms.txt', 'logo.svg', 'observability.html', 'observability-cloud.html', 'operations.html',
-    'site-metadata.json',
+    'site-metadata.json', 'turso.html', 'retention.html', 'benchmark.html', 'conformance.html', 'dependencies.html', 'mcp.html', 'examples.html',
+    'assets/concepts-lifecycle.svg', 'assets/concepts-filter.svg',
+    'assets/zh-CN/fig-overview.svg', 'assets/zh-CN/concepts-lifecycle.svg', 'assets/zh-CN/concepts-filter.svg',
+    ...['index.html', 'agents.html', 'concepts.html', 'internals.html', 'api.html', 'cli.html', 'access-keys.html', 'deployment.html', 'observability.html', 'observability-cloud.html', 'operations.html', 'turso.html', 'retention.html', 'benchmark.html', 'conformance.html', 'dependencies.html', 'mcp.html', 'examples.html', 'llms.txt', 'llms-full.txt'].map((name) => `zh-CN/${name}`),
   ].sort();
   assert.deepEqual(files(output).sort(), expected);
   for (const file of expected) {

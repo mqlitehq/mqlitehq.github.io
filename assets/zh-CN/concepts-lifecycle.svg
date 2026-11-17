@@ -1,0 +1,134 @@
+<svg lang="zh-CN" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1100" role="img" aria-labelledby="lifecycle-title lifecycle-description">
+  <title id="lifecycle-title">队列中一条消息的生命周期</title>
+  <desc id="lifecycle-description">一条消息记录在任一时刻只能处于待调度（scheduled）、就绪（active）、已锁定（locked）、暂缓（deferred）或死信（dead_lettered）之一。已移除（removed）表示记录已删除，不是另一种状态或队列。Receive 和 ReceiveDeferred 会增加 delivery_count。Renew 延长同一有效租约，不增加该计数。最后一次有效投递仍可完成（Complete）或续锁（Renew）。主流程下方列出重试、死信恢复（Redrive）、取消、到期与删除条件。</desc>
+  <defs>
+    <marker id="lifecycle-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 10 5 0 10Z" fill="#a7a59b"/></marker>
+    <marker id="lifecycle-complete-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 10 5 0 10Z" fill="#34d399"/></marker>
+    <style>
+      text { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; fill: #f2f1ea; }
+      .title { font-size: 24px; font-weight: 700; }
+      .subtitle { font-size: 15px; fill: #b9b8ad; }
+      .state { fill: #1d1d1b; stroke: #6b6a62; stroke-width: 1.8; }
+      .state-name { font-family: ui-monospace, "SF Mono", Consolas, monospace; font-size: 18px; font-weight: 600; }
+      .label { font-size: 15px; }
+      .note { font-size: 14px; fill: #b9b8ad; }
+      .edge { fill: none; stroke: #a7a59b; stroke-width: 1.8; marker-end: url(#lifecycle-arrow); }
+      .rule-name { font-family: ui-monospace, "SF Mono", Consolas, monospace; font-size: 14px; font-weight: 600; }
+      .rule-text { font-size: 15px; fill: #d2d0c6; }
+    </style>
+  </defs>
+  <rect width="1000" height="1100" rx="14" fill="#141413"/>
+  <text x="32" y="43" class="title">一条消息，同一时刻仅处于一种状态。</text>
+  <text x="32" y="70" class="subtitle">实线框表示同一队列内的状态；虚线框表示记录已删除。</text>
+
+  <g data-state="scheduled">
+    <rect x="315" y="130" width="190" height="62" rx="10" class="state" style="stroke:#facc15"/>
+    <text x="410" y="167" text-anchor="middle" class="state-name" style="font-size:16px">待调度（scheduled）</text>
+  </g>
+  <g data-state="active">
+    <rect x="315" y="270" width="190" height="62" rx="10" class="state" style="stroke:#34d399"/>
+    <text x="410" y="307" text-anchor="middle" class="state-name" style="font-size:16px">就绪（active）</text>
+  </g>
+  <g data-state="locked">
+    <rect x="315" y="410" width="190" height="62" rx="10" class="state" style="stroke:#facc15"/>
+    <text x="410" y="447" text-anchor="middle" class="state-name" style="font-size:16px">已锁定（locked）</text>
+  </g>
+  <g data-state="deferred">
+    <rect x="700" y="410" width="220" height="62" rx="10" class="state" style="stroke:#7db3f5"/>
+    <text x="810" y="447" text-anchor="middle" class="state-name" style="font-size:16px">暂缓（deferred）</text>
+  </g>
+  <g data-state="dead_lettered">
+    <rect x="315" y="550" width="190" height="62" rx="10" class="state" style="stroke:#e66767"/>
+    <text x="410" y="579" text-anchor="middle" class="state-name" style="font-size:14px">死信（dead_lettered）</text>
+    <text x="410" y="600" text-anchor="middle" class="note">队列内死信状态（DLQ）</text>
+  </g>
+  <g data-terminal="removed">
+    <rect x="700" y="130" width="220" height="62" rx="10" fill="none" stroke="#b9b8ad" stroke-width="1.8" stroke-dasharray="7 5"/>
+    <text x="810" y="157" text-anchor="middle" class="state-name" style="font-size:16px">已移除（removed）</text>
+    <text x="810" y="180" text-anchor="middle" class="note">记录已删除，非消息状态</text>
+  </g>
+
+  <g data-edge="new-to-scheduled">
+    <path d="M68 161H307" class="edge"/>
+    <text x="68" y="144" class="label">定时发送（Send）</text>
+  </g>
+  <g data-edge="new-to-active">
+    <path d="M68 301H307" class="edge"/>
+    <text x="68" y="284" class="label">发送（Send）</text>
+  </g>
+  <g data-edge="scheduled-to-active">
+    <path d="M410 192V262" class="edge"/>
+    <text x="391" y="224" text-anchor="end" class="label">调度器：到期转为可投递</text>
+    <text x="391" y="246" text-anchor="end" class="note">count 不变</text>
+  </g>
+  <g data-edge="scheduled-to-removed">
+    <path d="M505 161H692" class="edge"/>
+    <text x="602" y="142" text-anchor="middle" class="label">取消（Cancel）</text>
+    <text x="602" y="183" text-anchor="middle" class="note">仅 delivery_count = 0</text>
+  </g>
+  <g data-edge="active-to-locked">
+    <path d="M410 332V402" class="edge"/>
+    <text x="391" y="363" text-anchor="end" class="label">领取（Receive / claim）</text>
+    <text x="391" y="385" text-anchor="end" class="note">计数递增（count++）</text>
+  </g>
+  <g data-edge="locked-to-removed">
+    <path d="M505 417H550V230H810V200" fill="none" stroke="#34d399" stroke-width="1.8" marker-end="url(#lifecycle-complete-arrow)"/>
+    <text x="680" y="217" text-anchor="middle" class="label" style="font-size:14px;fill:#34d399">完成（Complete）：有效租约 + token</text>
+  </g>
+  <g data-edge="locked-to-deferred">
+    <path d="M505 433H692" class="edge"/>
+    <text x="618" y="415" text-anchor="middle" class="label">暂缓（Defer）</text>
+  </g>
+  <g data-edge="deferred-to-locked">
+    <path d="M700 455H513" class="edge"/>
+    <text x="710" y="496" class="label" style="font-size:14px">按 seq 领取（ReceiveDeferred）</text>
+    <text x="710" y="517" class="note">计数递增（count++）</text>
+    <text x="710" y="538" class="note">此领取不检查 max</text>
+  </g>
+  <g data-edge="locked-to-locked">
+    <path d="M315 455H258V426H307" class="edge"/>
+    <text x="64" y="421" class="label" style="font-size:14px">续锁（Renew / RenewBatch）</text>
+    <text x="64" y="445" class="note">同一有效租约（lease）</text>
+    <text x="64" y="468" class="note">count 不变</text>
+  </g>
+  <g data-edge="locked-to-dead_lettered">
+    <path d="M410 472V542" class="edge"/>
+    <text x="391" y="505" text-anchor="end" class="label">拒绝（Reject）</text>
+    <text x="391" y="528" text-anchor="end" class="note">或最后一次领取失败</text>
+  </g>
+  <text x="32" y="638" class="subtitle">DLQ 是同一队列内的状态，并非独立队列。其余转换条件列于下方。</text>
+
+  <rect x="32" y="658" width="936" height="414" rx="12" fill="#1b1b19" stroke="#3a3933"/>
+  <text x="52" y="691" font-size="19" font-weight="650">恢复、重试与过期规则</text>
+  <text x="52" y="716" class="note">计数 count = delivery_count；上限 max = max_delivery_count</text>
+
+  <g data-edge="locked-to-active">
+    <text x="52" y="749" class="rule-name">已锁定 → 就绪</text>
+    <text x="300" y="749" class="rule-text">立即放弃（Abandon）或锁过期，count &lt; max；count 不变。</text>
+  </g>
+  <g data-edge="locked-to-scheduled">
+    <text x="52" y="782" class="rule-name">已锁定 → 待调度</text>
+    <text x="300" y="782" class="rule-text">放弃（Abandon）：delay_ms &gt; 0，count &lt; max；count 不变。</text>
+    <text x="300" y="805" class="note">消息继续阻塞其有序分组，直至预定重试时刻。</text>
+  </g>
+  <g data-rule="failed-final-claim">
+    <text x="52" y="839" class="rule-name">已锁定 → 死信</text>
+    <text x="300" y="839" class="rule-text">拒绝（Reject）；或 count ≥ max 时放弃（Abandon）或锁过期。</text>
+  </g>
+  <g data-edge="dead_lettered-to-active">
+    <text x="52" y="873" class="rule-name">死信 → 就绪</text>
+    <text x="300" y="873" class="rule-text">死信恢复（Redrive）将 count 重置为 0（本队列或目标队列）。</text>
+  </g>
+  <g data-edge="dead_lettered-to-removed">
+    <text x="52" y="907" class="rule-name">死信 → 已移除</text>
+    <text x="300" y="907" class="rule-text">清除（Purge）或异步死信保留清理（按时长、数量、字节）。</text>
+  </g>
+  <g data-rule="message-ttl-expiry">
+    <text x="52" y="941" class="rule-name">生存时间（TTL）到期</text>
+    <text x="300" y="941" class="rule-text">适用状态：就绪、已锁定、暂缓、待调度：</text>
+    <text x="300" y="964" class="rule-text">dead_letter_on_expire = 1 → 死信（DLQ）；= 0 → 已移除（removed）。</text>
+  </g>
+  <path d="M52 985H948" stroke="#454238"/>
+  <text x="52" y="1014" font-size="16" font-weight="650" style="fill:#facc15">达到 max 不会终止仍有效的最后一次领取。</text>
+  <text x="52" y="1040" class="rule-text">仍可 Complete 或 Renew；最后一次尝试失败后的 Abandon 或锁过期，才将消息移入死信（DLQ）。</text>
+</svg>

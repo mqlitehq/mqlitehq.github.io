@@ -102,6 +102,16 @@
 }
 .demo-node strong { color: var(--ink); font: 650 12.5px/1.45 var(--mono); }
 .demo-node small { margin-top: 3px; color: var(--muted); font: 500 9.5px/1.4 var(--mono); }
+/* Chinese labels include the original term and must remain fully readable. */
+:lang(zh-CN) .demo-node-kind { font-size: 11px; letter-spacing: 0; text-transform: none; overflow-wrap: anywhere; }
+:lang(zh-CN) .demo-caption > span, :lang(zh-CN) .demo-transcript b { text-transform: none; }
+:lang(zh-CN) .demo-node strong, :lang(zh-CN) .demo-node small {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+:lang(zh-CN) .demo-node small { font-size: 11px; }
 .demo-node.is-hot {
   transform: translateY(-1px);
   border-color: rgba(250, 204, 21, 0.72);
@@ -156,6 +166,15 @@
   white-space: nowrap;
 }
 .demo-edge.is-hot, .demo-branch.is-hot { --edge: var(--accent); color: var(--accent); }
+:lang(zh-CN) .demo-edge span, :lang(zh-CN) .demo-branch span {
+  width: max-content;
+  white-space: pre;
+  overflow-wrap: normal;
+  text-align: center;
+  font-size: 10px;
+  line-height: 1.2;
+  top: -14px;
+}
 .product-demo[data-playing="true"][data-visible="true"] .demo-edge.is-hot::before {
   animation: demo-edge-flow 520ms linear infinite;
 }
@@ -183,6 +202,7 @@
 .demo-branch::before { top: calc(24% - 3px); }
 .demo-branch::after { top: calc(76% - 3px); }
 .demo-branch span { top: calc(50% - 17px); }
+:lang(zh-CN) .demo-branch span { top: calc(50% - 30px); background: #141413; }
 
 .demo-caption {
   min-height: 76px;
