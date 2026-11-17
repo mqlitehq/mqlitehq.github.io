@@ -31,8 +31,8 @@
       var summary = menu.querySelector('summary');
       menu.addEventListener('toggle', function () {
         if (!menu.open) return;
-        var row = menu.closest('[data-overflow]');
-        if (row) row.querySelectorAll('details').forEach(function (other) {
+        var group = menu.closest('nav.top') || menu.closest('[data-overflow]');
+        if (group) group.querySelectorAll('.overflow-more, [data-language-picker]').forEach(function (other) {
           if (other !== menu) other.open = false;
         });
       });

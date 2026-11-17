@@ -174,7 +174,9 @@ function page({ title, description, src, out, body }, metadata, chinese = false)
   const localTitle = chinese ? ZH[title][0] : title;
   const localDescription = chinese ? ZH[title][1] : description;
   const navLabel = (label) => label === 'HTTP API reference' ? 'API' : label === 'CLI reference' ? 'CLI' : chinese ? ZH[label][0] : label;
-  const navigation = CORE_PAGES.map(([pageSrc, output, label]) => `    <a href="${output}"${pageSrc === src ? ' aria-current="page"' : ''}>${navLabel(label)}</a>`).join('\n');
+  const navigationLinks = CORE_PAGES.map(([pageSrc, output, label]) => `    <a href="${output}"${pageSrc === src ? ' aria-current="page"' : ''}>${navLabel(label)}</a>`);
+  navigationLinks.splice(1, 0, `    <a href="agents.html">${chinese ? 'AI 代理指南' : 'For AI agents'}</a>`);
+  const navigation = navigationLinks.join('\n');
   const current = CORE_PAGES.some(([name]) => name === src) ? '' : `<a class="document-label" href="${out}" aria-current="page">${localTitle}</a> · `;
   const stamp = chinese
     ? `${current}来源：<a href="${GH}/blob/main/docs/${src}">mqlite main · docs/${src}</a> — ${sourceStatus}。最新受支持版本：<a href="${GH}/releases/tag/${metadata.latestRelease}">${metadata.latestRelease}</a>。本文档跟随 main；使用已发布产物时，请查阅对应版本的文档。`
@@ -198,15 +200,16 @@ ${languageLinks(out, chinese)}
   <a class="brand" href="./"><img src="logo.svg" alt="" width="24" height="24"> mqlite</a>
   <div class="links overflow-nav" data-overflow>
     <div class="overflow-primary"></div>
-    ${languageSwitch(out, chinese)}
     <details class="overflow-more has-current" name="header-menu">
       <summary aria-label="${chinese ? '更多导航链接' : 'More navigation links'}">${chinese ? '更多' : 'More'}</summary>
       <div class="overflow-items">
 ${navigation}
-    <a href="agents.html">${chinese ? 'AI 代理指南' : 'For AI agents'}</a>
     <a class="gh" href="${GH}">GitHub ↗</a>
       </div>
     </details>
+  </div>
+  <div class="nav-utilities">
+    ${languageSwitch(out, chinese)}
   </div>
 </div></nav>
 <div class="wrap">

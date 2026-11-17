@@ -89,7 +89,7 @@
       "sources": [
         "site/assets/site.css"
       ],
-      "sha256": "8606d85176661379c3205189f8463ce37531ab5afec3582b3f4b19b40f9160fd"
+      "sha256": "f1c5465401d181d97eb3c3dff22ede7f3d674b14b4165e468df704191b021fe0"
     },
     {
       "output": "assets/site.js",
@@ -98,7 +98,7 @@
       "sources": [
         "site/assets/site.js"
       ],
-      "sha256": "6619e0ee3a3c89e310ece4ab123cb1bf5d1ce94c8b8b170ad13e75d73a439bf4"
+      "sha256": "2fef21384257fccb9fcf0d1fff47c811d262fab2115b3f42a2741dfb4c04fb40"
     },
     {
       "output": "assets/zh-CN/concepts-filter.svg",
