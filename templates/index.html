@@ -129,20 +129,14 @@
   FIFO groups and topic fan-out — <strong>embedded in your Go process</strong> or served as a
   <strong>tiny HTTP broker</strong>. Same engine, same file, your choice.</p>
   <div class="chips">
-    <a class="chip v" href="https://github.com/mqlitehq/mqlite/releases/tag/{{LATEST_RELEASE}}">latest supported release {{LATEST_RELEASE}}</a>
-    <span class="chip">main docs · source {{SOURCE_VERSION}}{{SOURCE_STATUS}}</span>
+    <!-- Keep homepage version information to this single latest-release badge. -->
+    <a class="chip v" href="https://github.com/mqlitehq/mqlite/releases/tag/{{LATEST_RELEASE}}">Latest release {{LATEST_RELEASE}}</a>
     <span class="chip">pure Go · no CGO</span>
     <span class="chip">one binary · one file</span>
     <span class="chip">JSON over HTTP · curl-able</span>
     <span class="chip">local SQLite or remote Turso</span>
     <span class="chip">MIT</span>
   </div>
-  <p class="sub">This site follows source {{SOURCE_VERSION}}{{SOURCE_STATUS}} on <code>main</code>. The latest
-  supported release is {{LATEST_RELEASE}}; use
-  <a href="https://github.com/mqlitehq/mqlite/tree/{{LATEST_RELEASE}}/docs">the {{LATEST_RELEASE}} documentation</a>
-  with published artifacts. v0.3.3 is withdrawn, unsupported and retracted by
-  v0.4.0 and later; its public artifacts remain only for forensic or compatibility
-  inspection and must not be deployed.</p>
   <nav class="cta overflow-nav" data-overflow aria-label="Get started">
     <a class="btn primary" href="#quickstart">Quickstart</a>
     <div class="overflow-primary"></div>
@@ -202,7 +196,7 @@
       replay, single-broker crash recovery, and O(log n) claims on a deep backlog.
       FIFO groups stay ordered even across consumer crashes and lock expiry.</p></div>
     <div class="why"><h3><em>3</em>Simple, unambiguous interface</h3>
-      <p>Every operation is <strong>one HTTP POST with a JSON body</strong> — {{ROUTE_COUNT}} routes in source {{SOURCE_VERSION}}{{SOURCE_STATUS}}, curl-able by
+      <p>Every operation is <strong>one HTTP POST with a JSON body</strong> — {{ROUTE_COUNT}} routes, curl-able by
       construction, exactly one settlement verb per outcome (<code>Complete</code> /
       <code>Abandon</code> / <code>Reject</code> / <code>Defer</code>), no aliases. Easy for people; easy for
       <a href="agents.html">agents</a>.</p></div>
@@ -357,7 +351,7 @@ func main() {
     <noscript>
       <figure class="fig"><img src="assets/fig-overview.svg" alt="mqlite model: publish routes independent copies to subscription backing queues; receive locks a copy and settlement removes or reschedules it." style="width:100%;display:block"></figure>
     </noscript>
-    <p class="demo-note">Animation timing is illustrative, not broker latency. A final ordinary claim may still renew and complete at the delivery limit. It enters the DLQ if explicitly rejected, or if that final lock is abandoned, expires, or is explicitly reclaimed. The documented source preserves unexpired leases on ordinary opens; v0.4.2 still reclaims them at startup. See <a href="operations.html#graceful-broker-shutdown">shutdown and restart boundaries</a>.</p>
+    <p class="demo-note">Animation timing is illustrative, not broker latency. A final ordinary claim may still renew and complete at the delivery limit. It enters the DLQ if explicitly rejected, or if that final lock is abandoned, expires, or is explicitly reclaimed. See <a href="operations.html#graceful-broker-shutdown">shutdown and restart boundaries</a>.</p>
   </section>
   <h3 class="subh">the source version described here is covered by the conformance TCK — details in <a href="concepts.html">Concepts</a>; the full construction story (schema, locks, fencing, recovery) is in <a href="internals.html">Internals</a></h3>
   <div class="sem">
@@ -479,7 +473,6 @@ func main() {
     </div>
     <div class="tabpane" data-t="broker">
       <p>One tiny process, secure by default: it generates a <code>mqk_…</code> token and prints it if you don't set one. Every operation is one POST.</p>
-      <p>The documented source uses port {{BROKER_PORT}} and schema token {{SCHEMA_VERSION}}. The v0.4.2 release was a same-schema patch over v0.4.1, so that upgrade needs no database rebuild. Schema-5 databases from v0.3.x still require preserving the matching old binary/database pair and starting v0.4.2 with a fresh database. v0.3.3 is withdrawn and unsupported; its public artifacts remain only for forensic or compatibility inspection and must not be deployed.</p>
       <pre><code class="language-bash">go install github.com/mqlitehq/mqlite/cmd/mqlite@latest   # latest published broker
 
 # start the broker on :{{BROKER_PORT}} with a known token, in the background

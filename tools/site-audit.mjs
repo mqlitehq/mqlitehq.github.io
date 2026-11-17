@@ -21,10 +21,11 @@ export function checkCurrentVersionClaims(texts, metadata) {
     const sourcePatterns = [new RegExp(`\\bsource\\s+(?:version[:\\s]*)?(${semver})`, 'gi'),
       new RegExp(`(?:源码(?:版本)?|源版本)[：:\\s]*(${semver})`, 'g')];
     const sourceClaims = sourcePatterns.flatMap((pattern) => [...visible.matchAll(pattern)].map((match) => match[1]));
-    demand(sourceClaims.length > 0, `${file}: missing generated source-version declaration`);
+    const homepage = file === 'index.html' || file === 'zh-CN/index.html';
+    demand(homepage || sourceClaims.length > 0, `${file}: missing generated source-version declaration`);
     for (const value of sourceClaims) demand(value === `v${metadata.sourceVersion}`, `${file}: stale source version ${value}`);
     const releasePatterns = [
-      new RegExp(`(?:latest(?: (?:recorded|published|supported))? release|最新受支持(?:的)?版本)(?::|：| is|为|是)?\\s*(${semver})`, 'gi'),
+      new RegExp(`(?:latest(?: (?:recorded|published|supported))? release|最新(?:受支持(?:的)?)?版本)(?::|：| is|为|是)?\\s*(${semver})`, 'gi'),
       new RegExp(`(${semver})\\s*,?\\s*(?:is\\s+)?the latest supported release\\b`, 'gi'),
     ];
     const releaseClaims = releasePatterns.flatMap((pattern) => [...visible.matchAll(pattern)].map((match) => match[1]));

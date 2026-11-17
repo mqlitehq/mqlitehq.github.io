@@ -2159,21 +2159,7 @@
   },
   {
     "source": "site/i18n/zh-CN/interface.json",
-    "text": "\"Animation timing is illustrative, not broker latency. A final ordinary claim may still renew and complete at the delivery limit. It enters the DLQ if explicitly rejected, or if that final lock is abandoned, expires, or is explicitly reclaimed. The documented source preserves unexpired leases on ordinary opens; v0.4.2 still reclaims them at startup. See\": \"动画时序仅作演示，不代表 broker 延迟。即使达到投递次数上限，最后一次普通领取仍可续锁和完成。只有显式拒绝，或最后这次锁被放弃、到期或显式回收，消息才进入 DLQ。当前文档对应的源码在普通打开时保留未过期租约；v0.4.2 启动时仍会回收这些租约。参见\",",
-    "occurrence": 1,
-    "kind": "historical",
-    "reason": "Fixed capability-introduction, withdrawal, migration or older-release behavior; retain its exact version and review the surrounding compatibility statement."
-  },
-  {
-    "source": "site/i18n/zh-CN/interface.json",
     "text": "\"Available since v0.3.1.\": \"自 v0.3.1 起提供。\",",
-    "occurrence": 1,
-    "kind": "historical",
-    "reason": "Fixed capability-introduction, withdrawal, migration or older-release behavior; retain its exact version and review the surrounding compatibility statement."
-  },
-  {
-    "source": "site/i18n/zh-CN/interface.json",
-    "text": "\"The documented source uses port {{BROKER_PORT}} and schema token {{SCHEMA_VERSION}}. The v0.4.2 release was a same-schema patch over v0.4.1, so that upgrade needs no database rebuild. Schema-5 databases from v0.3.x still require preserving the matching old binary/database pair and starting v0.4.2 with a fresh database. v0.3.3 is withdrawn and unsupported; its public artifacts remain only for forensic or compatibility inspection and must not be deployed.\": \"当前文档对应源码的端口为 {{BROKER_PORT}}，schema token 为 {{SCHEMA_VERSION}}。v0.4.2 发布版本是基于 v0.4.1、schema 不变的补丁，因此该升级无需重建数据库。来自 v0.3.x、使用 Schema-5 的数据库，仍需保留匹配的旧二进制程序和数据库组合，并让 v0.4.2 从全新数据库启动。v0.3.3 已撤回且不再受支持；其公开制品仅为取证或兼容性检查保留，不得部署。\",",
     "occurrence": 1,
     "kind": "historical",
     "reason": "Fixed capability-introduction, withdrawal, migration or older-release behavior; retain its exact version and review the surrounding compatibility statement."
@@ -2223,13 +2209,6 @@
   {
     "source": "site/i18n/zh-CN/interface.json",
     "text": "\"tool requires both the broker and MCP server at v0.3.2 or later. Key-management tools require v0.3.1 or later:\": \"工具要求 broker 与 MCP 服务端均为 v0.3.2 或更高版本。密钥管理工具要求 v0.3.1 或更高版本：\",",
-    "occurrence": 1,
-    "kind": "historical",
-    "reason": "Fixed capability-introduction, withdrawal, migration or older-release behavior; retain its exact version and review the surrounding compatibility statement."
-  },
-  {
-    "source": "site/i18n/zh-CN/interface.json",
-    "text": "\"with published artifacts. v0.3.3 is withdrawn, unsupported and retracted by v0.4.0 and later; its public artifacts remain only for forensic or compatibility inspection and must not be deployed.\": \"与已发布产物配套使用。v0.3.3 已撤回、不再受支持，且自 v0.4.0 起被标记为撤销版本；其公开产物仅供取证或兼容性检查，不得部署。\",",
     "occurrence": 1,
     "kind": "historical",
     "reason": "Fixed capability-introduction, withdrawal, migration or older-release behavior; retain its exact version and review the surrounding compatibility statement."
@@ -2348,38 +2327,10 @@
   },
   {
     "source": "site/templates/index.html",
-    "text": "with published artifacts. v0.3.3 is withdrawn, unsupported and retracted by",
-    "occurrence": 1,
-    "kind": "historical",
-    "reason": "Fixed capability-introduction, withdrawal, migration or older-release behavior; retain its exact version and review the surrounding compatibility statement."
-  },
-  {
-    "source": "site/templates/index.html",
-    "text": "v0.4.0 and later; its public artifacts remain only for forensic or compatibility",
-    "occurrence": 1,
-    "kind": "historical",
-    "reason": "Fixed capability-introduction, withdrawal, migration or older-release behavior; retain its exact version and review the surrounding compatibility statement."
-  },
-  {
-    "source": "site/templates/index.html",
-    "text": "<p class=\"demo-note\">Animation timing is illustrative, not broker latency. A final ordinary claim may still renew and complete at the delivery limit. It enters the DLQ if explicitly rejected, or if that final lock is abandoned, expires, or is explicitly reclaimed. The documented source preserves unexpired leases on ordinary opens; v0.4.2 still reclaims them at startup. See <a href=\"operations.html#graceful-broker-shutdown\">shutdown and restart boundaries</a>.</p>",
-    "occurrence": 1,
-    "kind": "historical",
-    "reason": "Fixed capability-introduction, withdrawal, migration or older-release behavior; retain its exact version and review the surrounding compatibility statement."
-  },
-  {
-    "source": "site/templates/index.html",
     "text": "(<code>mqlite-go</code>)</a> is standard-library-only and keeps a Go 1.13",
     "occurrence": 1,
     "kind": "upstream",
     "reason": "Remote-only companion source compatibility or an exact companion-release example, independent of the main module floor. The whole-site release checklist also reviews pinned SDK installation examples."
-  },
-  {
-    "source": "site/templates/index.html",
-    "text": "<p>The documented source uses port {{BROKER_PORT}} and schema token {{SCHEMA_VERSION}}. The v0.4.2 release was a same-schema patch over v0.4.1, so that upgrade needs no database rebuild. Schema-5 databases from v0.3.x still require preserving the matching old binary/database pair and starting v0.4.2 with a fresh database. v0.3.3 is withdrawn and unsupported; its public artifacts remain only for forensic or compatibility inspection and must not be deployed.</p>",
-    "occurrence": 1,
-    "kind": "historical",
-    "reason": "Fixed capability-introduction, withdrawal, migration or older-release behavior; retain its exact version and review the surrounding compatibility statement."
   },
   {
     "source": "site/templates/index.html",

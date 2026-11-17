@@ -155,6 +155,27 @@ test('header uses the available width with the agent entry near the brand and la
   }
 });
 
+test('the homepage shows only the latest release badge in both languages', async ({ page }, testInfo) => {
+  const metadata = await (await page.request.get('/site-metadata.json')).json();
+  for (const locale of ['', 'zh-CN/']) {
+    for (const [label, width, height] of [['desktop', 1440, 900], ['mobile', 390, 844]]) {
+      await page.setViewportSize({ width, height });
+      await page.goto(`/${locale}index.html`);
+      const hero = page.locator('.hero');
+      const badge = hero.locator('.chip.v');
+      await expect(badge).toHaveCount(1);
+      await expect(badge).toHaveText(`${locale ? '最新版本' : 'Latest release'} ${metadata.latestRelease}`);
+      await expect(badge).toHaveAttribute('href', `https://github.com/mqlitehq/mqlite/releases/tag/${metadata.latestRelease}`);
+      await expect(hero).not.toContainText(/\bmain\b|\bsource\b|unreleased|withdrawn|retracted|unsupported|未发布|撤回|撤销|不再受支持|源码|源版本/i);
+      await expectNoPageOverflow(page);
+      const name = `homepage-${locale ? 'zh' : 'en'}-${label}`;
+      const screenshot = testInfo.outputPath(name + '.png');
+      await page.screenshot({ path: screenshot, fullPage: false });
+      await testInfo.attach(name, { path: screenshot, contentType: 'image/png' });
+    }
+  }
+});
+
 test('capture the reviewed header at desktop, compact, mobile and zoomed widths', async ({ page }, testInfo) => {
   for (const locale of ['', 'zh-CN/']) {
     for (const scenario of [

@@ -128,17 +128,14 @@
   <p class="sub">Peek-Lock 投递、重试、死信队列、调度、去重、FIFO 分组和主题扇出： <strong>嵌入 Go 进程</strong> 或运行成一个
   <strong>小型 HTTP broker</strong>。同一引擎、同一文件，由你选择。</p>
   <div class="chips">
-    <a class="chip v" href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.3">最新受支持版本 v0.4.3</a>
-    <span class="chip">main 文档 · 源版本 v0.4.3（含未发布变更）</span>
+    <!-- Keep homepage version information to this single latest-release badge. -->
+    <a class="chip v" href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.3">最新版本 v0.4.3</a>
     <span class="chip">纯 Go · 无需 CGO</span>
     <span class="chip">一个二进制文件 · 一个数据文件</span>
     <span class="chip">JSON over HTTP · 可用 curl 调用</span>
     <span class="chip">本地 SQLite 或远程 Turso</span>
     <span class="chip">MIT</span>
   </div>
-  <p class="sub">本网站跟随源版本 v0.4.3（含未发布变更），所在分支为 <code>main</code>。最新受支持版本为 v0.4.3；请使用
-  <a href="https://github.com/mqlitehq/mqlite/tree/v0.4.3/docs">v0.4.3 文档</a>
-  与已发布产物配套使用。v0.3.3 已撤回、不再受支持，且自 v0.4.0 起被标记为撤销版本；其公开产物仅供取证或兼容性检查，不得部署。</p>
   <nav class="cta overflow-nav" data-overflow aria-label="开始使用">
     <a class="btn primary" href="#quickstart">快速入门</a>
     <div class="overflow-primary"></div>
@@ -193,7 +190,7 @@
     <div class="why"><h3><em>2</em>并发下可靠</h3>
       <p>默认 Peek-Lock 投递如实承诺 <strong>至少一次（at-least-once）</strong>；显式的接收即删除模式则选择在 broker 侧至多删除一次（at-most-once）。新的结算要求当前令牌和未过期租约；支持按配置启用发送去重、有界的接收与结算重放、单 broker 崩溃恢复，以及深积压下 O(log n) 的领取。即使消费者崩溃或锁到期，FIFO 组仍保持顺序。</p></div>
     <div class="why"><h3><em>3</em>简单、无歧义的接口</h3>
-      <p>每项操作都是 <strong>携带 JSON 正文的单次 HTTP POST</strong> ；源版本 v0.4.3（含未发布变更） 有 29 条路由，设计上均可用 curl 调用，每种结算结果只有一个动词（<code>Complete</code> /
+      <p>每项操作都是 <strong>携带 JSON 正文的单次 HTTP POST</strong> —— 29 条路由，天然支持 curl；每种结算结果只有一个动词（<code>Complete</code> /
       <code>Abandon</code> / <code>Reject</code> / <code>Defer</code>），没有别名。人易于使用，也方便
       <a href="agents.html">智能体</a>。</p></div>
     <div class="why"><h3><em>4</em>借鉴 Service Bus，保持自身设计</h3>
@@ -339,7 +336,7 @@ func main() {
     <noscript>
       <figure class="fig"><img src="../assets/zh-CN/fig-overview.svg" alt="mqlite 模型：发布（Publish）将独立副本路由到订阅的支撑队列；接收（Receive）锁定一个副本，结算（settlement）将其删除或重新调度。" style="width:100%;display:block"></figure>
     </noscript>
-    <p class="demo-note">动画时序仅作演示，不代表 broker 延迟。即使达到投递次数上限，最后一次普通领取仍可续锁和完成。只有显式拒绝，或最后这次锁被放弃、到期或显式回收，消息才进入 DLQ。当前文档对应的源码在普通打开时保留未过期租约；v0.4.2 启动时仍会回收这些租约。参见 <a href="operations.html#graceful-broker-shutdown">关停与重启边界</a>。</p>
+    <p class="demo-note">动画时序仅作演示，不代表 broker 延迟。即使达到投递次数上限，最后一次普通领取仍可续锁和完成。只有显式拒绝，或最后这次锁被放弃、到期或显式回收，消息才进入 DLQ。参见 <a href="operations.html#graceful-broker-shutdown">关停与重启边界</a>。</p>
   </section>
   <h3 class="subh">此处描述的源版本由一致性测试集（TCK）覆盖，详情见 <a href="concepts.html">核心概念</a>；完整的构建原理（schema、锁、令牌隔离、恢复）见 <a href="internals.html">内部原理</a></h3>
   <div class="sem">
@@ -457,7 +454,6 @@ func main() {
     </div>
     <div class="tabpane" data-t="broker">
       <p>一个小进程，默认安全：若未配置令牌，它会生成 <code>mqk_…</code> 令牌并打印。每项操作都是一次 POST。</p>
-      <p>当前文档对应源码的端口为 6754，schema token 为 7。v0.4.2 发布版本是基于 v0.4.1、schema 不变的补丁，因此该升级无需重建数据库。来自 v0.3.x、使用 Schema-5 的数据库，仍需保留匹配的旧二进制程序和数据库组合，并让 v0.4.2 从全新数据库启动。v0.3.3 已撤回且不再受支持；其公开制品仅为取证或兼容性检查保留，不得部署。</p>
       <pre><code class="language-bash">go install github.com/mqlitehq/mqlite/cmd/mqlite@latest   # latest published broker
 
 # start the broker on :6754 with a known token, in the background

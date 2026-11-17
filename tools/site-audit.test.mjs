@@ -19,6 +19,18 @@ test('Chinese pages and machine-readable summaries receive the same current-fact
   checkCurrentVersionClaims(new Map([['zh-CN/agents.html', '源版本 v0.4.2。最新受支持版本是 v0.4.2。']]), facts);
 });
 
+test('only the landing pages may omit source declarations while keeping the latest release accurate', () => {
+  for (const [file, text] of [['index.html', 'Latest release v0.4.2'], ['zh-CN/index.html', '最新版本 v0.4.2']]) {
+    checkCurrentVersionClaims(new Map([[file, text]]), { ...facts, sourceVersion: '0.5.0' });
+    assert.throws(() => checkCurrentVersionClaims(new Map([[file, text.replace('v0.4.2', 'v9.9.9')]]), facts), /stale supported release/);
+    assert.throws(() => checkCurrentVersionClaims(new Map([[file, 'No release badge']]), facts), /missing generated stable-release declaration/);
+    assert.throws(() => checkCurrentVersionClaims(new Map([[file, `source v9.9.9; ${text}`]]), facts), /stale source version/);
+  }
+  for (const file of ['api.html', 'zh-CN/api.html', 'agents.html', 'llms.txt']) {
+    assert.throws(() => checkCurrentVersionClaims(new Map([[file, 'Latest release v0.4.2']]), facts), /missing generated source-version declaration/);
+  }
+});
+
 test('linked release versions in Markdown summaries keep the current-version checks', () => {
   const release = (version) => `[${version}](https://github.com/mqlitehq/mqlite/releases/tag/${version})`;
   checkCurrentVersionClaims(new Map([
