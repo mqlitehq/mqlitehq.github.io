@@ -46,7 +46,8 @@ test('a source-only version bump updates reference facts while the homepage keep
     assert.ok(homepage.includes(`/releases/tag/${metadata.latestRelease}`));
     assert.ok(homepage.includes(`${locale ? '最新版本' : 'Latest release'} ${metadata.latestRelease}`));
     assert.ok(!homepage.includes('v9.9.0'));
-    assert.doesNotMatch(homepage, /unreleased|未发布|withdrawn|retracted|撤回|撤销/);
+    assert.deepEqual([...new Set(homepage.match(/\bv\d+\.\d+\.\d+\b/g))], [metadata.latestRelease]);
+    assert.doesNotMatch(homepage, /unreleased|未发布/);
     for (const file of ['agents.html', 'llms.txt']) {
       const text = String(outputs.get(locale + file));
       assert.ok(text.includes('v9.9.0'), locale + file);
