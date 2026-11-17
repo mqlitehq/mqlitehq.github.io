@@ -1,6 +1,6 @@
 # 示例
 
-这些示例跟随 `main`，目标版本为 v0.4.3。已安装 v0.4.2 时，请使用[该 tag 的示例](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/examples.md)；各版本的行为变化参见 [CHANGELOG.md](../CHANGELOG.md)。
+这些示例介绍已发布 v0.4.3 的行为，并跟随 `main` 进行后续文档修订。准确发布快照见 [v0.4.3 示例](https://github.com/mqlitehq/mqlite/blob/v0.4.3/docs/examples.md)。使用已安装的 v0.4.2 发行版时，请阅读[该标签对应的示例](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/examples.md)；各版本的行为变化见 [CHANGELOG.md](../CHANGELOG.md)。
 
 经认证的生产者/消费者凭据、Go SDK 密钥管理、控制台和 MCP 流程，参见[访问密钥](access-keys.md)（v0.3.1 及更新版本）。
 

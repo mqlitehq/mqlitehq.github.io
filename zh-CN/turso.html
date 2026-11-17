@@ -45,12 +45,10 @@
   </div>
 </div></nav>
 <div class="wrap">
-  <div class="stamp"><a class="document-label" href="turso.html" aria-current="page">Turso / libSQL</a> · 来源：<a href="https://github.com/mqlitehq/mqlite/blob/main/docs/turso.md">mqlite main · docs/turso.md</a> — 源码 v0.4.3。最新受支持版本：<a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.3">v0.4.3</a>。本文档跟随 main；使用已发布产物时，请查阅对应版本的文档。</div>
+  <div class="stamp"><a class="document-label" href="turso.html" aria-current="page">Turso / libSQL</a> · 来源：<a href="https://github.com/mqlitehq/mqlite/blob/main/docs/turso.md">mqlite main · docs/turso.md</a> — 源码 v0.4.3（含未发布变更）。最新受支持版本：<a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.3">v0.4.3</a>。本文档跟随 main；使用已发布产物时，请查阅对应版本的文档。</div>
   <main class="prose">
 <h1 id="turso--libsql-concurrency--embedded-replicas-mqlite-4">Turso / libSQL：并发与嵌入式副本（MQLITE-4）</h1>
-<p>本指南对应 <code>main</code>，目标版本为 v0.4.3。使用已安装的
-v0.4.2 版本时，请阅读<a href="https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/turso.md">该标签下的 Turso 指南</a>；
-各版本的行为变化见 <a href="https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md">CHANGELOG.md</a>。</p>
+<p>本指南介绍已发布 v0.4.3 的行为，并跟随 <code>main</code> 进行后续文档修订。准确发布快照见 <a href="https://github.com/mqlitehq/mqlite/blob/v0.4.3/docs/turso.md">v0.4.3 Turso 指南</a>。使用已安装的 v0.4.2 发行版时，请阅读<a href="https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/turso.md">该标签对应的 Turso 指南</a>；各版本的行为变化见 <a href="https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md">CHANGELOG.md</a>。</p>
 <p>MQLite 在本地 SQLite 文件和远程
 <a href="https://turso.tech">Turso</a>/libSQL 数据库上运行同一套引擎——设置 <code>MQLITE_DB=libsql://&lt;db&gt;.turso.io</code>
 （以及 <code>MQLITE_DB_AUTH_TOKEN</code>）即可。远程路径<strong>不依赖 CGO</strong>：它通过 <code>libsql-client-go</code> 使用

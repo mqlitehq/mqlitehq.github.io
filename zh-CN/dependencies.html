@@ -45,12 +45,12 @@
   </div>
 </div></nav>
 <div class="wrap">
-  <div class="stamp"><a class="document-label" href="dependencies.html" aria-current="page">依赖与兼容性</a> · 来源：<a href="https://github.com/mqlitehq/mqlite/blob/main/docs/dependencies.md">mqlite main · docs/dependencies.md</a> — 源码 v0.4.3。最新受支持版本：<a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.3">v0.4.3</a>。本文档跟随 main；使用已发布产物时，请查阅对应版本的文档。</div>
+  <div class="stamp"><a class="document-label" href="dependencies.html" aria-current="page">依赖与兼容性</a> · 来源：<a href="https://github.com/mqlitehq/mqlite/blob/main/docs/dependencies.md">mqlite main · docs/dependencies.md</a> — 源码 v0.4.3（含未发布变更）。最新受支持版本：<a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.3">v0.4.3</a>。本文档跟随 main；使用已发布产物时，请查阅对应版本的文档。</div>
   <main class="prose">
 <h1 id="dependency-policy--the-go-121-floor">依赖策略与 go 1.21 最低版本</h1>
 <p>MQLite 将 <code>go.mod</code> 的最低版本固定为 <strong><code>go 1.21</code></strong>，使 SDK 仍可直接嵌入尚未升级工具链的项目（MQLITE-1）。这一决定锁定了两个依赖；本文说明锁定原因、代价，以及如何防止无意间解除限制。</p>
 <h2 id="remote-only-companion-module">仅远程访问的配套模块</h2>
-<p>只调用 broker 的应用可以改用官方的 <a href="https://github.com/mqlitehq/mqlite-go">MQLite Remote Client for Go</a>。其模块路径仍为 <code>github.com/mqlitehq/mqlite-go</code>；目标发布版本 <code>v0.1.2</code> 的源码最低要求是 Go 1.13，且仅使用标准库，因此不会链接嵌入式引擎、SQLite、libSQL/Turso 或 CGO。
+<p>只调用 broker 的应用可以改用官方的 <a href="https://github.com/mqlitehq/mqlite-go">MQLite Remote Client for Go</a>。其模块路径仍为 <code>github.com/mqlitehq/mqlite-go</code>；已发布版本 <code>v0.1.2</code> 的源码最低要求是 Go 1.13，且仅使用标准库，因此不会链接嵌入式引擎、SQLite、libSQL/Turso 或 CGO。
 较低的最低版本是兼容性承诺，并不建议在生产环境运行已停止维护的工具链：应尽可能使用仍受支持的 Go 版本构建。应用需要嵌入式模式、事务发件箱（transactional outbox）、规范化观测数据解码或托管访问密钥管理时，应使用本主模块。</p>
 <h2 id="what-the-floor-freezes">最低版本限制锁定了哪些依赖</h2>
 <table>

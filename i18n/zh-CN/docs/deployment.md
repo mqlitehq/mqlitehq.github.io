@@ -47,9 +47,9 @@ broker 默认监听 `:6754`（`mqlite serve --addr :6754`）。完整端点与�
 ## Docker / GHCR
 
 > **版本与升级兼容性。**
-> 本源码的目标版本为 **v0.4.3**，默认端口为 **6754**，schema token 为 **7**。
-> 使用下方示例中的准确 v0.4.3 二进制或镜像前，请在
-> [Releases](https://github.com/mqlitehq/mqlite/releases) 核对标签与产物是否已经发布。
+> 当前已发布版本为 **v0.4.3**，默认端口为 **6754**，schema token 为 **7**。
+> [发布页](https://github.com/mqlitehq/mqlite/releases/tag/v0.4.3)提供各平台归档、校验和与验证范围说明。
+> 下方示例使用该准确版本。
 > v0.3.3 已撤回、不受支持，且由 v0.4.0 及后续版本声明撤回；
 > 其公开产物和准确镜像仅供取证或兼容性检查，不得部署。
 >
@@ -68,10 +68,10 @@ v0.4.2 是基于 v0.4.1 的同 schema 补丁。
 会进入已启用的控制台；curl 和 JSON 客户端仍然获得服务发现响应。
 协议契约不变，无需重建数据库。
 
-目标镜像为多架构镜像（amd64 + arm64），运行前应确认发布状态：
+已发布镜像支持多架构（amd64 + arm64）。运行该版本：
 
 ```bash
-# v0.4.3 release target, default port 6754
+# Published v0.4.3, default port 6754
 docker run -d --name mqlite -p 6754:6754 \
   -v mqlite-data:/data \
   -e MQLITE_DB=file:/data/mq.db \
@@ -100,7 +100,7 @@ app            = "your-mqlite"
 primary_region = "sin"            # pick a region near you
 
 [build]
-  image = "ghcr.io/mqlitehq/mqlite:0.4.3"   # exact release-target image
+  image = "ghcr.io/mqlitehq/mqlite:0.4.3"   # exact published version
 
 [env]
   MQLITE_DB = "file:/data/mq.db"            # SQLite on the persistent volume
@@ -240,6 +240,38 @@ MQLITE_TOKENS=mqk_prod_CHANGEME \
 替换时先停止旧所有者，确认其进程已经退出，之后才能启动替代进程。
 不支持让滚动替换中的新旧进程同时访问同一数据库。
 远程连接池仅在单个 MQLite 进程内安全，不提供跨进程所有权控制。
+
+## 核对已发布版本
+
+使用仍受支持的当前 Go 工具链，一次安装准确已发布版本的 broker 和 MCP 命令：
+
+```sh
+go install github.com/mqlitehq/mqlite/cmd/mqlite@v0.4.3 github.com/mqlitehq/mqlite/cmd/mqlite-mcp@v0.4.3
+mqlite version
+go list -m -json github.com/mqlitehq/mqlite@v0.4.3
+```
+
+若已设置 `GOBIN`，从该目录使用已安装二进制；未设置 `GOBIN` 时，从 `$(go env GOPATH)/bin` 使用。
+`mqlite version` 必须报告 `0.4.3`。MCP 客户端检查 `initialize.serverInfo.version`；
+`mqlite-mcp` 没有 `--version` 标志。Go 1.21 源码最低要求与构建生产二进制所用的受支持工具链是两回事。
+
+使用预构建二进制时，从 [v0.4.3 发布页](https://github.com/mqlitehq/mqlite/releases/tag/v0.4.3)
+下载对应操作系统／架构的归档及 `checksums.txt`。解压运行之前，核对该归档的 SHA256
+与校验和中同名条目一致。独立客户端使用自己的 [v0.1.2 发布页](https://github.com/mqlitehq/mqlite-go/releases/tag/v0.1.2)
+和 `SHA256SUMS`；它是独立的模块与可执行文件。
+
+已发布的双平台镜像索引固定为以下摘要：
+
+```sh
+docker pull ghcr.io/mqlitehq/mqlite:0.4.3@sha256:5b142d101a41406c587729a8c235a35ff45f817e95f3c569544a11d4d0963cdc
+docker run --rm ghcr.io/mqlitehq/mqlite:0.4.3@sha256:5b142d101a41406c587729a8c235a35ff45f817e95f3c569544a11d4d0963cdc version
+```
+
+镜像命令必须报告 `0.4.3`。部署时应记录该摘要；可变的 `latest` 标签不能固定部署身份。
+
+发布说明披露了维护者批准的有限验证：完整回归／CI 与集成、60 分钟本地工作负载，
+以及 30 分钟直接引擎 Turso 工作负载。计划的 24/48 小时验收及八个跨时段 Turso 窗口尚未完成。
+安装和健康检查不能替代对应用自身工作负载的持续负载验证。
 
 ## 验证部署
 
