@@ -1,8 +1,6 @@
 # Turso / libSQL：并发与嵌入式副本（MQLITE-4）
 
-本指南对应 `main`，目标版本为 v0.4.3。使用已安装的
-v0.4.2 版本时，请阅读[该标签下的 Turso 指南](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/turso.md)；
-各版本的行为变化见 [CHANGELOG.md](../CHANGELOG.md)。
+本指南介绍已发布 v0.4.3 的行为，并跟随 `main` 进行后续文档修订。准确发布快照见 [v0.4.3 Turso 指南](https://github.com/mqlitehq/mqlite/blob/v0.4.3/docs/turso.md)。使用已安装的 v0.4.2 发行版时，请阅读[该标签对应的 Turso 指南](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/turso.md)；各版本的行为变化见 [CHANGELOG.md](../CHANGELOG.md)。
 
 MQLite 在本地 SQLite 文件和远程
 [Turso](https://turso.tech)/libSQL 数据库上运行同一套引擎——设置 `MQLITE_DB=libsql://<db>.turso.io`

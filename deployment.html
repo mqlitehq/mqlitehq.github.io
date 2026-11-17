@@ -45,7 +45,7 @@
   </div>
 </div></nav>
 <div class="wrap">
-  <div class="stamp">Source: <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/deployment.md">mqlite main · docs/deployment.md</a> — source v0.4.3. Latest supported release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.3">v0.4.3</a>. These docs track main; use the linked release for published artifacts.</div>
+  <div class="stamp">Source: <a href="https://github.com/mqlitehq/mqlite/blob/main/docs/deployment.md">mqlite main · docs/deployment.md</a> — source v0.4.3 with unreleased changes. Latest supported release: <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.3">v0.4.3</a>. These docs track main; use the linked release for published artifacts.</div>
   <main class="prose">
 <h1 id="deploying-mqlite">Deploying mqlite</h1>
 <p>mqlite is <strong>one pure-Go binary</strong> (or one container image) over <strong>one SQLite file</strong>
@@ -130,10 +130,10 @@ and error reference: <a href="api.html">api-reference.md</a>.</p>
 <h2 id="docker--ghcr">Docker / GHCR</h2>
 <blockquote>
 <p><strong>Version and upgrade compatibility.</strong>
-This source targets <strong>v0.4.3</strong>, with default port <strong>6754</strong> and
-schema token <strong>7</strong>. Verify its tag and assets on
-<a href="https://github.com/mqlitehq/mqlite/releases">Releases</a> before using the exact
-v0.4.3 binary or image in these examples. v0.3.3 is withdrawn, unsupported, and retracted by
+The published release is <strong>v0.4.3</strong>, with default port <strong>6754</strong> and
+schema token <strong>7</strong>. Its <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.3">release page</a>
+contains the platform archives, checksums and qualification limits. The examples
+below use that exact version. v0.3.3 is withdrawn, unsupported, and retracted by
 v0.4.0 and later; its public assets and exact image remain available for
 forensic or compatibility inspection and must not be deployed.</p>
 <p>v0.4.x cannot open a v0.3.x schema-5 database and no in-place migration exists.
@@ -151,8 +151,8 @@ or update subscriptions and test filters; subscription inventory and deletion
 remain <code>manage</code> operations. Browser root requests that explicitly prefer HTML
 enter the enabled console, while curl and JSON clients retain the discovery
 response. The wire contract is unchanged and no database rebuild is required.</p>
-<p>The target image is multi-arch (amd64 + arm64); confirm publication before running:</p>
-<pre><code class="language-bash"># v0.4.3 release target, default port 6754
+<p>The published image is multi-arch (amd64 + arm64). To run that version:</p>
+<pre><code class="language-bash"># Published v0.4.3, default port 6754
 docker run -d --name mqlite -p 6754:6754 \
   -v mqlite-data:/data \
   -e MQLITE_DB=file:/data/mq.db \
@@ -179,7 +179,7 @@ curl and JSON clients continue to receive the discovery card.</li>
 primary_region = &quot;sin&quot;            # pick a region near you
 
 [build]
-  image = &quot;ghcr.io/mqlitehq/mqlite:0.4.3&quot;   # exact release-target image
+  image = &quot;ghcr.io/mqlitehq/mqlite:0.4.3&quot;   # exact published version
 
 [env]
   MQLITE_DB = &quot;file:/data/mq.db&quot;            # SQLite on the persistent volume
@@ -301,6 +301,35 @@ replace it, stop the old owner, confirm its process has exited, and only then st
 the replacement. Rolling overlap against the same database is unsupported. The
 remote connection pool is safe only within one MQLite process; it does not provide
 cross-process ownership.</p>
+<h2 id="verify-the-published-release">Verify the published release</h2>
+<p>Use a supported current Go toolchain to install the exact published broker and
+MCP commands together:</p>
+<pre><code class="language-sh">go install github.com/mqlitehq/mqlite/cmd/mqlite@v0.4.3 github.com/mqlitehq/mqlite/cmd/mqlite-mcp@v0.4.3
+mqlite version
+go list -m -json github.com/mqlitehq/mqlite@v0.4.3
+</code></pre>
+<p>Use the installed binaries from <code>GOBIN</code>, or <code>$(go env GOPATH)/bin</code> when <code>GOBIN</code>
+is unset. <code>mqlite version</code> must report <code>0.4.3</code>. MCP clients check
+<code>initialize.serverInfo.version</code>; <code>mqlite-mcp</code> has no <code>--version</code> flag.
+The Go 1.21 source floor is independent of the supported toolchain used to build
+production binaries.</p>
+<p>For prebuilt binaries, download the OS/architecture archive and <code>checksums.txt</code>
+from the <a href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.3">v0.4.3 release</a>.
+Verify the archive&#39;s SHA256 against its matching named entry before extracting
+and running the binary. The standalone client uses its own
+<a href="https://github.com/mqlitehq/mqlite-go/releases/tag/v0.1.2">v0.1.2 release</a> and
+<code>SHA256SUMS</code>; it is a separate module and executable.</p>
+<p>The published dual-platform image index is pinned by this digest:</p>
+<pre><code class="language-sh">docker pull ghcr.io/mqlitehq/mqlite:0.4.3@sha256:5b142d101a41406c587729a8c235a35ff45f817e95f3c569544a11d4d0963cdc
+docker run --rm ghcr.io/mqlitehq/mqlite:0.4.3@sha256:5b142d101a41406c587729a8c235a35ff45f817e95f3c569544a11d4d0963cdc version
+</code></pre>
+<p>The image command must report <code>0.4.3</code>. Record the digest with the deployment;
+a mutable <code>latest</code> tag is not a fixed deployment identity.</p>
+<p>The release notes disclose the maintainer-approved bounded qualification:
+complete regression/CI and integration, a 60-minute local workload and a
+30-minute direct-engine Turso workload. The planned 24/48-hour acceptance and
+eight spaced Turso windows were not completed. Installation and health checks
+do not replace sustained-load qualification for an application&#39;s workload.</p>
 <h2 id="verify-any-deploy">Verify any deploy</h2>
 <pre><code class="language-bash">curl https://&lt;host&gt;/                       # discovery: {name, version, status, ...} (open)
 curl https://&lt;host&gt;/healthz                # ok (open)

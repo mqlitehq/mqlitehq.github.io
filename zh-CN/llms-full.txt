@@ -1,5 +1,6 @@
 mqlite main — 完整简体中文文档。
 源码版本：v0.4.3。最新受支持版本：[v0.4.3](https://github.com/mqlitehq/mqlite/releases/tag/v0.4.3)。
+源码包含未发布变更。
 本文档跟随 main；使用已发布产物时，请核对相应版本说明。
 英文规范来源：https://github.com/mqlitehq/mqlite/tree/main/docs
 
@@ -7,7 +8,7 @@ mqlite main — 完整简体中文文档。
 
 # 核心概念与订阅过滤器
 
-本文跟随 `main`，目标版本为 v0.4.3。使用已安装的 v0.4.2 发行版时，请阅读[该标签对应的核心概念](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/concepts.md)；各版本的行为变化见 [CHANGELOG.md](https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md)。
+本文介绍已发布 v0.4.3 的行为，并跟随 `main` 进行后续文档修订。准确发布快照见 [v0.4.3 核心概念](https://github.com/mqlitehq/mqlite/blob/v0.4.3/docs/concepts.md)。使用已安装的 v0.4.2 发行版时，请阅读[该标签对应的核心概念](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/concepts.md)；各版本的行为变化见 [CHANGELOG.md](https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md)。
 
 > 目标：清晰、完整地说明 MQLite 模型，并与 Azure Service Bus、AWS（SQS + SNS）和 GCP Pub/Sub 的相应服务对照。MQLite 从基本原则出发设计，强调单个 SQLite 文件、可嵌入和对智能体友好；在概念上最接近 Azure Service Bus，因此以 ASB 为主要参照，并在重要之处明确差异。第 1–5 节介绍模型，第 6–11 节介绍**订阅过滤器语言**（`expr`）。
 
@@ -387,7 +388,7 @@ body_text contains "urgent"
 
 # mqlite 的工作原理：在一个 SQLite 文件上构建可靠队列
 
-本文跟随 `main`，目标版本为 v0.4.3。使用已安装的 v0.4.2 发行版时，请阅读[该标签对应的内部原理](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/internals.md)；各版本的行为变化见 [CHANGELOG.md](https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md)。
+本文介绍已发布 v0.4.3 的行为，并跟随 `main` 进行后续文档修订。准确发布快照见 [v0.4.3 内部原理](https://github.com/mqlitehq/mqlite/blob/v0.4.3/docs/internals.md)。使用已安装的 v0.4.2 发行版时，请阅读[该标签对应的内部原理](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/internals.md)；各版本的行为变化见 [CHANGELOG.md](https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md)。
 
 > 这是一份原理讲解：逐表、逐项决策说明 mqlite 的实际构造，以及这种构造*为什么*能支撑可信赖的队列。使用 mqlite 不必先读本文，但它有助于预测系统行为。配套阅读：[concepts.md](https://mqlitehq.github.io/zh-CN/concepts.html) 从外部介绍模型；[conformance.md](https://mqlitehq.github.io/zh-CN/conformance.html) 以测试固定下文的每项承诺。
 
@@ -657,7 +658,7 @@ err := mq.Tx(ctx, func(tx *engine.EngineTx) error {
 
 Broker 使用 **Connect 风格的 HTTP JSON 协议**。每个操作都是向 `/mqlite.v1.<Service>/<Method>` 发送一次携带 JSON 正文的 `POST` 请求，因此可直接使用 curl 调用。本文依据 [`wire/wire.go`](https://github.com/mqlitehq/mqlite/blob/main/wire/wire.go) 中的线协议契约（broker 与 Go SDK 共用的唯一事实来源，避免两者偏离）以及服务端错误映射生成。
 
-本参考跟随 `main`，目标版本为 v0.4.3。使用已安装的 v0.4.2 broker 时，请查阅[对应版本参考](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/api-reference.md)。本文介绍的 broker 时间响应头、调整后的 Go 托管 Receiver 重试与续锁行为、1 秒至 1 小时的队列锁时长范围、保留租约的启动行为以及协调关停响应均包含在 v0.4.3 目标版本中；参见 [CHANGELOG.md](https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md)。v0.3.3 已撤回且不再受支持；使用管理接口较少的 v0.3.2 时，请查阅其 tag 中的文档。
+本参考介绍已发布 v0.4.3 的行为，并跟随 `main` 进行后续文档修订。准确发布快照见 [v0.4.3 参考](https://github.com/mqlitehq/mqlite/blob/v0.4.3/docs/api-reference.md)；使用已安装的 v0.4.2 broker 时，请查阅[对应版本参考](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/api-reference.md)。本文介绍的 broker 时间响应头、调整后的 Go 托管 Receiver 重试与续锁行为、1 秒至 1 小时的队列锁时长范围、保留租约的启动行为以及协调关停响应均包含在 v0.4.3 中；参见 [CHANGELOG.md](https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md)。v0.3.3 已撤回且不再受支持；使用管理接口较少的 v0.3.2 时，请查阅其 tag 中的文档。
 
 每个 RPC 正文必须恰好是一个非 null 的 JSON 对象，包括没有其他请求字段的操作（`{}`）。未知字段和对象之后的额外数据会被拒绝。重复字段沿用 Go `encoding/json` 的行为：后出现的标量值覆盖先前的值，而重复的对象和 map 值可能合并。
 
@@ -686,7 +687,7 @@ Broker 使用 **Connect 风格的 HTTP JSON 协议**。每个操作都是向 `/m
 | 保留的订阅 | active 与 deleting 合计 10,000 | `MQLITE_MAX_SUBSCRIPTIONS`（serve）/ `Options.MaxSubscriptions` 或 `WithMaxSubscriptions`（嵌入式） |
 | 过滤器 `expr` 源码 | 限制长度与 AST 节点数 | 内部限制（参见 [concepts.md](https://mqlitehq.github.io/zh-CN/concepts.html#subscription-filters-expr)） |
 
-v0.4.3 目标版本还对新的 Peek、Receive 与 ReceiveDeferred 批次应用 32 MiB 序列化计量阈值。
+v0.4.3 还对新的 Peek、Receive 与 ReceiveDeferred 批次应用 32 MiB 序列化计量阈值。
 计量包含消息正文、base64 膨胀、JSON 转义及元数据。引擎返回使批次达到阈值的那条消息，
 然后停止领取下一条，因此上限是阈值加一条消息；已有的单条大消息仍能取得进展。
 Peek 使用 `from_seq` 翻页；ReceiveDeferred 调用方再次请求尚未返回的序号。
@@ -1174,7 +1175,7 @@ Go SDK 将普通成功响应正文限制为 64 MiB，错误正文限制为 64 Ki
 
 # CLI 参考（`mqlite`）
 
-本文档跟随 `main`，目标版本为 v0.4.3。下文所述的跨调用本地结算和保留租约的维护行为不包含在 v0.4.2 中；如果使用该版本的已安装二进制程序，请参阅[该 tag 对应的 CLI 参考](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/cli.md)。另见 [CHANGELOG.md](https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md)。
+本文档介绍已发布 v0.4.3 的行为，并跟随 `main` 进行后续文档修订。准确发布快照见 [v0.4.3 CLI 参考](https://github.com/mqlitehq/mqlite/blob/v0.4.3/docs/cli.md)。下文所述的跨调用本地结算和保留租约的维护行为不包含在 v0.4.2 中；如果使用该版本的已安装二进制程序，请参阅[该 tag 对应的 CLI 参考](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/cli.md)。另见 [CHANGELOG.md](https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md)。
 
 一个二进制程序，**两种模式**——同一组命令既可访问本地 SQLite 数据库（嵌入式模式），也可访问运行中的 broker（客户端模式），由环境变量决定：
 
@@ -1685,9 +1686,9 @@ broker 默认监听 `:6754`（`mqlite serve --addr :6754`）。完整端点与�
 ## Docker / GHCR
 
 > **版本与升级兼容性。**
-> 本源码的目标版本为 **v0.4.3**，默认端口为 **6754**，schema token 为 **7**。
-> 使用下方示例中的准确 v0.4.3 二进制或镜像前，请在
-> [Releases](https://github.com/mqlitehq/mqlite/releases) 核对标签与产物是否已经发布。
+> 当前已发布版本为 **v0.4.3**，默认端口为 **6754**，schema token 为 **7**。
+> [发布页](https://github.com/mqlitehq/mqlite/releases/tag/v0.4.3)提供各平台归档、校验和与验证范围说明。
+> 下方示例使用该准确版本。
 > v0.3.3 已撤回、不受支持，且由 v0.4.0 及后续版本声明撤回；
 > 其公开产物和准确镜像仅供取证或兼容性检查，不得部署。
 >
@@ -1706,10 +1707,10 @@ v0.4.2 是基于 v0.4.1 的同 schema 补丁。
 会进入已启用的控制台；curl 和 JSON 客户端仍然获得服务发现响应。
 协议契约不变，无需重建数据库。
 
-目标镜像为多架构镜像（amd64 + arm64），运行前应确认发布状态：
+已发布镜像支持多架构（amd64 + arm64）。运行该版本：
 
 ```bash
-# v0.4.3 release target, default port 6754
+# Published v0.4.3, default port 6754
 docker run -d --name mqlite -p 6754:6754 \
   -v mqlite-data:/data \
   -e MQLITE_DB=file:/data/mq.db \
@@ -1738,7 +1739,7 @@ app            = "your-mqlite"
 primary_region = "sin"            # pick a region near you
 
 [build]
-  image = "ghcr.io/mqlitehq/mqlite:0.4.3"   # exact release-target image
+  image = "ghcr.io/mqlitehq/mqlite:0.4.3"   # exact published version
 
 [env]
   MQLITE_DB = "file:/data/mq.db"            # SQLite on the persistent volume
@@ -1878,6 +1879,38 @@ MQLITE_TOKENS=mqk_prod_CHANGEME \
 替换时先停止旧所有者，确认其进程已经退出，之后才能启动替代进程。
 不支持让滚动替换中的新旧进程同时访问同一数据库。
 远程连接池仅在单个 MQLite 进程内安全，不提供跨进程所有权控制。
+
+## 核对已发布版本
+
+使用仍受支持的当前 Go 工具链，一次安装准确已发布版本的 broker 和 MCP 命令：
+
+```sh
+go install github.com/mqlitehq/mqlite/cmd/mqlite@v0.4.3 github.com/mqlitehq/mqlite/cmd/mqlite-mcp@v0.4.3
+mqlite version
+go list -m -json github.com/mqlitehq/mqlite@v0.4.3
+```
+
+若已设置 `GOBIN`，从该目录使用已安装二进制；未设置 `GOBIN` 时，从 `$(go env GOPATH)/bin` 使用。
+`mqlite version` 必须报告 `0.4.3`。MCP 客户端检查 `initialize.serverInfo.version`；
+`mqlite-mcp` 没有 `--version` 标志。Go 1.21 源码最低要求与构建生产二进制所用的受支持工具链是两回事。
+
+使用预构建二进制时，从 [v0.4.3 发布页](https://github.com/mqlitehq/mqlite/releases/tag/v0.4.3)
+下载对应操作系统／架构的归档及 `checksums.txt`。解压运行之前，核对该归档的 SHA256
+与校验和中同名条目一致。独立客户端使用自己的 [v0.1.2 发布页](https://github.com/mqlitehq/mqlite-go/releases/tag/v0.1.2)
+和 `SHA256SUMS`；它是独立的模块与可执行文件。
+
+已发布的双平台镜像索引固定为以下摘要：
+
+```sh
+docker pull ghcr.io/mqlitehq/mqlite:0.4.3@sha256:5b142d101a41406c587729a8c235a35ff45f817e95f3c569544a11d4d0963cdc
+docker run --rm ghcr.io/mqlitehq/mqlite:0.4.3@sha256:5b142d101a41406c587729a8c235a35ff45f817e95f3c569544a11d4d0963cdc version
+```
+
+镜像命令必须报告 `0.4.3`。部署时应记录该摘要；可变的 `latest` 标签不能固定部署身份。
+
+发布说明披露了维护者批准的有限验证：完整回归／CI 与集成、60 分钟本地工作负载，
+以及 30 分钟直接引擎 Turso 工作负载。计划的 24/48 小时验收及八个跨时段 Turso 窗口尚未完成。
+安装和健康检查不能替代对应用自身工作负载的持续负载验证。
 
 ## 验证部署
 
@@ -2516,12 +2549,12 @@ Secret 访问权限。Azure 托管 ServiceMonitor/PodMonitor CRD 与上游 Prome
 
 # 生产运维
 
-本手册对应 `main` 的 v0.4.3 目标版本（端口 6754，schema token 7）。
+本手册介绍已发布 v0.4.3 的行为（端口 6754，schema token 7），并跟随 `main` 进行后续文档修订。准确发布快照见 [v0.4.3 运维手册](https://github.com/mqlitehq/mqlite/blob/v0.4.3/docs/operations.md)。
 运行已安装的 v0.4.2 二进制时，请使用[对应版本运维手册](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/operations.md)。
 尤其是，下述保留租约的启动与本地维护、协同 broker 关停，以及调整后的托管 Receiver 行为
-均包含在 v0.4.3 目标版本中；参见 [CHANGELOG.md](https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md)。
+均包含在 v0.4.3 中；参见 [CHANGELOG.md](https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md)。
 v0.3.3 已撤回且不受支持；其公开产物和准确镜像仅供取证或兼容性检查，不得部署。
-v0.4.2 保留 v0.4.0 对 v0.3.3 的撤回声明。
+v0.4.3 保留 v0.4.0 对 v0.3.3 的撤回声明。
 从 v0.3.2 或其他 schema-5 版本升级时，必须按下述流程使用全新数据库。
 运行时管理的访问密钥要求 v0.3.1；v0.3.0 只支持配置 token。
 统一的 `Observe` 与已配置的监控凭据要求 v0.3.2。
@@ -2673,7 +2706,7 @@ Turso/libSQL 替换仍须保持单活，先停再启；这些关停行为不意�
 
 ## 消费者停止与主机中断
 
-这些边界描述 v0.4.3 目标版本与两个 Go 客户端的托管 `Receiver.Run`。
+这些边界描述已发布 v0.4.3 与两个 Go 客户端的托管 `Receiver.Run`。
 SDK 不会安装进程信号处理器。宿主应用决定 SIGINT/SIGTERM、stdin EOF 和平台宽限期
 如何影响其上下文；`Consumer.Shutdown` 以及先停止准入、再排空的 API 均未实现。
 Ctrl-D 通常产生 stdin EOF，不是进程信号，也不会自动取消上下文；`mqlite serve` 不读取 stdin。
@@ -2928,9 +2961,7 @@ Prometheus 抓取现在默认关闭：设置 `MQLITE_METRICS=on` 或使用 `--me
 
 # Turso / libSQL：并发与嵌入式副本（MQLITE-4）
 
-本指南对应 `main`，目标版本为 v0.4.3。使用已安装的
-v0.4.2 版本时，请阅读[该标签下的 Turso 指南](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/turso.md)；
-各版本的行为变化见 [CHANGELOG.md](https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md)。
+本指南介绍已发布 v0.4.3 的行为，并跟随 `main` 进行后续文档修订。准确发布快照见 [v0.4.3 Turso 指南](https://github.com/mqlitehq/mqlite/blob/v0.4.3/docs/turso.md)。使用已安装的 v0.4.2 发行版时，请阅读[该标签对应的 Turso 指南](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/turso.md)；各版本的行为变化见 [CHANGELOG.md](https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md)。
 
 MQLite 在本地 SQLite 文件和远程
 [Turso](https://turso.tech)/libSQL 数据库上运行同一套引擎——设置 `MQLITE_DB=libsql://<db>.turso.io`
@@ -3158,10 +3189,10 @@ SQL NULL 和匹配的关闭回执继续保留原有含义。
 
 # 保留、删除与存储空间回收
 
-本页跟随 `main`，目标版本为 v0.4.3。v0.3.3 已撤回且不受支持；其公开产物仅供取证或兼容性检查，
-不得部署。v0.4.2 保留 v0.4.0 对 v0.3.3 的撤回声明。
+本页介绍已发布 v0.4.3 的行为，并跟随 `main` 进行后续文档修订。v0.3.3 已撤回且不受支持；其公开产物仅供取证或兼容性检查，
+不得部署。v0.4.3 保留 v0.4.0 对 v0.3.3 的撤回声明。
 v0.3.2 已有 DLQ 保留和自动本地空间回收，但除非明确注明版本差异，
-下述工作预算均描述 v0.4.3 目标版本。
+下述工作预算均描述 v0.4.3。
 v0.3.2 不具备 v0.4.0 引入的队列和订阅生命周期 API。
 
 ## 哪些操作会移除保留中的消息
@@ -3564,7 +3595,7 @@ mqlite 提供合理的默认值；大多数部署无需改动。以下按大致�
 
 # 一致性规范：mqlite 的正确行为（TCK）
 
-本规范跟随 `main`，目标版本为 v0.4.3。使用已安装的 v0.4.2 发行版时，请阅读[该标签对应的一致性规范](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/conformance.md)；各版本的行为变化见 [CHANGELOG.md](https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md)。
+本规范介绍已发布 v0.4.3 的行为，并跟随 `main` 进行后续文档修订。准确发布快照见 [v0.4.3 一致性规范](https://github.com/mqlitehq/mqlite/blob/v0.4.3/docs/conformance.md)。使用已安装的 v0.4.2 发行版时，请阅读[该标签对应的一致性规范](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/conformance.md)；各版本的行为变化见 [CHANGELOG.md](https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md)。
 
 本文是 mqlite **必须**遵守的规范性行为要求：这些不变量定义何为“正确”，不依赖具体实现细节。每项都有交叉引用的隔离测试强制执行，共同构成 mqlite 的 TCK。破坏本文任一**必须**（MUST）要求的改动，属于行为变更，而非重构。
 
@@ -3850,7 +3881,7 @@ MQLite 将 `go.mod` 的最低版本固定为 **`go 1.21`**，使 SDK 仍可直�
 
 ## 仅远程访问的配套模块
 
-只调用 broker 的应用可以改用官方的 [MQLite Remote Client for Go](https://github.com/mqlitehq/mqlite-go)。其模块路径仍为 `github.com/mqlitehq/mqlite-go`；目标发布版本 `v0.1.2` 的源码最低要求是 Go 1.13，且仅使用标准库，因此不会链接嵌入式引擎、SQLite、libSQL/Turso 或 CGO。
+只调用 broker 的应用可以改用官方的 [MQLite Remote Client for Go](https://github.com/mqlitehq/mqlite-go)。其模块路径仍为 `github.com/mqlitehq/mqlite-go`；已发布版本 `v0.1.2` 的源码最低要求是 Go 1.13，且仅使用标准库，因此不会链接嵌入式引擎、SQLite、libSQL/Turso 或 CGO。
 较低的最低版本是兼容性承诺，并不建议在生产环境运行已停止维护的工具链：应尽可能使用仍受支持的 Go 版本构建。应用需要嵌入式模式、事务发件箱（transactional outbox）、规范化观测数据解码或托管访问密钥管理时，应使用本主模块。
 
 ## 最低版本限制锁定了哪些依赖
@@ -4031,7 +4062,7 @@ make build           # → bin/mqlite-mcp  (also: go build ./cmd/mqlite-mcp)
 
 # 示例
 
-这些示例跟随 `main`，目标版本为 v0.4.3。已安装 v0.4.2 时，请使用[该 tag 的示例](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/examples.md)；各版本的行为变化参见 [CHANGELOG.md](https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md)。
+这些示例介绍已发布 v0.4.3 的行为，并跟随 `main` 进行后续文档修订。准确发布快照见 [v0.4.3 示例](https://github.com/mqlitehq/mqlite/blob/v0.4.3/docs/examples.md)。使用已安装的 v0.4.2 发行版时，请阅读[该标签对应的示例](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/examples.md)；各版本的行为变化见 [CHANGELOG.md](https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md)。
 
 经认证的生产者/消费者凭据、Go SDK 密钥管理、控制台和 MCP 流程，参见[访问密钥](https://mqlitehq.github.io/zh-CN/access-keys.html)（v0.3.1 及更新版本）。
 

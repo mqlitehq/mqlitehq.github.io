@@ -1,5 +1,6 @@
 mqlite main — full documentation bundle.
 Source version: v0.4.3. Latest supported release: [v0.4.3](https://github.com/mqlitehq/mqlite/releases/tag/v0.4.3).
+Source includes unreleased changes.
 These docs track main; consult release notes for published artifacts and upgrade requirements.
 Source of truth: https://github.com/mqlitehq/mqlite/tree/main/docs
 
@@ -7,7 +8,9 @@ Source of truth: https://github.com/mqlitehq/mqlite/tree/main/docs
 
 # Core concepts & subscription filters
 
-This document follows `main` for release target v0.4.3. For an installed
+This document covers released v0.4.3 behavior and follows `main` for later
+documentation corrections. Use the [v0.4.3 concepts](https://github.com/mqlitehq/mqlite/blob/v0.4.3/docs/concepts.md)
+for the exact release snapshot. For an installed
 v0.4.2 release, use the [concepts at that tag](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/concepts.md);
 see [CHANGELOG.md](https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md) for version-specific behavior changes.
 
@@ -590,7 +593,9 @@ network I/O APIs are exposed; `now()` can read the wall clock:
 
 # How mqlite works — building a reliable queue on one SQLite file
 
-This document follows `main` for release target v0.4.3. For an installed
+This document covers released v0.4.3 behavior and follows `main` for later
+documentation corrections. Use the [v0.4.3 internals](https://github.com/mqlitehq/mqlite/blob/v0.4.3/docs/internals.md)
+for the exact release snapshot. For an installed
 v0.4.2 release, use the [internals at that tag](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/internals.md);
 see [CHANGELOG.md](https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md) for version-specific behavior changes.
 
@@ -1152,11 +1157,13 @@ construction. This document is generated from the wire contract in
 [`wire/wire.go`](https://github.com/mqlitehq/mqlite/blob/main/wire/wire.go) (the single source of truth shared by the broker
 and the Go SDK, so the two can't drift) and the server's error mapping.
 
-This reference follows `main` for release target v0.4.3. Use the [v0.4.2 reference](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/api-reference.md)
+This reference documents released v0.4.3 behavior and follows `main` for later
+documentation corrections. Use the [v0.4.3 reference](https://github.com/mqlitehq/mqlite/blob/v0.4.3/docs/api-reference.md)
+for the exact release snapshot, or the [v0.4.2 reference](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/api-reference.md)
 for that installed broker. The broker time header, revised Go managed Receiver
 retry and renewal behavior, 1-second through 1-hour queue lock-duration bounds,
 lease-preserving startup, and coordinated shutdown responses documented here
-are included in the v0.4.3 release target; see [CHANGELOG.md](https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md). v0.3.3 is withdrawn
+are included in v0.4.3; see [CHANGELOG.md](https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md). v0.3.3 is withdrawn
 and unsupported; use the documentation in the v0.3.2 tag when working with its
 smaller management surface.
 
@@ -1233,7 +1240,7 @@ reasonable (they count toward the JSON request you send, not toward the body cap
 | retained subscriptions | 10,000 active + deleting | `MQLITE_MAX_SUBSCRIPTIONS` (serve) / `Options.MaxSubscriptions` or `WithMaxSubscriptions` (embedded) |
 | filter `expr` source | capped length + AST node count | internal (see [concepts.md](https://github.com/mqlitehq/mqlite/blob/main/docs/concepts.md#subscription-filters-expr)) |
 
-The v0.4.3 release target applies a 32 MiB serialization-accounting threshold to
+v0.4.3 applies a 32 MiB serialization-accounting threshold to
 new Peek, Receive, and ReceiveDeferred batches. The accounting includes message
 bodies, base64 expansion, JSON escaping and metadata. The engine returns the
 message that reaches the threshold, then stops before claiming another one;
@@ -2235,7 +2242,9 @@ the untrusted `Location` value into the error.
 
 # CLI reference (`mqlite`)
 
-This reference follows `main` for release target v0.4.3. Cross-invocation
+This reference documents released v0.4.3 behavior and follows `main` for later
+documentation corrections. Use the [v0.4.3 CLI reference](https://github.com/mqlitehq/mqlite/blob/v0.4.3/docs/cli.md)
+for the exact release snapshot. Cross-invocation
 local settlement and lease-preserving maintenance below are not included in
 v0.4.2; use the [CLI reference at that tag](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/cli.md)
 for that installed binary. See [CHANGELOG.md](https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md).
@@ -2947,10 +2956,10 @@ and error reference: [api-reference.md](https://github.com/mqlitehq/mqlite/blob/
 ## Docker / GHCR
 
 > **Version and upgrade compatibility.**
-> This source targets **v0.4.3**, with default port **6754** and
-> schema token **7**. Verify its tag and assets on
-> [Releases](https://github.com/mqlitehq/mqlite/releases) before using the exact
-> v0.4.3 binary or image in these examples. v0.3.3 is withdrawn, unsupported, and retracted by
+> The published release is **v0.4.3**, with default port **6754** and
+> schema token **7**. Its [release page](https://github.com/mqlitehq/mqlite/releases/tag/v0.4.3)
+> contains the platform archives, checksums and qualification limits. The examples
+> below use that exact version. v0.3.3 is withdrawn, unsupported, and retracted by
 > v0.4.0 and later; its public assets and exact image remain available for
 > forensic or compatibility inspection and must not be deployed.
 >
@@ -2970,10 +2979,10 @@ remain `manage` operations. Browser root requests that explicitly prefer HTML
 enter the enabled console, while curl and JSON clients retain the discovery
 response. The wire contract is unchanged and no database rebuild is required.
 
-The target image is multi-arch (amd64 + arm64); confirm publication before running:
+The published image is multi-arch (amd64 + arm64). To run that version:
 
 ```bash
-# v0.4.3 release target, default port 6754
+# Published v0.4.3, default port 6754
 docker run -d --name mqlite -p 6754:6754 \
   -v mqlite-data:/data \
   -e MQLITE_DB=file:/data/mq.db \
@@ -3003,7 +3012,7 @@ app            = "your-mqlite"
 primary_region = "sin"            # pick a region near you
 
 [build]
-  image = "ghcr.io/mqlitehq/mqlite:0.4.3"   # exact release-target image
+  image = "ghcr.io/mqlitehq/mqlite:0.4.3"   # exact published version
 
 [env]
   MQLITE_DB = "file:/data/mq.db"            # SQLite on the persistent volume
@@ -3151,6 +3160,46 @@ replace it, stop the old owner, confirm its process has exited, and only then st
 the replacement. Rolling overlap against the same database is unsupported. The
 remote connection pool is safe only within one MQLite process; it does not provide
 cross-process ownership.
+
+## Verify the published release
+
+Use a supported current Go toolchain to install the exact published broker and
+MCP commands together:
+
+```sh
+go install github.com/mqlitehq/mqlite/cmd/mqlite@v0.4.3 github.com/mqlitehq/mqlite/cmd/mqlite-mcp@v0.4.3
+mqlite version
+go list -m -json github.com/mqlitehq/mqlite@v0.4.3
+```
+
+Use the installed binaries from `GOBIN`, or `$(go env GOPATH)/bin` when `GOBIN`
+is unset. `mqlite version` must report `0.4.3`. MCP clients check
+`initialize.serverInfo.version`; `mqlite-mcp` has no `--version` flag.
+The Go 1.21 source floor is independent of the supported toolchain used to build
+production binaries.
+
+For prebuilt binaries, download the OS/architecture archive and `checksums.txt`
+from the [v0.4.3 release](https://github.com/mqlitehq/mqlite/releases/tag/v0.4.3).
+Verify the archive's SHA256 against its matching named entry before extracting
+and running the binary. The standalone client uses its own
+[v0.1.2 release](https://github.com/mqlitehq/mqlite-go/releases/tag/v0.1.2) and
+`SHA256SUMS`; it is a separate module and executable.
+
+The published dual-platform image index is pinned by this digest:
+
+```sh
+docker pull ghcr.io/mqlitehq/mqlite:0.4.3@sha256:5b142d101a41406c587729a8c235a35ff45f817e95f3c569544a11d4d0963cdc
+docker run --rm ghcr.io/mqlitehq/mqlite:0.4.3@sha256:5b142d101a41406c587729a8c235a35ff45f817e95f3c569544a11d4d0963cdc version
+```
+
+The image command must report `0.4.3`. Record the digest with the deployment;
+a mutable `latest` tag is not a fixed deployment identity.
+
+The release notes disclose the maintainer-approved bounded qualification:
+complete regression/CI and integration, a 60-minute local workload and a
+30-minute direct-engine Turso workload. The planned 24/48-hour acceptance and
+eight spaced Turso windows were not completed. Installation and health checks
+do not replace sustained-load qualification for an application's workload.
 
 ## Verify any deploy
 
@@ -3882,14 +3931,17 @@ deployment test.
 
 # Production operations
 
-This runbook follows `main` for release target v0.4.3 (port 6754, schema token 7).
+This runbook documents released v0.4.3 behavior (port 6754, schema token 7) and
+follows `main` for later documentation corrections. Use the
+[v0.4.3 runbook](https://github.com/mqlitehq/mqlite/blob/v0.4.3/docs/operations.md)
+for the exact release snapshot.
 Use the [v0.4.2 runbook](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/operations.md)
 when operating that binary. In particular, lease-preserving startup and local
 maintenance, coordinated broker shutdown, and the revised managed Receiver
-behavior below are included in the v0.4.3 release target; see [CHANGELOG.md](https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md).
+behavior below are included in v0.4.3; see [CHANGELOG.md](https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md).
 v0.3.3 is withdrawn and
 unsupported; its public assets and exact image remain available for forensic or
-compatibility inspection and must not be deployed. v0.4.2 retains v0.4.0's
+compatibility inspection and must not be deployed. v0.4.3 retains v0.4.0's
 retraction of v0.3.3. Upgrading from v0.3.2 or another schema-5 release
 requires a fresh database as described below.
 Runtime-managed access keys require v0.3.1; v0.3.0 supports configured tokens only.
@@ -4098,7 +4150,7 @@ shutdown behavior does not make overlapping brokers safe.
 
 ## Consumer stops and host interruptions
 
-These boundaries describe release target v0.4.3 and both Go clients' managed
+These boundaries describe released v0.4.3 and both Go clients' managed
 `Receiver.Run`. The SDK does not install process signal handlers. The host
 application decides how SIGINT/SIGTERM, stdin EOF, and platform grace periods
 affect its contexts; `Consumer.Shutdown` and a stop-admission-then-drain API are
@@ -4404,7 +4456,9 @@ rules behind these procedures.
 
 # Turso / libSQL: concurrency & embedded replicas (MQLITE-4)
 
-This guide follows `main` for release target v0.4.3. For an installed
+This guide covers released v0.4.3 behavior and follows `main` for later
+documentation corrections. Use the [v0.4.3 Turso guide](https://github.com/mqlitehq/mqlite/blob/v0.4.3/docs/turso.md)
+for the exact release snapshot. For an installed
 v0.4.2 release, use the [Turso guide at that tag](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/turso.md);
 see [CHANGELOG.md](https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md) for version-specific behavior changes.
 
@@ -4701,11 +4755,12 @@ extend backend support beyond the verified scope.
 
 # Retention, deletion, and storage reclamation
 
-This page follows `main` for release target v0.4.3. v0.3.3 is withdrawn and
+This page documents released v0.4.3 behavior and follows `main` for later
+documentation corrections. v0.3.3 is withdrawn and
 unsupported; its public artifacts remain available for forensic or compatibility
-inspection and must not be deployed. v0.4.2 retains v0.4.0's retraction of
+inspection and must not be deployed. v0.4.3 retains v0.4.0's retraction of
 v0.3.3. v0.3.2 has DLQ retention
-and automatic local reclamation, but the work budgets below describe the v0.4.3 release target
+and automatic local reclamation, but the work budgets below describe v0.4.3
 unless a version difference is stated.
 v0.3.2 does not have the
 queue and subscription lifecycle APIs introduced in v0.4.0.
@@ -5358,7 +5413,9 @@ numbers for a current deployment decision.
 
 # Conformance — correct mqlite behavior (TCK)
 
-This specification follows `main` for release target v0.4.3. For an installed
+This specification covers released v0.4.3 behavior and follows `main` for later
+documentation corrections. Use the [v0.4.3 conformance specification](https://github.com/mqlitehq/mqlite/blob/v0.4.3/docs/conformance.md)
+for the exact release snapshot. For an installed
 v0.4.2 release, use the [conformance specification at that tag](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/conformance.md);
 see [CHANGELOG.md](https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md) for version-specific behavior changes.
 
@@ -6027,7 +6084,7 @@ and how the freeze is enforced so it can't be lifted by accident.
 
 Applications that only call a broker can instead use the official
 [MQLite Remote Client for Go](https://github.com/mqlitehq/mqlite-go). Its module
-path remains `github.com/mqlitehq/mqlite-go`; release target `v0.1.2` has a Go 1.13
+path remains `github.com/mqlitehq/mqlite-go`; released version `v0.1.2` has a Go 1.13
 source floor and uses only the standard library, so it does not link the embedded
 engine, SQLite, libSQL/Turso, or CGO.
 The low floor is a compatibility promise, not a recommendation to run an
@@ -6380,7 +6437,9 @@ unavailable when broker authentication is explicitly disabled.
 
 # Examples
 
-These examples follow `main` for release target v0.4.3. For an installed
+These examples cover released v0.4.3 behavior and follow `main` for later
+documentation corrections. Use the [v0.4.3 examples](https://github.com/mqlitehq/mqlite/blob/v0.4.3/docs/examples.md)
+for the exact release snapshot. For an installed
 v0.4.2 release, use the [examples at that tag](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/examples.md);
 see [CHANGELOG.md](https://github.com/mqlitehq/mqlite/blob/main/CHANGELOG.md) for version-specific behavior changes.
 

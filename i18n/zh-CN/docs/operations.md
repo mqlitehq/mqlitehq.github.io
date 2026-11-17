@@ -1,11 +1,11 @@
 # 生产运维
 
-本手册对应 `main` 的 v0.4.3 目标版本（端口 6754，schema token 7）。
+本手册介绍已发布 v0.4.3 的行为（端口 6754，schema token 7），并跟随 `main` 进行后续文档修订。准确发布快照见 [v0.4.3 运维手册](https://github.com/mqlitehq/mqlite/blob/v0.4.3/docs/operations.md)。
 运行已安装的 v0.4.2 二进制时，请使用[对应版本运维手册](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/operations.md)。
 尤其是，下述保留租约的启动与本地维护、协同 broker 关停，以及调整后的托管 Receiver 行为
-均包含在 v0.4.3 目标版本中；参见 [CHANGELOG.md](../CHANGELOG.md)。
+均包含在 v0.4.3 中；参见 [CHANGELOG.md](../CHANGELOG.md)。
 v0.3.3 已撤回且不受支持；其公开产物和准确镜像仅供取证或兼容性检查，不得部署。
-v0.4.2 保留 v0.4.0 对 v0.3.3 的撤回声明。
+v0.4.3 保留 v0.4.0 对 v0.3.3 的撤回声明。
 从 v0.3.2 或其他 schema-5 版本升级时，必须按下述流程使用全新数据库。
 运行时管理的访问密钥要求 v0.3.1；v0.3.0 只支持配置 token。
 统一的 `Observe` 与已配置的监控凭据要求 v0.3.2。
@@ -157,7 +157,7 @@ Turso/libSQL 替换仍须保持单活，先停再启；这些关停行为不意�
 
 ## 消费者停止与主机中断
 
-这些边界描述 v0.4.3 目标版本与两个 Go 客户端的托管 `Receiver.Run`。
+这些边界描述已发布 v0.4.3 与两个 Go 客户端的托管 `Receiver.Run`。
 SDK 不会安装进程信号处理器。宿主应用决定 SIGINT/SIGTERM、stdin EOF 和平台宽限期
 如何影响其上下文；`Consumer.Shutdown` 以及先停止准入、再排空的 API 均未实现。
 Ctrl-D 通常产生 stdin EOF，不是进程信号，也不会自动取消上下文；`mqlite serve` 不读取 stdin。

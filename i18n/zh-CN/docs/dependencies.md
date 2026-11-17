@@ -4,7 +4,7 @@ MQLite 将 `go.mod` 的最低版本固定为 **`go 1.21`**，使 SDK 仍可直�
 
 ## 仅远程访问的配套模块
 
-只调用 broker 的应用可以改用官方的 [MQLite Remote Client for Go](https://github.com/mqlitehq/mqlite-go)。其模块路径仍为 `github.com/mqlitehq/mqlite-go`；目标发布版本 `v0.1.2` 的源码最低要求是 Go 1.13，且仅使用标准库，因此不会链接嵌入式引擎、SQLite、libSQL/Turso 或 CGO。
+只调用 broker 的应用可以改用官方的 [MQLite Remote Client for Go](https://github.com/mqlitehq/mqlite-go)。其模块路径仍为 `github.com/mqlitehq/mqlite-go`；已发布版本 `v0.1.2` 的源码最低要求是 Go 1.13，且仅使用标准库，因此不会链接嵌入式引擎、SQLite、libSQL/Turso 或 CGO。
 较低的最低版本是兼容性承诺，并不建议在生产环境运行已停止维护的工具链：应尽可能使用仍受支持的 Go 版本构建。应用需要嵌入式模式、事务发件箱（transactional outbox）、规范化观测数据解码或托管访问密钥管理时，应使用本主模块。
 
 ## 最低版本限制锁定了哪些依赖

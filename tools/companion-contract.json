@@ -1,11 +1,11 @@
 {
   "formatVersion": 1,
-  "reviewedRevision": "b4f4cb0324f24ae7dc7209d4dcf989bf32d23625",
-  "reviewNote": "Reviewed the remote-only SDK delivery-batch validation, Send acknowledgements, conservative legacy renewals, output-before-settlement CLI and broker-version permission guidance. The source targets v0.1.2 with a Go 1.13 floor and standard-library-only runtime. Tagged broker compatibility and final source-pair qualification are recorded separately. Additionally reviewed Abandon validation on current main: negative/sub-millisecond client rejection, non-mutating timestamp overflow rejection, zero-delay behavior and exact live receipt replay after clock movement. Matching English/Chinese API, summary and agent guidance were reviewed; complete code/load evidence is separate from unpublished release acceptance.",
+  "reviewedRevision": "b710d67dbd57e6954bd90ca55db3ac6cd1e42899",
+  "reviewNote": "The previously reviewed SDK runtime and build contract is unchanged: delivery validation, Send acknowledgements, conservative legacy renewals, output-before-settlement CLI, permissions and Abandon validation. Reviewed the published v0.1.2 README, exact tag references, public module verification with broker v0.4.3, source-main documentation corrections and explicit qualification limits. Go 1.13 and standard-library-only runtime are unchanged. Public pinned modules passed the eight-scenario integration after publication; this is distinct from the incomplete24/48-hour qualification.",
   "files": {
     ".github/workflows/ci.yml": "def545c145cebe60212de62bc4217fa0a544b8889fd502eb12b56bd689a63c9c",
     ".github/workflows/release.yml": "0afd94c9ba93b354beb35300347f55fe5721625ac42ea92d58869d2024a0c8fd",
-    "README.md": "d918026d90696d30abecfef5e1cd4ec8d6e8f4d25ef930b090de5347354fd969",
+    "README.md": "65666cff5d4fb1d77290ef1f2fbabff8a2cacd3c8c0a01c37265b631a99a1326",
     "api.go": "902842c2eee7eb68f0a215f3ecfb4bd55d52823be7ad76ba6c201ddbd778c4ed",
     "client.go": "e35a46527db33c5416cc9e9f3c0161a9e74c445be7e85ab59ff8f4f674f46712",
     "cmd/mqlitec/main.go": "7325f7cf7dcabd771bee0dd167863e89d38daedfe8922a35f0e4dffa6cd31384",

@@ -4,7 +4,7 @@
   "brokerPort": "6754",
   "sourceVersion": "0.4.3",
   "latestRelease": "v0.4.3",
-  "hasUnreleasedChanges": false,
+  "hasUnreleasedChanges": true,
   "source": "https://github.com/mqlitehq/mqlite/tree/main/docs",
   "routes": [
     "/mqlite.v1.AdminService/CreateQueue",
@@ -164,8 +164,8 @@
   "defaultLocale": "en",
   "agentGuideContract": {
     "formatVersion": 1,
-    "reviewedRevision": "f30f5aecf8f526325070e36a5649611c681d270f",
-    "sourceDigest": "02e7a71348fde3b258eb5eca2158c03303227c6d009c83892c9b2d79d2ea3a2c",
+    "reviewedRevision": "9ca2f83ce19c8bbd35e70abdc7fe8968c32baa8a",
+    "sourceDigest": "66e1fda1ec90aaa95fc3819ad8bde072cbffeb28f7721f0abbe17b968809efaa",
     "filesReviewed": 112
   }
 }

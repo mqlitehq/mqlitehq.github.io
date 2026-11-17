@@ -22,17 +22,34 @@
   },
   {
     "source": "mqlite/docs/api-reference.md",
-    "text": "This reference follows `main` for release target v0.4.3. Use the [v0.4.2 reference](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/api-reference.md)",
+    "text": "This reference documents released v0.4.3 behavior and follows `main` for later",
     "occurrence": 1,
-    "kind": "upstream",
-    "reason": "Reviewed canonical source release target or companion release-target example. Publication is checked separately; this line does not announce an available tag."
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
   },
   {
     "source": "mqlite/docs/api-reference.md",
-    "text": "are included in the v0.4.3 release target; see [CHANGELOG.md](../CHANGELOG.md). v0.3.3 is withdrawn",
+    "text": "documentation corrections. Use the [v0.4.3 reference](https://github.com/mqlitehq/mqlite/blob/v0.4.3/docs/api-reference.md)",
     "occurrence": 1,
-    "kind": "upstream",
-    "reason": "Reviewed canonical source release target or companion release-target example. Publication is checked separately; this line does not announce an available tag."
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
+  },
+  {
+    "source": "mqlite/docs/api-reference.md",
+    "text": "for the exact release snapshot, or the [v0.4.2 reference](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/api-reference.md)",
+    "occurrence": 1,
+    "kind": "historical",
+    "reason": "Exact v0.4.2 documentation remains the compatibility baseline for users of that installed release; current published behavior is documented separately."
+  },
+  {
+    "source": "mqlite/docs/api-reference.md",
+    "text": "are included in v0.4.3; see [CHANGELOG.md](../CHANGELOG.md). v0.3.3 is withdrawn",
+    "occurrence": 1,
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
   },
   {
     "source": "mqlite/docs/api-reference.md",
@@ -43,10 +60,11 @@
   },
   {
     "source": "mqlite/docs/api-reference.md",
-    "text": "The v0.4.3 release target applies a 32 MiB serialization-accounting threshold to",
+    "text": "v0.4.3 applies a 32 MiB serialization-accounting threshold to",
     "occurrence": 1,
-    "kind": "upstream",
-    "reason": "Reviewed canonical source release target or companion release-target example. Publication is checked separately; this line does not announce an available tag."
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
   },
   {
     "source": "mqlite/docs/api-reference.md",
@@ -169,17 +187,26 @@
   },
   {
     "source": "mqlite/docs/cli.md",
-    "text": "This reference follows `main` for release target v0.4.3. Cross-invocation",
+    "text": "This reference documents released v0.4.3 behavior and follows `main` for later",
     "occurrence": 1,
-    "kind": "upstream",
-    "reason": "Reviewed canonical source release target or companion release-target example. Publication is checked separately; this line does not announce an available tag."
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
+  },
+  {
+    "source": "mqlite/docs/cli.md",
+    "text": "documentation corrections. Use the [v0.4.3 CLI reference](https://github.com/mqlitehq/mqlite/blob/v0.4.3/docs/cli.md)",
+    "occurrence": 1,
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
   },
   {
     "source": "mqlite/docs/cli.md",
     "text": "v0.4.2; use the [CLI reference at that tag](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/cli.md)",
     "occurrence": 1,
     "kind": "historical",
-    "reason": "Installed v0.4.2 documentation link retained as an explicit compatibility baseline beside the v0.4.3 source target."
+    "reason": "Exact v0.4.2 documentation remains the compatibility baseline for users of that installed release; current published behavior is documented separately."
   },
   {
     "source": "mqlite/docs/cli.md",
@@ -211,17 +238,26 @@
   },
   {
     "source": "mqlite/docs/concepts.md",
-    "text": "This document follows `main` for release target v0.4.3. For an installed",
+    "text": "This document covers released v0.4.3 behavior and follows `main` for later",
     "occurrence": 1,
-    "kind": "upstream",
-    "reason": "Reviewed canonical source release target or companion release-target example. Publication is checked separately; this line does not announce an available tag."
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
+  },
+  {
+    "source": "mqlite/docs/concepts.md",
+    "text": "documentation corrections. Use the [v0.4.3 concepts](https://github.com/mqlitehq/mqlite/blob/v0.4.3/docs/concepts.md)",
+    "occurrence": 1,
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
   },
   {
     "source": "mqlite/docs/concepts.md",
     "text": "v0.4.2 release, use the [concepts at that tag](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/concepts.md);",
     "occurrence": 1,
     "kind": "historical",
-    "reason": "Installed v0.4.2 documentation link retained as an explicit compatibility baseline beside the v0.4.3 source target."
+    "reason": "Exact v0.4.2 documentation remains the compatibility baseline for users of that installed release; current published behavior is documented separately."
   },
   {
     "source": "mqlite/docs/concepts.md",
@@ -239,17 +275,26 @@
   },
   {
     "source": "mqlite/docs/conformance.md",
-    "text": "This specification follows `main` for release target v0.4.3. For an installed",
+    "text": "This specification covers released v0.4.3 behavior and follows `main` for later",
     "occurrence": 1,
-    "kind": "upstream",
-    "reason": "Reviewed canonical source release target or companion release-target example. Publication is checked separately; this line does not announce an available tag."
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
+  },
+  {
+    "source": "mqlite/docs/conformance.md",
+    "text": "documentation corrections. Use the [v0.4.3 conformance specification](https://github.com/mqlitehq/mqlite/blob/v0.4.3/docs/conformance.md)",
+    "occurrence": 1,
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
   },
   {
     "source": "mqlite/docs/conformance.md",
     "text": "v0.4.2 release, use the [conformance specification at that tag](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/conformance.md);",
     "occurrence": 1,
     "kind": "historical",
-    "reason": "Installed v0.4.2 documentation link retained as an explicit compatibility baseline beside the v0.4.3 source target."
+    "reason": "Exact v0.4.2 documentation remains the compatibility baseline for users of that installed release; current published behavior is documented separately."
   },
   {
     "source": "mqlite/docs/conformance.md",
@@ -276,10 +321,10 @@
   },
   {
     "source": "mqlite/docs/dependencies.md",
-    "text": "path remains `github.com/mqlitehq/mqlite-go`; release target `v0.1.2` has a Go 1.13",
+    "text": "path remains `github.com/mqlitehq/mqlite-go`; released version `v0.1.2` has a Go 1.13",
     "occurrence": 1,
     "kind": "upstream",
-    "reason": "Reviewed canonical source release target or companion release-target example. Publication is checked separately; this line does not announce an available tag."
+    "reason": "Published companion v0.1.2; its public Go module, CLI and eight-scenario broker v0.4.3 integration were verified after publication. The companion Go 1.13 source floor remains unchanged."
   },
   {
     "source": "mqlite/docs/dependencies.md",
@@ -435,17 +480,26 @@
   },
   {
     "source": "mqlite/docs/deployment.md",
-    "text": "> This source targets **v0.4.3**, with default port **6754** and",
+    "text": "> The published release is **v0.4.3**, with default port **6754** and",
     "occurrence": 1,
-    "kind": "upstream",
-    "reason": "Reviewed canonical source release target or companion release-target example. Publication is checked separately; this line does not announce an available tag."
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
   },
   {
     "source": "mqlite/docs/deployment.md",
-    "text": "> v0.4.3 binary or image in these examples. v0.3.3 is withdrawn, unsupported, and retracted by",
+    "text": "> schema token **7**. Its [release page](https://github.com/mqlitehq/mqlite/releases/tag/v0.4.3)",
     "occurrence": 1,
-    "kind": "upstream",
-    "reason": "Reviewed canonical source release target or companion release-target example. Publication is checked separately; this line does not announce an available tag."
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
+  },
+  {
+    "source": "mqlite/docs/deployment.md",
+    "text": "> below use that exact version. v0.3.3 is withdrawn, unsupported, and retracted by",
+    "occurrence": 1,
+    "kind": "historical",
+    "reason": "Withdrawn v0.3.3 and its retraction boundary are historical; publication of v0.4.3 does not make that old release supported."
   },
   {
     "source": "mqlite/docs/deployment.md",
@@ -491,24 +545,27 @@
   },
   {
     "source": "mqlite/docs/deployment.md",
-    "text": "# v0.4.3 release target, default port 6754",
+    "text": "# Published v0.4.3, default port 6754",
     "occurrence": 1,
-    "kind": "upstream",
-    "reason": "Reviewed canonical source release target or companion release-target example. Publication is checked separately; this line does not announce an available tag."
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
   },
   {
     "source": "mqlite/docs/deployment.md",
     "text": "ghcr.io/mqlitehq/mqlite:0.4.3",
     "occurrence": 1,
-    "kind": "upstream",
-    "reason": "Reviewed canonical source release target or companion release-target example. Publication is checked separately; this line does not announce an available tag."
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
   },
   {
     "source": "mqlite/docs/deployment.md",
     "text": "- Pin exact `0.4.3` in production. Images `>= 0.3.0` listen on `6754`;",
     "occurrence": 1,
-    "kind": "upstream",
-    "reason": "Reviewed canonical source release target or companion release-target example. Publication is checked separately; this line does not announce an available tag."
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
   },
   {
     "source": "mqlite/docs/deployment.md",
@@ -519,10 +576,11 @@
   },
   {
     "source": "mqlite/docs/deployment.md",
-    "text": "image = \"ghcr.io/mqlitehq/mqlite:0.4.3\"   # exact release-target image",
+    "text": "image = \"ghcr.io/mqlitehq/mqlite:0.4.3\"   # exact published version",
     "occurrence": 1,
-    "kind": "upstream",
-    "reason": "Reviewed canonical source release target or companion release-target example. Publication is checked separately; this line does not announce an available tag."
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
   },
   {
     "source": "mqlite/docs/deployment.md",
@@ -549,8 +607,9 @@
     "source": "mqlite/docs/deployment.md",
     "text": "v0.3.3 use schema 5; v0.4.0 through v0.4.3 use schema 7.**",
     "occurrence": 1,
-    "kind": "upstream",
-    "reason": "Reviewed canonical source release target or companion release-target example. Publication is checked separately; this line does not announce an available tag."
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
   },
   {
     "source": "mqlite/docs/deployment.md",
@@ -588,18 +647,98 @@
     "reason": "Fixed capability-introduction, withdrawal, migration or older-release behavior; retain its exact version and review the surrounding compatibility statement."
   },
   {
-    "source": "mqlite/docs/examples.md",
-    "text": "These examples follow `main` for release target v0.4.3. For an installed",
+    "source": "mqlite/docs/deployment.md",
+    "text": "go install github.com/mqlitehq/mqlite/cmd/mqlite@v0.4.3 github.com/mqlitehq/mqlite/cmd/mqlite-mcp@v0.4.3",
+    "occurrence": 1,
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
+  },
+  {
+    "source": "mqlite/docs/deployment.md",
+    "text": "go list -m -json github.com/mqlitehq/mqlite@v0.4.3",
+    "occurrence": 1,
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
+  },
+  {
+    "source": "mqlite/docs/deployment.md",
+    "text": "is unset. `mqlite version` must report `0.4.3`. MCP clients check",
+    "occurrence": 1,
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
+  },
+  {
+    "source": "mqlite/docs/deployment.md",
+    "text": "The Go 1.21 source floor is independent of the supported toolchain used to build",
+    "occurrence": 1,
+    "kind": "source-go",
+    "reviewedValue": "1.21",
+    "reason": "Broker source compatibility remains Go 1.21; supported current Go builds the published binaries."
+  },
+  {
+    "source": "mqlite/docs/deployment.md",
+    "text": "from the [v0.4.3 release](https://github.com/mqlitehq/mqlite/releases/tag/v0.4.3).",
+    "occurrence": 1,
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
+  },
+  {
+    "source": "mqlite/docs/deployment.md",
+    "text": "[v0.1.2 release](https://github.com/mqlitehq/mqlite-go/releases/tag/v0.1.2) and",
     "occurrence": 1,
     "kind": "upstream",
-    "reason": "Reviewed canonical source release target or companion release-target example. Publication is checked separately; this line does not announce an available tag."
+    "reason": "Published companion v0.1.2; its public Go module, CLI and eight-scenario broker v0.4.3 integration were verified after publication. The companion Go 1.13 source floor remains unchanged."
+  },
+  {
+    "source": "mqlite/docs/deployment.md",
+    "text": "docker pull ghcr.io/mqlitehq/mqlite:0.4.3@sha256:5b142d101a41406c587729a8c235a35ff45f817e95f3c569544a11d4d0963cdc",
+    "occurrence": 1,
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
+  },
+  {
+    "source": "mqlite/docs/deployment.md",
+    "text": "docker run --rm ghcr.io/mqlitehq/mqlite:0.4.3@sha256:5b142d101a41406c587729a8c235a35ff45f817e95f3c569544a11d4d0963cdc version",
+    "occurrence": 1,
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
+  },
+  {
+    "source": "mqlite/docs/deployment.md",
+    "text": "The image command must report `0.4.3`. Record the digest with the deployment;",
+    "occurrence": 1,
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
+  },
+  {
+    "source": "mqlite/docs/examples.md",
+    "text": "These examples cover released v0.4.3 behavior and follow `main` for later",
+    "occurrence": 1,
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
+  },
+  {
+    "source": "mqlite/docs/examples.md",
+    "text": "documentation corrections. Use the [v0.4.3 examples](https://github.com/mqlitehq/mqlite/blob/v0.4.3/docs/examples.md)",
+    "occurrence": 1,
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
   },
   {
     "source": "mqlite/docs/examples.md",
     "text": "v0.4.2 release, use the [examples at that tag](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/examples.md);",
     "occurrence": 1,
     "kind": "historical",
-    "reason": "Installed v0.4.2 documentation link retained as an explicit compatibility baseline beside the v0.4.3 source target."
+    "reason": "Exact v0.4.2 documentation remains the compatibility baseline for users of that installed release; current published behavior is documented separately."
   },
   {
     "source": "mqlite/docs/examples.md",
@@ -613,7 +752,7 @@
     "text": "`github.com/mqlitehq/mqlite-go@v0.1.2` and change the import to",
     "occurrence": 1,
     "kind": "upstream",
-    "reason": "Reviewed canonical source release target or companion release-target example. Publication is checked separately; this line does not announce an available tag."
+    "reason": "Published companion v0.1.2; its public Go module, CLI and eight-scenario broker v0.4.3 integration were verified after publication. The companion Go 1.13 source floor remains unchanged."
   },
   {
     "source": "mqlite/docs/examples.md",
@@ -624,17 +763,26 @@
   },
   {
     "source": "mqlite/docs/internals.md",
-    "text": "This document follows `main` for release target v0.4.3. For an installed",
+    "text": "This document covers released v0.4.3 behavior and follows `main` for later",
     "occurrence": 1,
-    "kind": "upstream",
-    "reason": "Reviewed canonical source release target or companion release-target example. Publication is checked separately; this line does not announce an available tag."
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
+  },
+  {
+    "source": "mqlite/docs/internals.md",
+    "text": "documentation corrections. Use the [v0.4.3 internals](https://github.com/mqlitehq/mqlite/blob/v0.4.3/docs/internals.md)",
+    "occurrence": 1,
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
   },
   {
     "source": "mqlite/docs/internals.md",
     "text": "v0.4.2 release, use the [internals at that tag](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/internals.md);",
     "occurrence": 1,
     "kind": "historical",
-    "reason": "Installed v0.4.2 documentation link retained as an explicit compatibility baseline beside the v0.4.3 source target."
+    "reason": "Exact v0.4.2 documentation remains the compatibility baseline for users of that installed release; current published behavior is documented separately."
   },
   {
     "source": "mqlite/docs/internals.md",
@@ -750,10 +898,19 @@
   },
   {
     "source": "mqlite/docs/operations.md",
-    "text": "This runbook follows `main` for release target v0.4.3 (port 6754, schema token 7).",
+    "text": "This runbook documents released v0.4.3 behavior (port 6754, schema token 7) and",
     "occurrence": 1,
-    "kind": "upstream",
-    "reason": "Reviewed canonical source release target or companion release-target example. Publication is checked separately; this line does not announce an available tag."
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
+  },
+  {
+    "source": "mqlite/docs/operations.md",
+    "text": "[v0.4.3 runbook](https://github.com/mqlitehq/mqlite/blob/v0.4.3/docs/operations.md)",
+    "occurrence": 1,
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
   },
   {
     "source": "mqlite/docs/operations.md",
@@ -764,10 +921,11 @@
   },
   {
     "source": "mqlite/docs/operations.md",
-    "text": "behavior below are included in the v0.4.3 release target; see [CHANGELOG.md](../CHANGELOG.md).",
+    "text": "behavior below are included in v0.4.3; see [CHANGELOG.md](../CHANGELOG.md).",
     "occurrence": 1,
-    "kind": "upstream",
-    "reason": "Reviewed canonical source release target or companion release-target example. Publication is checked separately; this line does not announce an available tag."
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
   },
   {
     "source": "mqlite/docs/operations.md",
@@ -778,10 +936,11 @@
   },
   {
     "source": "mqlite/docs/operations.md",
-    "text": "compatibility inspection and must not be deployed. v0.4.2 retains v0.4.0's",
+    "text": "compatibility inspection and must not be deployed. v0.4.3 retains v0.4.0's",
     "occurrence": 1,
-    "kind": "historical",
-    "reason": "Fixed capability-introduction, withdrawal, migration or older-release behavior; retain its exact version and review the surrounding compatibility statement."
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
   },
   {
     "source": "mqlite/docs/operations.md",
@@ -829,15 +988,17 @@
     "source": "mqlite/docs/operations.md",
     "text": "v0.4.3; an installed v0.4.2 broker does not provide these guarantees.",
     "occurrence": 1,
-    "kind": "upstream",
-    "reason": "Reviewed canonical source release target or companion release-target example. Publication is checked separately; this line does not announce an available tag."
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
   },
   {
     "source": "mqlite/docs/operations.md",
-    "text": "These boundaries describe release target v0.4.3 and both Go clients' managed",
+    "text": "These boundaries describe released v0.4.3 and both Go clients' managed",
     "occurrence": 1,
-    "kind": "upstream",
-    "reason": "Reviewed canonical source release target or companion release-target example. Publication is checked separately; this line does not announce an available tag."
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
   },
   {
     "source": "mqlite/docs/operations.md",
@@ -939,17 +1100,26 @@
   },
   {
     "source": "mqlite/docs/retention.md",
-    "text": "This page follows `main` for release target v0.4.3. v0.3.3 is withdrawn and",
+    "text": "This page documents released v0.4.3 behavior and follows `main` for later",
     "occurrence": 1,
-    "kind": "upstream",
-    "reason": "Reviewed canonical source release target or companion release-target example. Publication is checked separately; this line does not announce an available tag."
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
   },
   {
     "source": "mqlite/docs/retention.md",
-    "text": "inspection and must not be deployed. v0.4.2 retains v0.4.0's retraction of",
+    "text": "documentation corrections. v0.3.3 is withdrawn and",
     "occurrence": 1,
     "kind": "historical",
-    "reason": "Fixed capability-introduction, withdrawal, migration or older-release behavior; retain its exact version and review the surrounding compatibility statement."
+    "reason": "Withdrawn v0.3.3 and its retraction boundary are historical; publication of v0.4.3 does not make that old release supported."
+  },
+  {
+    "source": "mqlite/docs/retention.md",
+    "text": "inspection and must not be deployed. v0.4.3 retains v0.4.0's retraction of",
+    "occurrence": 1,
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
   },
   {
     "source": "mqlite/docs/retention.md",
@@ -960,10 +1130,11 @@
   },
   {
     "source": "mqlite/docs/retention.md",
-    "text": "and automatic local reclamation, but the work budgets below describe the v0.4.3 release target",
+    "text": "and automatic local reclamation, but the work budgets below describe v0.4.3",
     "occurrence": 1,
-    "kind": "upstream",
-    "reason": "Reviewed canonical source release target or companion release-target example. Publication is checked separately; this line does not announce an available tag."
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
   },
   {
     "source": "mqlite/docs/retention.md",
@@ -988,17 +1159,26 @@
   },
   {
     "source": "mqlite/docs/turso.md",
-    "text": "This guide follows `main` for release target v0.4.3. For an installed",
+    "text": "This guide covers released v0.4.3 behavior and follows `main` for later",
     "occurrence": 1,
-    "kind": "upstream",
-    "reason": "Reviewed canonical source release target or companion release-target example. Publication is checked separately; this line does not announce an available tag."
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
+  },
+  {
+    "source": "mqlite/docs/turso.md",
+    "text": "documentation corrections. Use the [v0.4.3 Turso guide](https://github.com/mqlitehq/mqlite/blob/v0.4.3/docs/turso.md)",
+    "occurrence": 1,
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
   },
   {
     "source": "mqlite/docs/turso.md",
     "text": "v0.4.2 release, use the [Turso guide at that tag](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/turso.md);",
     "occurrence": 1,
     "kind": "historical",
-    "reason": "Installed v0.4.2 documentation link retained as an explicit compatibility baseline beside the v0.4.3 source target."
+    "reason": "Exact v0.4.2 documentation remains the compatibility baseline for users of that installed release; current published behavior is documented separately."
   },
   {
     "source": "mqlite/docs/turso.md",
@@ -1038,17 +1218,19 @@
   },
   {
     "source": "site/i18n/zh-CN/docs/api-reference.md",
-    "text": "本参考跟随 `main`，目标版本为 v0.4.3。使用已安装的 v0.4.2 broker 时，请查阅[对应版本参考](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/api-reference.md)。本文介绍的 broker 时间响应头、调整后的 Go 托管 Receiver 重试与续锁行为、1 秒至 1 小时的队列锁时长范围、保留租约的启动行为以及协调关停响应均包含在 v0.4.3 目标版本中；参见 [CHANGELOG.md](../CHANGELOG.md)。v0.3.3 已撤回且不再受支持；使用管理接口较少的 v0.3.2 时，请查阅其 tag 中的文档。",
+    "text": "本参考介绍已发布 v0.4.3 的行为，并跟随 `main` 进行后续文档修订。准确发布快照见 [v0.4.3 参考](https://github.com/mqlitehq/mqlite/blob/v0.4.3/docs/api-reference.md)；使用已安装的 v0.4.2 broker 时，请查阅[对应版本参考](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/api-reference.md)。本文介绍的 broker 时间响应头、调整后的 Go 托管 Receiver 重试与续锁行为、1 秒至 1 小时的队列锁时长范围、保留租约的启动行为以及协调关停响应均包含在 v0.4.3 中；参见 [CHANGELOG.md](../CHANGELOG.md)。v0.3.3 已撤回且不再受支持；使用管理接口较少的 v0.3.2 时，请查阅其 tag 中的文档。",
     "occurrence": 1,
-    "kind": "upstream",
-    "reason": "Reviewed canonical source release target or companion release-target example. Publication is checked separately; this line does not announce an available tag."
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
   },
   {
     "source": "site/i18n/zh-CN/docs/api-reference.md",
-    "text": "v0.4.3 目标版本还对新的 Peek、Receive 与 ReceiveDeferred 批次应用 32 MiB 序列化计量阈值。",
+    "text": "v0.4.3 还对新的 Peek、Receive 与 ReceiveDeferred 批次应用 32 MiB 序列化计量阈值。",
     "occurrence": 1,
-    "kind": "upstream",
-    "reason": "Reviewed canonical source release target or companion release-target example. Publication is checked separately; this line does not announce an available tag."
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
   },
   {
     "source": "site/i18n/zh-CN/docs/api-reference.md",
@@ -1150,10 +1332,11 @@
   },
   {
     "source": "site/i18n/zh-CN/docs/cli.md",
-    "text": "本文档跟随 `main`，目标版本为 v0.4.3。下文所述的跨调用本地结算和保留租约的维护行为不包含在 v0.4.2 中；如果使用该版本的已安装二进制程序，请参阅[该 tag 对应的 CLI 参考](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/cli.md)。另见 [CHANGELOG.md](../CHANGELOG.md)。",
+    "text": "本文档介绍已发布 v0.4.3 的行为，并跟随 `main` 进行后续文档修订。准确发布快照见 [v0.4.3 CLI 参考](https://github.com/mqlitehq/mqlite/blob/v0.4.3/docs/cli.md)。下文所述的跨调用本地结算和保留租约的维护行为不包含在 v0.4.2 中；如果使用该版本的已安装二进制程序，请参阅[该 tag 对应的 CLI 参考](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/cli.md)。另见 [CHANGELOG.md](../CHANGELOG.md)。",
     "occurrence": 1,
-    "kind": "upstream",
-    "reason": "Reviewed canonical source release target or companion release-target example. Publication is checked separately; this line does not announce an available tag."
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
   },
   {
     "source": "site/i18n/zh-CN/docs/cli.md",
@@ -1178,10 +1361,11 @@
   },
   {
     "source": "site/i18n/zh-CN/docs/concepts.md",
-    "text": "本文跟随 `main`，目标版本为 v0.4.3。使用已安装的 v0.4.2 发行版时，请阅读[该标签对应的核心概念](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/concepts.md)；各版本的行为变化见 [CHANGELOG.md](../CHANGELOG.md)。",
+    "text": "本文介绍已发布 v0.4.3 的行为，并跟随 `main` 进行后续文档修订。准确发布快照见 [v0.4.3 核心概念](https://github.com/mqlitehq/mqlite/blob/v0.4.3/docs/concepts.md)。使用已安装的 v0.4.2 发行版时，请阅读[该标签对应的核心概念](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/concepts.md)；各版本的行为变化见 [CHANGELOG.md](../CHANGELOG.md)。",
     "occurrence": 1,
-    "kind": "upstream",
-    "reason": "Reviewed canonical source release target or companion release-target example. Publication is checked separately; this line does not announce an available tag."
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
   },
   {
     "source": "site/i18n/zh-CN/docs/concepts.md",
@@ -1199,10 +1383,11 @@
   },
   {
     "source": "site/i18n/zh-CN/docs/conformance.md",
-    "text": "本规范跟随 `main`，目标版本为 v0.4.3。使用已安装的 v0.4.2 发行版时，请阅读[该标签对应的一致性规范](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/conformance.md)；各版本的行为变化见 [CHANGELOG.md](../CHANGELOG.md)。",
+    "text": "本规范介绍已发布 v0.4.3 的行为，并跟随 `main` 进行后续文档修订。准确发布快照见 [v0.4.3 一致性规范](https://github.com/mqlitehq/mqlite/blob/v0.4.3/docs/conformance.md)。使用已安装的 v0.4.2 发行版时，请阅读[该标签对应的一致性规范](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/conformance.md)；各版本的行为变化见 [CHANGELOG.md](../CHANGELOG.md)。",
     "occurrence": 1,
-    "kind": "upstream",
-    "reason": "Reviewed canonical source release target or companion release-target example. Publication is checked separately; this line does not announce an available tag."
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
   },
   {
     "source": "site/i18n/zh-CN/docs/conformance.md",
@@ -1229,10 +1414,10 @@
   },
   {
     "source": "site/i18n/zh-CN/docs/dependencies.md",
-    "text": "只调用 broker 的应用可以改用官方的 [MQLite Remote Client for Go](https://github.com/mqlitehq/mqlite-go)。其模块路径仍为 `github.com/mqlitehq/mqlite-go`；目标发布版本 `v0.1.2` 的源码最低要求是 Go 1.13，且仅使用标准库，因此不会链接嵌入式引擎、SQLite、libSQL/Turso 或 CGO。",
+    "text": "只调用 broker 的应用可以改用官方的 [MQLite Remote Client for Go](https://github.com/mqlitehq/mqlite-go)。其模块路径仍为 `github.com/mqlitehq/mqlite-go`；已发布版本 `v0.1.2` 的源码最低要求是 Go 1.13，且仅使用标准库，因此不会链接嵌入式引擎、SQLite、libSQL/Turso 或 CGO。",
     "occurrence": 1,
     "kind": "upstream",
-    "reason": "Reviewed canonical source release target or companion release-target example. Publication is checked separately; this line does not announce an available tag."
+    "reason": "Published companion v0.1.2; its public Go module, CLI and eight-scenario broker v0.4.3 integration were verified after publication. The companion Go 1.13 source floor remains unchanged."
   },
   {
     "source": "site/i18n/zh-CN/docs/dependencies.md",
@@ -1338,17 +1523,19 @@
   },
   {
     "source": "site/i18n/zh-CN/docs/deployment.md",
-    "text": "> 本源码的目标版本为 **v0.4.3**，默认端口为 **6754**，schema token 为 **7**。",
+    "text": "> 当前已发布版本为 **v0.4.3**，默认端口为 **6754**，schema token 为 **7**。",
     "occurrence": 1,
-    "kind": "upstream",
-    "reason": "Reviewed canonical source release target or companion release-target example. Publication is checked separately; this line does not announce an available tag."
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
   },
   {
     "source": "site/i18n/zh-CN/docs/deployment.md",
-    "text": "> 使用下方示例中的准确 v0.4.3 二进制或镜像前，请在",
+    "text": "> [发布页](https://github.com/mqlitehq/mqlite/releases/tag/v0.4.3)提供各平台归档、校验和与验证范围说明。",
     "occurrence": 1,
-    "kind": "upstream",
-    "reason": "Reviewed canonical source release target or companion release-target example. Publication is checked separately; this line does not announce an available tag."
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
   },
   {
     "source": "site/i18n/zh-CN/docs/deployment.md",
@@ -1394,24 +1581,27 @@
   },
   {
     "source": "site/i18n/zh-CN/docs/deployment.md",
-    "text": "# v0.4.3 release target, default port 6754",
+    "text": "# Published v0.4.3, default port 6754",
     "occurrence": 1,
-    "kind": "upstream",
-    "reason": "Reviewed canonical source release target or companion release-target example. Publication is checked separately; this line does not announce an available tag."
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
   },
   {
     "source": "site/i18n/zh-CN/docs/deployment.md",
     "text": "ghcr.io/mqlitehq/mqlite:0.4.3",
     "occurrence": 1,
-    "kind": "upstream",
-    "reason": "Reviewed canonical source release target or companion release-target example. Publication is checked separately; this line does not announce an available tag."
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
   },
   {
     "source": "site/i18n/zh-CN/docs/deployment.md",
     "text": "- 生产环境固定使用准确的 `0.4.3`。镜像 `>= 0.3.0` 监听 `6754`；",
     "occurrence": 1,
-    "kind": "upstream",
-    "reason": "Reviewed canonical source release target or companion release-target example. Publication is checked separately; this line does not announce an available tag."
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
   },
   {
     "source": "site/i18n/zh-CN/docs/deployment.md",
@@ -1422,10 +1612,11 @@
   },
   {
     "source": "site/i18n/zh-CN/docs/deployment.md",
-    "text": "image = \"ghcr.io/mqlitehq/mqlite:0.4.3\"   # exact release-target image",
+    "text": "image = \"ghcr.io/mqlitehq/mqlite:0.4.3\"   # exact published version",
     "occurrence": 1,
-    "kind": "upstream",
-    "reason": "Reviewed canonical source release target or companion release-target example. Publication is checked separately; this line does not announce an available tag."
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
   },
   {
     "source": "site/i18n/zh-CN/docs/deployment.md",
@@ -1452,8 +1643,9 @@
     "source": "site/i18n/zh-CN/docs/deployment.md",
     "text": "v0.4.0 至 v0.4.3 使用 schema 7。**",
     "occurrence": 1,
-    "kind": "upstream",
-    "reason": "Reviewed canonical source release target or companion release-target example. Publication is checked separately; this line does not announce an available tag."
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
   },
   {
     "source": "site/i18n/zh-CN/docs/deployment.md",
@@ -1484,11 +1676,83 @@
     "reason": "Fixed capability-introduction, withdrawal, migration or older-release behavior; retain its exact version and review the surrounding compatibility statement."
   },
   {
-    "source": "site/i18n/zh-CN/docs/examples.md",
-    "text": "这些示例跟随 `main`，目标版本为 v0.4.3。已安装 v0.4.2 时，请使用[该 tag 的示例](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/examples.md)；各版本的行为变化参见 [CHANGELOG.md](../CHANGELOG.md)。",
+    "source": "site/i18n/zh-CN/docs/deployment.md",
+    "text": "go install github.com/mqlitehq/mqlite/cmd/mqlite@v0.4.3 github.com/mqlitehq/mqlite/cmd/mqlite-mcp@v0.4.3",
+    "occurrence": 1,
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
+  },
+  {
+    "source": "site/i18n/zh-CN/docs/deployment.md",
+    "text": "go list -m -json github.com/mqlitehq/mqlite@v0.4.3",
+    "occurrence": 1,
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
+  },
+  {
+    "source": "site/i18n/zh-CN/docs/deployment.md",
+    "text": "`mqlite version` 必须报告 `0.4.3`。MCP 客户端检查 `initialize.serverInfo.version`；",
+    "occurrence": 1,
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
+  },
+  {
+    "source": "site/i18n/zh-CN/docs/deployment.md",
+    "text": "`mqlite-mcp` 没有 `--version` 标志。Go 1.21 源码最低要求与构建生产二进制所用的受支持工具链是两回事。",
+    "occurrence": 1,
+    "kind": "source-go",
+    "reviewedValue": "1.21",
+    "reason": "Broker source compatibility remains Go 1.21; supported current Go builds the published binaries."
+  },
+  {
+    "source": "site/i18n/zh-CN/docs/deployment.md",
+    "text": "使用预构建二进制时，从 [v0.4.3 发布页](https://github.com/mqlitehq/mqlite/releases/tag/v0.4.3)",
+    "occurrence": 1,
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
+  },
+  {
+    "source": "site/i18n/zh-CN/docs/deployment.md",
+    "text": "与校验和中同名条目一致。独立客户端使用自己的 [v0.1.2 发布页](https://github.com/mqlitehq/mqlite-go/releases/tag/v0.1.2)",
     "occurrence": 1,
     "kind": "upstream",
-    "reason": "Reviewed canonical source release target or companion release-target example. Publication is checked separately; this line does not announce an available tag."
+    "reason": "Published companion v0.1.2; its public Go module, CLI and eight-scenario broker v0.4.3 integration were verified after publication. The companion Go 1.13 source floor remains unchanged."
+  },
+  {
+    "source": "site/i18n/zh-CN/docs/deployment.md",
+    "text": "docker pull ghcr.io/mqlitehq/mqlite:0.4.3@sha256:5b142d101a41406c587729a8c235a35ff45f817e95f3c569544a11d4d0963cdc",
+    "occurrence": 1,
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
+  },
+  {
+    "source": "site/i18n/zh-CN/docs/deployment.md",
+    "text": "docker run --rm ghcr.io/mqlitehq/mqlite:0.4.3@sha256:5b142d101a41406c587729a8c235a35ff45f817e95f3c569544a11d4d0963cdc version",
+    "occurrence": 1,
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
+  },
+  {
+    "source": "site/i18n/zh-CN/docs/deployment.md",
+    "text": "镜像命令必须报告 `0.4.3`。部署时应记录该摘要；可变的 `latest` 标签不能固定部署身份。",
+    "occurrence": 1,
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
+  },
+  {
+    "source": "site/i18n/zh-CN/docs/examples.md",
+    "text": "这些示例介绍已发布 v0.4.3 的行为，并跟随 `main` 进行后续文档修订。准确发布快照见 [v0.4.3 示例](https://github.com/mqlitehq/mqlite/blob/v0.4.3/docs/examples.md)。使用已安装的 v0.4.2 发行版时，请阅读[该标签对应的示例](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/examples.md)；各版本的行为变化见 [CHANGELOG.md](../CHANGELOG.md)。",
+    "occurrence": 1,
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
   },
   {
     "source": "site/i18n/zh-CN/docs/examples.md",
@@ -1502,14 +1766,15 @@
     "text": "本例核心调用也适用于 MQLite Remote Client for Go，即仅标准库、仅远程的配套模块。安装 `github.com/mqlitehq/mqlite-go@v0.1.2`，将导入改为 `mqlite \"github.com/mqlitehq/mqlite-go\"`。它的源码下限为 Go 1.13。同一应用还需要嵌入式、`Observe` 或托管访问密钥管理时，使用下面展示的主模块。",
     "occurrence": 1,
     "kind": "upstream",
-    "reason": "Reviewed canonical source release target or companion release-target example. Publication is checked separately; this line does not announce an available tag."
+    "reason": "Published companion v0.1.2; its public Go module, CLI and eight-scenario broker v0.4.3 integration were verified after publication. The companion Go 1.13 source floor remains unchanged."
   },
   {
     "source": "site/i18n/zh-CN/docs/internals.md",
-    "text": "本文跟随 `main`，目标版本为 v0.4.3。使用已安装的 v0.4.2 发行版时，请阅读[该标签对应的内部原理](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/internals.md)；各版本的行为变化见 [CHANGELOG.md](../CHANGELOG.md)。",
+    "text": "本文介绍已发布 v0.4.3 的行为，并跟随 `main` 进行后续文档修订。准确发布快照见 [v0.4.3 内部原理](https://github.com/mqlitehq/mqlite/blob/v0.4.3/docs/internals.md)。使用已安装的 v0.4.2 发行版时，请阅读[该标签对应的内部原理](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/internals.md)；各版本的行为变化见 [CHANGELOG.md](../CHANGELOG.md)。",
     "occurrence": 1,
-    "kind": "upstream",
-    "reason": "Reviewed canonical source release target or companion release-target example. Publication is checked separately; this line does not announce an available tag."
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
   },
   {
     "source": "site/i18n/zh-CN/docs/internals.md",
@@ -1618,10 +1883,11 @@
   },
   {
     "source": "site/i18n/zh-CN/docs/operations.md",
-    "text": "本手册对应 `main` 的 v0.4.3 目标版本（端口 6754，schema token 7）。",
+    "text": "本手册介绍已发布 v0.4.3 的行为（端口 6754，schema token 7），并跟随 `main` 进行后续文档修订。准确发布快照见 [v0.4.3 运维手册](https://github.com/mqlitehq/mqlite/blob/v0.4.3/docs/operations.md)。",
     "occurrence": 1,
-    "kind": "upstream",
-    "reason": "Reviewed canonical source release target or companion release-target example. Publication is checked separately; this line does not announce an available tag."
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
   },
   {
     "source": "site/i18n/zh-CN/docs/operations.md",
@@ -1632,10 +1898,11 @@
   },
   {
     "source": "site/i18n/zh-CN/docs/operations.md",
-    "text": "均包含在 v0.4.3 目标版本中；参见 [CHANGELOG.md](../CHANGELOG.md)。",
+    "text": "均包含在 v0.4.3 中；参见 [CHANGELOG.md](../CHANGELOG.md)。",
     "occurrence": 1,
-    "kind": "upstream",
-    "reason": "Reviewed canonical source release target or companion release-target example. Publication is checked separately; this line does not announce an available tag."
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
   },
   {
     "source": "site/i18n/zh-CN/docs/operations.md",
@@ -1646,10 +1913,11 @@
   },
   {
     "source": "site/i18n/zh-CN/docs/operations.md",
-    "text": "v0.4.2 保留 v0.4.0 对 v0.3.3 的撤回声明。",
+    "text": "v0.4.3 保留 v0.4.0 对 v0.3.3 的撤回声明。",
     "occurrence": 1,
-    "kind": "historical",
-    "reason": "Fixed capability-introduction, withdrawal, migration or older-release behavior; retain its exact version and review the surrounding compatibility statement."
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
   },
   {
     "source": "site/i18n/zh-CN/docs/operations.md",
@@ -1704,15 +1972,17 @@
     "source": "site/i18n/zh-CN/docs/operations.md",
     "text": "下面的协同关停和保留租约的重启契约要求 v0.4.3；已安装的 v0.4.2 broker",
     "occurrence": 1,
-    "kind": "upstream",
-    "reason": "Reviewed canonical source release target or companion release-target example. Publication is checked separately; this line does not announce an available tag."
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
   },
   {
     "source": "site/i18n/zh-CN/docs/operations.md",
-    "text": "这些边界描述 v0.4.3 目标版本与两个 Go 客户端的托管 `Receiver.Run`。",
+    "text": "这些边界描述已发布 v0.4.3 与两个 Go 客户端的托管 `Receiver.Run`。",
     "occurrence": 1,
-    "kind": "upstream",
-    "reason": "Reviewed canonical source release target or companion release-target example. Publication is checked separately; this line does not announce an available tag."
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
   },
   {
     "source": "site/i18n/zh-CN/docs/operations.md",
@@ -1814,17 +2084,19 @@
   },
   {
     "source": "site/i18n/zh-CN/docs/retention.md",
-    "text": "本页跟随 `main`，目标版本为 v0.4.3。v0.3.3 已撤回且不受支持；其公开产物仅供取证或兼容性检查，",
+    "text": "本页介绍已发布 v0.4.3 的行为，并跟随 `main` 进行后续文档修订。v0.3.3 已撤回且不受支持；其公开产物仅供取证或兼容性检查，",
     "occurrence": 1,
-    "kind": "upstream",
-    "reason": "Reviewed canonical source release target or companion release-target example. Publication is checked separately; this line does not announce an available tag."
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
   },
   {
     "source": "site/i18n/zh-CN/docs/retention.md",
-    "text": "不得部署。v0.4.2 保留 v0.4.0 对 v0.3.3 的撤回声明。",
+    "text": "不得部署。v0.4.3 保留 v0.4.0 对 v0.3.3 的撤回声明。",
     "occurrence": 1,
-    "kind": "historical",
-    "reason": "Fixed capability-introduction, withdrawal, migration or older-release behavior; retain its exact version and review the surrounding compatibility statement."
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
   },
   {
     "source": "site/i18n/zh-CN/docs/retention.md",
@@ -1835,10 +2107,11 @@
   },
   {
     "source": "site/i18n/zh-CN/docs/retention.md",
-    "text": "下述工作预算均描述 v0.4.3 目标版本。",
+    "text": "下述工作预算均描述 v0.4.3。",
     "occurrence": 1,
-    "kind": "upstream",
-    "reason": "Reviewed canonical source release target or companion release-target example. Publication is checked separately; this line does not announce an available tag."
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
   },
   {
     "source": "site/i18n/zh-CN/docs/retention.md",
@@ -1856,17 +2129,11 @@
   },
   {
     "source": "site/i18n/zh-CN/docs/turso.md",
-    "text": "本指南对应 `main`，目标版本为 v0.4.3。使用已安装的",
+    "text": "本指南介绍已发布 v0.4.3 的行为，并跟随 `main` 进行后续文档修订。准确发布快照见 [v0.4.3 Turso 指南](https://github.com/mqlitehq/mqlite/blob/v0.4.3/docs/turso.md)。使用已安装的 v0.4.2 发行版时，请阅读[该标签对应的 Turso 指南](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/turso.md)；各版本的行为变化见 [CHANGELOG.md](../CHANGELOG.md)。",
     "occurrence": 1,
-    "kind": "upstream",
-    "reason": "Reviewed canonical source release target or companion release-target example. Publication is checked separately; this line does not announce an available tag."
-  },
-  {
-    "source": "site/i18n/zh-CN/docs/turso.md",
-    "text": "v0.4.2 版本时，请阅读[该标签下的 Turso 指南](https://github.com/mqlitehq/mqlite/blob/v0.4.2/docs/turso.md)；",
-    "occurrence": 1,
-    "kind": "historical",
-    "reason": "Installed v0.4.2 documentation link retained as an explicit compatibility baseline beside the v0.4.3 source target."
+    "kind": "current-release",
+    "reviewedValue": "v0.4.3",
+    "reason": "Reviewed against published broker v0.4.3, its exact tag documents and available archives/image. Historical compatibility, retraction and schema boundaries on this line remain literal. Publication does not imply completion of the waived 24/48-hour qualification."
   },
   {
     "source": "site/i18n/zh-CN/docs/turso.md",
