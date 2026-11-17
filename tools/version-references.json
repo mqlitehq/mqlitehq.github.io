@@ -2152,20 +2152,6 @@
   },
   {
     "source": "site/i18n/zh-CN/interface.json",
-    "text": "\"; in v0.4.2, opening the root URL in a browser enters that console while curl and JSON clients keep the discovery card. The console groups subscriptions by topic and shows permanent or fixed lifetimes against the broker clock; its five-second loop calls only\": \"；在 v0.4.2 中，用浏览器打开根 URL 会进入该控制台，而 curl 和 JSON 客户端仍收到发现卡片。控制台按主题分组显示订阅，并以 broker 时钟展示永久或固定生命周期；每五秒的循环仅调用\",",
-    "occurrence": 1,
-    "kind": "historical",
-    "reason": "Fixed capability-introduction, withdrawal, migration or older-release behavior; retain its exact version and review the surrounding compatibility statement."
-  },
-  {
-    "source": "site/i18n/zh-CN/interface.json",
-    "text": "\"Available since v0.3.1.\": \"自 v0.3.1 起提供。\",",
-    "occurrence": 1,
-    "kind": "historical",
-    "reason": "Fixed capability-introduction, withdrawal, migration or older-release behavior; retain its exact version and review the surrounding compatibility statement."
-  },
-  {
-    "source": "site/i18n/zh-CN/interface.json",
     "text": "\"broker health and lifecycle clock, queue snapshots, message effects, storage and request measurements (since v0.3.2)\": \"broker 健康状态与生命周期时钟、队列快照、消息操作效果、存储和请求测量值（自 v0.3.2 起）\",",
     "occurrence": 1,
     "kind": "historical",
@@ -2331,20 +2317,6 @@
     "occurrence": 1,
     "kind": "upstream",
     "reason": "Remote-only companion source compatibility or an exact companion-release example, independent of the main module floor. The whole-site release checklist also reviews pinned SDK installation examples."
-  },
-  {
-    "source": "site/templates/index.html",
-    "text": "<p>A named volume keeps queue data across container replacement. The admin console is available at <code>/ui</code>; in v0.4.2, opening the root URL in a browser enters that console while curl and JSON clients keep the discovery card. The console groups subscriptions by topic and shows permanent or fixed lifetimes against the broker clock; its five-second loop calls only <code>Observe</code>, while lifecycle inventory refreshes on connection, explicit refresh and configuration changes.</p>",
-    "occurrence": 1,
-    "kind": "historical",
-    "reason": "Fixed capability-introduction, withdrawal, migration or older-release behavior; retain its exact version and review the surrounding compatibility statement."
-  },
-  {
-    "source": "site/templates/index.html",
-    "text": "<p class=\"lede\"><strong>Available since v0.3.1.</strong> Keep a configured administrator token and issue separate application keys at runtime, with no broker restart.</p>",
-    "occurrence": 1,
-    "kind": "historical",
-    "reason": "Fixed capability-introduction, withdrawal, migration or older-release behavior; retain its exact version and review the surrounding compatibility statement."
   },
   {
     "source": "site/templates/index.html",

@@ -474,7 +474,7 @@ curl -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
      localhost:6754/mqlite.v1.QueueService/Receive</code></pre>
     </div>
     <div class="tabpane" data-t="docker">
-      <p>命名卷会在容器替换后保留队列数据。管理控制台位于 <code>/ui</code>；在 v0.4.2 中，用浏览器打开根 URL 会进入该控制台，而 curl 和 JSON 客户端仍收到发现卡片。控制台按主题分组显示订阅，并以 broker 时钟展示永久或固定生命周期；每五秒的循环仅调用 <code>Observe</code>；生命周期清单则在连接、显式刷新和配置变更时更新。</p>
+      <p>命名卷会在容器替换后保留队列数据。管理控制台位于 <code>/ui</code>；用浏览器打开根 URL 会进入该控制台，而 curl 和 JSON 客户端仍收到发现卡片。控制台按主题分组显示订阅，并以 broker 时钟展示永久或固定生命周期；每五秒的循环仅调用 <code>Observe</code>；生命周期清单则在连接、显式刷新和配置变更时更新。</p>
       <p>此示例跟随最新发布的镜像。需要可复现部署时，应固定已验证的标签或摘要。生产配置和恢复操作请参阅 <a href="deployment.html">部署</a> 和 <a href="operations.html">运维手册</a>。</p>
       <pre><code class="language-bash">docker run -d --name mqlite -p 127.0.0.1:6754:6754 \
   -e MQLITE_TOKENS=mqk_dev \
@@ -490,7 +490,7 @@ curl http://localhost:6754/          # discovery card (no auth)
 
 <section class="land" id="access-keys">
   <h2># 每个应用一把密钥</h2>
-  <p class="lede"><strong>自 v0.3.1 起提供。</strong> 保留一个配置中的管理员令牌，并在运行时为各应用签发独立密钥，无需重启 broker。</p>
+  <p class="lede">保留一个配置中的管理员令牌，并在运行时为各应用签发独立密钥，无需重启 broker。</p>
   <div class="sem">
     <a href="access-keys.html#choose-a-permission"><b>发送（Send）</b>发送、调度与取消计划消息</a>
     <a href="access-keys.html#choose-a-permission"><b>消费（Listen）</b>接收、结算、续锁、浏览及读取队列统计</a>

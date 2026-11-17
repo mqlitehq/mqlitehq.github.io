@@ -493,7 +493,7 @@ curl -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
      localhost:6754/mqlite.v1.QueueService/Receive</code></pre>
     </div>
     <div class="tabpane" data-t="docker">
-      <p>A named volume keeps queue data across container replacement. The admin console is available at <code>/ui</code>; in v0.4.2, opening the root URL in a browser enters that console while curl and JSON clients keep the discovery card. The console groups subscriptions by topic and shows permanent or fixed lifetimes against the broker clock; its five-second loop calls only <code>Observe</code>, while lifecycle inventory refreshes on connection, explicit refresh and configuration changes.</p>
+      <p>A named volume keeps queue data across container replacement. The admin console is available at <code>/ui</code>; opening the root URL in a browser enters that console while curl and JSON clients keep the discovery card. The console groups subscriptions by topic and shows permanent or fixed lifetimes against the broker clock; its five-second loop calls only <code>Observe</code>, while lifecycle inventory refreshes on connection, explicit refresh and configuration changes.</p>
       <p>This example follows the latest published image. Pin a verified tag or digest for reproducible deployments. For production configuration and recovery, follow <a href="deployment.html">Deployment</a> and the <a href="operations.html">operations runbook</a>.</p>
       <pre><code class="language-bash">docker run -d --name mqlite -p 127.0.0.1:6754:6754 \
   -e MQLITE_TOKENS=mqk_dev \
@@ -509,7 +509,7 @@ curl http://localhost:6754/          # discovery card (no auth)
 
 <section class="land" id="access-keys">
   <h2># one key for each application</h2>
-  <p class="lede"><strong>Available since v0.3.1.</strong> Keep a configured administrator token and issue separate application keys at runtime, with no broker restart.</p>
+  <p class="lede">Keep a configured administrator token and issue separate application keys at runtime, with no broker restart.</p>
   <div class="sem">
     <a href="access-keys.html#choose-a-permission"><b>Send</b>send, schedule and cancel scheduled messages</a>
     <a href="access-keys.html#choose-a-permission"><b>Listen</b>receive, settle, renew, peek and read queue statistics</a>

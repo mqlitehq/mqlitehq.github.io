@@ -1,7 +1,7 @@
 {
   "pages": {
     "index.html": {
-      "sourceSha256": "4a05e9f9f63eb3dc03729dc04f4d901c5f85dffb13099d1f3653a56abb42583d"
+      "sourceSha256": "cfa9b26694fc8ce959ce8f1e075fb74866c899d5c3eb8c21eb6c13f735b05fd7"
     },
     "agents.html": {
       "sourceSha256": "c416b0b45bac574519e40e4697ce15d77aa075dce00143fc72b2d513ed83458f"
@@ -84,7 +84,6 @@
     "; both configured administrators and managed": "；配置中的管理员和托管的",
     "; explicit receive-and-delete chooses at-most-once broker removal. New settlements require a current token and unexpired lease; send deduplication when configured, bounded receive/settlement replay, single-broker crash recovery, and O(log n) claims on a deep backlog. FIFO groups stay ordered even across consumer crashes and lock expiry.": "；显式的接收即删除模式则选择在 broker 侧至多删除一次（at-most-once）。新的结算要求当前令牌和未过期租约；支持按配置启用发送去重、有界的接收与结算重放、单 broker 崩溃恢复，以及深积压下 O(log n) 的领取。即使消费者崩溃或锁到期，FIFO 组仍保持顺序。",
     "; explicit receive-and-delete instead chooses at-most-once broker removal. The broker cannot promise your handler's external side effects happen exactly once. Design agent workflows so that": "；显式的接收即删除模式则选择在 broker 侧至多删除一次（at-most-once）。broker 无法保证 handler 的外部副作用恰好发生一次。设计智能体工作流时，应确保",
-    "; in v0.4.2, opening the root URL in a browser enters that console while curl and JSON clients keep the discovery card. The console groups subscriptions by topic and shows permanent or fixed lifetimes against the broker clock; its five-second loop calls only": "；在 v0.4.2 中，用浏览器打开根 URL 会进入该控制台，而 curl 和 JSON 客户端仍收到发现卡片。控制台按主题分组显示订阅，并以 broker 时钟展示永久或固定生命周期；每五秒的循环仅调用",
     "; repeated revocation is safe": "；重复撤销是安全的",
     "; the full construction story (schema, locks, fencing, recovery) is in": "；完整的构建原理（schema、锁、令牌隔离、恢复）见",
     "; token returned once": "；令牌只返回一次",
@@ -97,7 +96,6 @@
     "API": "API",
     "Access keys": "访问密钥",
     "Animation timing is illustrative, not broker latency. A final ordinary claim may still renew and complete at the delivery limit. It enters the DLQ if explicitly rejected, or if that final lock is abandoned, expires, or is explicitly reclaimed. See": "动画时序仅作演示，不代表 broker 延迟。即使达到投递次数上限，最后一次普通领取仍可续锁和完成。只有显式拒绝，或最后这次锁被放弃、到期或显式回收，消息才进入 DLQ。参见",
-    "Available since v0.3.1.": "自 v0.3.1 起提供。",
     "Because the queue": "由于队列",
     "Benchmark evidence": "基准测试依据",
     "Both packages are resolved from the same module version. Run": "两个软件包会解析为同一模块版本。运行",
@@ -409,6 +407,7 @@
     "“My hand-rolled jobs table became a bad broker.”": "“手写的任务表变成了一个不可靠的 broker。”",
     "→ a library over one file": "→ 一个库，基于一个文件运行",
     "→ one transaction for both": "→ 两者使用同一事务",
-    "→ these semantics come finished": "→ 直接提供完整语义"
+    "→ these semantics come finished": "→ 直接提供完整语义",
+    "; opening the root URL in a browser enters that console while curl and JSON clients keep the discovery card. The console groups subscriptions by topic and shows permanent or fixed lifetimes against the broker clock; its five-second loop calls only": "；用浏览器打开根 URL 会进入该控制台，而 curl 和 JSON 客户端仍收到发现卡片。控制台按主题分组显示订阅，并以 broker 时钟展示永久或固定生命周期；每五秒的循环仅调用"
   }
 }
