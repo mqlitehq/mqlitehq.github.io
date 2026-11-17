@@ -35,17 +35,25 @@ test('agent entry points install a matching latest pair and identify deployed ca
     for (const file of ['index.html', 'agents.html', 'llms.txt']) assert.doesNotMatch(String(outputs.get(locale + file)), /github\.com\/mqlitehq\/mqlite(?:-go)?(?:\/cmd\/mqlite(?:-mcp)?)?@v\d+\.\d+\.\d+/);
   }
 });
-test('a source-only version bump updates both languages without claiming main was released', (t) => {
+test('a source-only version bump updates reference facts while the homepage keeps the published release', (t) => {
   const root = snapshot(t);
   put(root, 'internal/version/version.go', 'package version\nconst Version = "9.9.0"\n');
   const { outputs, metadata } = renderSnapshot(root);
   assert.equal(metadata.sourceVersion, '9.9.0');
   assert.equal(metadata.latestRelease, sourceMetadata(canonical).latestRelease);
-  for (const locale of ['', 'zh-CN/']) for (const file of ['index.html', 'agents.html', 'llms.txt']) {
-    const text = String(outputs.get(locale + file));
-    assert.ok(text.includes('v9.9.0'), locale + file);
-    assert.ok(!text.includes('/releases/tag/v9.9.0'), locale + file);
-    assert.ok(text.includes(locale ? '未发布' : 'unreleased'), locale + file);
+  for (const locale of ['', 'zh-CN/']) {
+    const homepage = String(outputs.get(locale + 'index.html'));
+    assert.ok(homepage.includes(`/releases/tag/${metadata.latestRelease}`));
+    assert.ok(homepage.includes(`${locale ? '最新版本' : 'Latest release'} ${metadata.latestRelease}`));
+    assert.ok(!homepage.includes('v9.9.0'));
+    assert.deepEqual([...new Set(homepage.match(/\bv\d+\.\d+\.\d+\b/g))], [metadata.latestRelease]);
+    assert.doesNotMatch(homepage, /unreleased|未发布/);
+    for (const file of ['agents.html', 'llms.txt']) {
+      const text = String(outputs.get(locale + file));
+      assert.ok(text.includes('v9.9.0'), locale + file);
+      assert.ok(!text.includes('/releases/tag/v9.9.0'), locale + file);
+      assert.ok(text.includes(locale ? '未发布' : 'unreleased'), locale + file);
+    }
   }
 });
 test('a new stable documentation baseline updates links while historical boundaries stay fixed', (t) => {
@@ -62,8 +70,12 @@ test('a new stable documentation baseline updates links while historical boundar
     assert.ok(!agents.includes('mqlite-mcp@v9.9.0'));
     assert.ok(agents.includes('v0.3.3'));
     assert.ok(agents.includes('v0.3.2'));
+    const homepage = String(outputs.get(locale + 'index.html'));
+    assert.ok(homepage.includes('/releases/tag/v9.9.0'));
+    assert.ok(homepage.includes(`${locale ? '最新版本' : 'Latest release'} v9.9.0`));
   }
-  assert.ok(String(outputs.get('index.html')).includes('v0.4.2 still reclaims'));
+  const operations = String(outputs.get('operations.html')).replace(/<[^>]*>/g, '').replace(/\s+/g, ' ');
+  assert.match(operations, /requires v0\.4\.3; an installed v0\.4\.2 broker does not provide these guarantees/);
   for (const file of ['index.html', 'llms.txt', 'zh-CN/index.html', 'zh-CN/llms.txt']) {
     assert.doesNotMatch(String(outputs.get(file)), /Unreleased main|未发布的 main/);
   }

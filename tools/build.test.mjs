@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import { PAGES, BUNDLE_FILES, GENERATED_FILES, HANDWRITTEN_RELEASE_FILES, sourceMetadata as sourceFacts, renderSite as renderBilingualSite, checkOutputs, checkClaims, checkLinks, rewriteLinks, rewriteMdLinks } from './build.mjs';
 import { createSiteServer } from './serve.mjs';
+import { renderFacts } from './facts.mjs';
 
 const fixtureReleases = ['v0.1.0', 'v0.1.1', 'v0.2.0', 'v0.3.0', 'v0.3.1', 'v0.3.2', 'v0.3.3', 'v0.4.0'];
 const fixtureOptions = { bilingual: false, releaseTags: fixtureReleases, sourceIsReleaseTag: true };
@@ -177,6 +178,31 @@ test('source and latest supported release stay distinct across patch preparation
       assert.ok(outputs.get(out).includes('id="shared-heading"'));
     }
     assert.ok(outputs.get('llms-full.txt').includes(`Source version: v${source}. Latest supported release: [v${released}](https://github.com/mqlitehq/mqlite/releases/tag/v${released}).`));
+  }
+});
+
+test('the homepage advertises one published release even when main contains unreleased changes', (t) => {
+  const root = fixture(t);
+  const template = readFileSync(resolve(site, 'templates/index.html'), 'utf8');
+  for (const source of ['0.5.0', '0.3.0']) {
+    put(root, 'internal/version/version.go', `const Version = "${source}"\n`);
+    put(root, 'CHANGELOG.md', '## Unreleased\n\n- Pending source changes.\n\n## v0.3.0 — 2026-09-06\n');
+    const { metadata, outputs } = renderSite(root);
+    assert.equal(metadata.hasUnreleasedChanges, true);
+    const homepage = renderFacts(template, metadata);
+    const hero = /<div class="hero">([\s\S]*?)<section\b/.exec(homepage)?.[1];
+    assert.ok(hero, 'homepage hero exists');
+    assert.equal((hero.match(/class="chip v"/g) ?? []).length, 1);
+    assert.match(hero, /href="https:\/\/github\.com\/mqlitehq\/mqlite\/releases\/tag\/v0\.3\.0">Latest release v0\.3\.0<\/a>/);
+    assert.doesNotMatch(hero.replace(/<!--[\s\S]*?-->/g, ''), /\bmain\b|\bsource\b|unreleased|withdrawn|retracted|unsupported|v0\.5\.0/i);
+    const generatedRoot = materialize(t, outputs, metadata);
+    const entry = `${hero} 5 routes, 5 tools, 5 commands.`;
+    put(generatedRoot, 'index.html', entry);
+    checkClaims(metadata, generatedRoot);
+    put(generatedRoot, 'index.html', entry.replace('Latest release v0.3.0', 'Latest release v9.9.9'));
+    assert.throws(() => checkClaims(metadata, generatedRoot), /incorrect latest release/);
+    put(generatedRoot, 'index.html', entry.replace(/<a class="chip v"[^>]*>[^<]*<\/a>/, ''));
+    assert.throws(() => checkClaims(metadata, generatedRoot), /missing latest supported release/);
   }
 });
 

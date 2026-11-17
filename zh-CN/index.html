@@ -128,17 +128,14 @@
   <p class="sub">Peek-Lock 投递、重试、死信队列、调度、去重、FIFO 分组和主题扇出： <strong>嵌入 Go 进程</strong> 或运行成一个
   <strong>小型 HTTP broker</strong>。同一引擎、同一文件，由你选择。</p>
   <div class="chips">
-    <a class="chip v" href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.3">最新受支持版本 v0.4.3</a>
-    <span class="chip">main 文档 · 源版本 v0.4.3（含未发布变更）</span>
+    <!-- Keep homepage version information to this single latest-release badge. -->
+    <a class="chip v" href="https://github.com/mqlitehq/mqlite/releases/tag/v0.4.3">最新版本 v0.4.3</a>
     <span class="chip">纯 Go · 无需 CGO</span>
     <span class="chip">一个二进制文件 · 一个数据文件</span>
     <span class="chip">JSON over HTTP · 可用 curl 调用</span>
     <span class="chip">本地 SQLite 或远程 Turso</span>
     <span class="chip">MIT</span>
   </div>
-  <p class="sub">本网站跟随源版本 v0.4.3（含未发布变更），所在分支为 <code>main</code>。最新受支持版本为 v0.4.3；请使用
-  <a href="https://github.com/mqlitehq/mqlite/tree/v0.4.3/docs">v0.4.3 文档</a>
-  与已发布产物配套使用。v0.3.3 已撤回、不再受支持，且自 v0.4.0 起被标记为撤销版本；其公开产物仅供取证或兼容性检查，不得部署。</p>
   <nav class="cta overflow-nav" data-overflow aria-label="开始使用">
     <a class="btn primary" href="#quickstart">快速入门</a>
     <div class="overflow-primary"></div>
@@ -193,7 +190,7 @@
     <div class="why"><h3><em>2</em>并发下可靠</h3>
       <p>默认 Peek-Lock 投递如实承诺 <strong>至少一次（at-least-once）</strong>；显式的接收即删除模式则选择在 broker 侧至多删除一次（at-most-once）。新的结算要求当前令牌和未过期租约；支持按配置启用发送去重、有界的接收与结算重放、单 broker 崩溃恢复，以及深积压下 O(log n) 的领取。即使消费者崩溃或锁到期，FIFO 组仍保持顺序。</p></div>
     <div class="why"><h3><em>3</em>简单、无歧义的接口</h3>
-      <p>每项操作都是 <strong>携带 JSON 正文的单次 HTTP POST</strong> ；源版本 v0.4.3（含未发布变更） 有 29 条路由，设计上均可用 curl 调用，每种结算结果只有一个动词（<code>Complete</code> /
+      <p>每项操作都是 <strong>携带 JSON 正文的单次 HTTP POST</strong> —— 29 条路由，天然支持 curl；每种结算结果只有一个动词（<code>Complete</code> /
       <code>Abandon</code> / <code>Reject</code> / <code>Defer</code>），没有别名。人易于使用，也方便
       <a href="agents.html">智能体</a>。</p></div>
     <div class="why"><h3><em>4</em>借鉴 Service Bus，保持自身设计</h3>
@@ -339,7 +336,7 @@ func main() {
     <noscript>
       <figure class="fig"><img src="../assets/zh-CN/fig-overview.svg" alt="mqlite 模型：发布（Publish）将独立副本路由到订阅的支撑队列；接收（Receive）锁定一个副本，结算（settlement）将其删除或重新调度。" style="width:100%;display:block"></figure>
     </noscript>
-    <p class="demo-note">动画时序仅作演示，不代表 broker 延迟。即使达到投递次数上限，最后一次普通领取仍可续锁和完成。只有显式拒绝，或最后这次锁被放弃、到期或显式回收，消息才进入 DLQ。当前文档对应的源码在普通打开时保留未过期租约；v0.4.2 启动时仍会回收这些租约。参见 <a href="operations.html#graceful-broker-shutdown">关停与重启边界</a>。</p>
+    <p class="demo-note">动画时序仅作演示，不代表 broker 延迟。即使达到投递次数上限，最后一次普通领取仍可续锁和完成。只有显式拒绝，或最后这次锁被放弃、到期或显式回收，消息才进入 DLQ。参见 <a href="operations.html#graceful-broker-shutdown">关停与重启边界</a>。</p>
   </section>
   <h3 class="subh">此处描述的源版本由一致性测试集（TCK）覆盖，详情见 <a href="concepts.html">核心概念</a>；完整的构建原理（schema、锁、令牌隔离、恢复）见 <a href="internals.html">内部原理</a></h3>
   <div class="sem">
@@ -457,7 +454,6 @@ func main() {
     </div>
     <div class="tabpane" data-t="broker">
       <p>一个小进程，默认安全：若未配置令牌，它会生成 <code>mqk_…</code> 令牌并打印。每项操作都是一次 POST。</p>
-      <p>当前文档对应源码的端口为 6754，schema token 为 7。v0.4.2 发布版本是基于 v0.4.1、schema 不变的补丁，因此该升级无需重建数据库。来自 v0.3.x、使用 Schema-5 的数据库，仍需保留匹配的旧二进制程序和数据库组合，并让 v0.4.2 从全新数据库启动。v0.3.3 已撤回且不再受支持；其公开制品仅为取证或兼容性检查保留，不得部署。</p>
       <pre><code class="language-bash">go install github.com/mqlitehq/mqlite/cmd/mqlite@latest   # latest published broker
 
 # start the broker on :6754 with a known token, in the background
@@ -478,7 +474,7 @@ curl -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
      localhost:6754/mqlite.v1.QueueService/Receive</code></pre>
     </div>
     <div class="tabpane" data-t="docker">
-      <p>命名卷会在容器替换后保留队列数据。管理控制台位于 <code>/ui</code>；在 v0.4.2 中，用浏览器打开根 URL 会进入该控制台，而 curl 和 JSON 客户端仍收到发现卡片。控制台按主题分组显示订阅，并以 broker 时钟展示永久或固定生命周期；每五秒的循环仅调用 <code>Observe</code>；生命周期清单则在连接、显式刷新和配置变更时更新。</p>
+      <p>命名卷会在容器替换后保留队列数据。管理控制台位于 <code>/ui</code>；用浏览器打开根 URL 会进入该控制台，而 curl 和 JSON 客户端仍收到发现卡片。控制台按主题分组显示订阅，并以 broker 时钟展示永久或固定生命周期；每五秒的循环仅调用 <code>Observe</code>；生命周期清单则在连接、显式刷新和配置变更时更新。</p>
       <p>此示例跟随最新发布的镜像。需要可复现部署时，应固定已验证的标签或摘要。生产配置和恢复操作请参阅 <a href="deployment.html">部署</a> 和 <a href="operations.html">运维手册</a>。</p>
       <pre><code class="language-bash">docker run -d --name mqlite -p 127.0.0.1:6754:6754 \
   -e MQLITE_TOKENS=mqk_dev \
@@ -494,7 +490,7 @@ curl http://localhost:6754/          # discovery card (no auth)
 
 <section class="land" id="access-keys">
   <h2># 每个应用一把密钥</h2>
-  <p class="lede"><strong>自 v0.3.1 起提供。</strong> 保留一个配置中的管理员令牌，并在运行时为各应用签发独立密钥，无需重启 broker。</p>
+  <p class="lede">保留一个配置中的管理员令牌，并在运行时为各应用签发独立密钥，无需重启 broker。</p>
   <div class="sem">
     <a href="access-keys.html#choose-a-permission"><b>发送（Send）</b>发送、调度与取消计划消息</a>
     <a href="access-keys.html#choose-a-permission"><b>消费（Listen）</b>接收、结算、续锁、浏览及读取队列统计</a>
@@ -508,11 +504,11 @@ curl http://localhost:6754/          # discovery card (no auth)
 <section class="land" id="operations">
   <h2># 生产环境运行</h2>
   <p class="lede">从一个 broker 和持久化的本地 SQLite 文件开始。投产前选择耐久性设置，并演练恢复。</p>
-  <p>Prometheus 采集默认关闭。启用 <code>--metrics</code> 或 <code>MQLITE_METRICS=on</code> 以提供经过鉴权的 <code>/metrics</code> ；它位于 API 端口，并为采集器配置独立的 <code>MQLITE_MONITOR_TOKENS</code> 凭据。采集应置于私有网络；若 API 有公网入口，请在该入口禁止访问 <code>/metrics</code> 。v0.4.0 删除了已弃用的 <code>mqlite_queue_total</code> 和 <code>mqlite_queue_oldest_message_age_ms</code> 别名；请使用 <code>mqlite_queue_retained_messages</code> 和 <code>mqlite_queue_oldest_message_age_seconds</code>。入门套件包含 Prometheus、Grafana、仪表盘和验证场景。</p>
+  <p>Prometheus 采集默认关闭。启用 <code>--metrics</code> 或 <code>MQLITE_METRICS=on</code> 以提供经过鉴权的 <code>/metrics</code> ；它位于 API 端口，并为采集器配置独立的 <code>MQLITE_MONITOR_TOKENS</code> 凭据。采集应置于私有网络；若 API 有公网入口，请在该入口禁止访问 <code>/metrics</code> 。请使用 <code>mqlite_queue_retained_messages</code> 和 <code>mqlite_queue_oldest_message_age_seconds</code>。入门套件包含 Prometheus、Grafana、仪表盘和验证场景。</p>
   <div class="sem">
     <a href="operations.html"><b>运维手册</b>生产边界、备份、恢复、升级与回退</a>
     <a href="deployment.html"><b>部署</b>安装、单 broker、持久存储、鉴权与 TLS</a>
-    <a href="observability.html"><b>可观测性</b>SDK、CLI、MCP、控制台与 Prometheus 共用一套指标契约（自 v0.3.2 起）</a>
+    <a href="observability.html"><b>可观测性</b>SDK、CLI、MCP、控制台与 Prometheus 共用一套指标契约</a>
     <a href="observability-cloud.html"><b>云端监控</b>为已有 Grafana、Fly.io、阿里云、Azure 和 Kubernetes 提供经过鉴权的采集</a>
     <a href="conformance.html"><b>一致性规范</b>投递保证、恢复契约及其验证测试</a>
   </div>

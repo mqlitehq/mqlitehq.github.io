@@ -346,17 +346,19 @@ export function checkClaims(metadata, root = site) {
     }
     const visible = read(root, file).replace(/<[^>]*>/g, '').replace(/\*\*/g, '').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ');
     const sourceClaims = [...visible.matchAll(/\bsource\s+(v\d+\.\d+\.\d+(?:-rc\.\d+)?)\b/gi)];
-    requireValue(sourceClaims.length > 0, `${file}: missing source version ${source}`);
+    const homepage = file === 'index.html';
+    requireValue(homepage || sourceClaims.length > 0, `${file}: missing source version ${source}`);
     for (const match of sourceClaims) {
       requireValue(match[1] === source, `${file}: incorrect source version ${match[1]} (expected ${source})`);
     }
+    const releaseLabel = homepage ? 'latest(?: supported)? release' : 'latest supported release';
     requireValue(
-      new RegExp(`\\blatest supported release(?::| is)?\\s+${escape(latest)}\\b`, 'i').test(visible),
+      new RegExp(`\\b${releaseLabel}(?::| is)?\\s+${escape(latest)}\\b`, 'i').test(visible),
       `${file}: missing latest supported release ${latest}`,
     );
     const expectedUnreleased = metadata.hasUnreleasedChanges || latest !== source;
     requireValue(
-      releaseStatus.test(visible) === expectedUnreleased,
+      (homepage && sourceClaims.length === 0) || releaseStatus.test(visible) === expectedUnreleased,
       `${file}: source ${source} must be described as ${expectedUnreleased ? 'unreleased' : 'released'}`,
     );
   }
