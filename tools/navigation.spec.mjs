@@ -71,7 +71,9 @@ test('More is a native keyboard disclosure with Escape, outside click and focus 
   await expect(summary).toBeFocused();
   await page.keyboard.press('Space');
   await expect(more).toHaveAttribute('open', '');
-  await page.locator('.hero h1').click();
+  // The narrower header popup can cover the title's center; its left corner
+  // remains outside the popup and exercises a real, unobstructed pointer click.
+  await page.locator('.hero h1').click({ position: { x: 8, y: 8 } });
   await expect(more).not.toHaveAttribute('open');
   await summary.click();
   await page.getByRole('navigation', { name: 'Get started' }).getByRole('link', { name: 'Quickstart', exact: true }).focus();
@@ -93,6 +95,10 @@ test('a focused link remains reachable through resize and current page is identi
   await page.keyboard.press('Escape');
   await page.setViewportSize({ width: 1440, height: 900 });
   await expect.poll(() => row.locator('.overflow-primary > a[aria-current="page"]').count()).toBe(1);
+  await expect(row.locator('.overflow-more > summary')).toHaveAttribute('aria-label', 'More navigation links');
+  await expect(row.locator('.overflow-more')).toBeHidden();
+  await page.setViewportSize({ width: 1024, height: 900 });
+  await expect(row.locator('.overflow-more')).toBeVisible();
   await expect(row.locator('.overflow-more > summary')).toHaveAccessibleName('More navigation links');
 });
 
